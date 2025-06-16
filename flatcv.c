@@ -7,7 +7,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "simplecv.h"
+#include "flatcv.h"
 #include "perspectivetransform.h"
 
 // Avoid using floating point arithmetic by pre-multiplying the weights

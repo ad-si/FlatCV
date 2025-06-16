@@ -8,7 +8,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-#include "simplecv.h"
+#include "flatcv.h"
 
 typedef struct {
   char operation[32];

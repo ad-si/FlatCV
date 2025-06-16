@@ -1,4 +1,4 @@
-# SimpleCV
+# FlatCV
 
 Simple computer vision library in pure C.
 
@@ -14,12 +14,12 @@ Simple computer vision library in pure C.
 
 ## Usage
 
-SimpleCV can either be used as a C library or via its CLI.
+FlatCV can either be used as a C library or via its CLI.
 The CLI supports edit pipelines which sequentially applies all transformations.
 
 Command | Output
 --------|-------
 `viu i.jpg` | ![Parrot](./images/parrot.jpeg)
-`simplecv i.jpg grayscale o.jpg` | ![Parrot Grayscale](./images/grayscale.jpeg)
-`simplecv i.jpg (blur 9) o.jpg` | ![Parrot Blur](./images/blur.jpeg)
-`simplecv i.jpg grayscale (blur 9) o.jpg` | ![Parrot Grayscale and Blur](./images/grayscale_blur.jpeg)
+`flatcv i.jpg grayscale o.jpg` | ![Parrot Grayscale](./images/grayscale.jpeg)
+`flatcv i.jpg (blur 9) o.jpg` | ![Parrot Blur](./images/blur.jpeg)
+`flatcv i.jpg grayscale (blur 9) o.jpg` | ![Parrot Grayscale and Blur](./images/grayscale_blur.jpeg)

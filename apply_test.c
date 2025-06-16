@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include "simplecv.h"
+#include "flatcv.h"
 #include "perspectivetransform.h"
 
 
