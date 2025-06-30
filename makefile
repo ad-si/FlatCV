@@ -54,6 +54,11 @@ flatcv.c: flatcv.h conversion.c perspectivetransform.c
 combine: flatcv.h flatcv.c
 
 
+.PHONY: docs
+docs:
+	doxygen ./doxyfile
+
+
 .PHONY: clean
 clean:
 	-rm -f \

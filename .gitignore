@@ -1,6 +1,7 @@
 .aider*
 .direnv
 apply_test
+docs
 flatcv
 flatcv.c
 flatcv.h

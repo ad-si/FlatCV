@@ -20,6 +20,7 @@
           buildInputs = with pkgs; [
             bash
             coreutils
+            doxygen
             gcc
             gnumake
           ];
