@@ -6,7 +6,11 @@
 #include <string.h>
 #include <time.h>
 
+#ifndef FLATCV_AMALGAMATION
 #include "perspectivetransform.h"
+#else
+#include "flatcv.h"
+#endif
 
 // #define DEBUG_LOGGING
 

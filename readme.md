@@ -2,14 +2,13 @@
 
 Simple computer vision library in pure C.
 
-
 "Simple" means:
 
-- Color image is a flat array of RGBA row-major top-to-bottom
-- Grayscale image is a flat array of GRAY row-major top-to-bottom
-- No preprocessor usage
-- No macros
-- [WIP] Available as an amalgamation (all code combined into one file)
+- Color images are a flat array of RGBA row-major top-to-bottom
+- Grayscale images are a flat array of GRAY row-major top-to-bottom
+- No macros and preprocessor usage
+- Available as an amalgamation where all code is combined into one file.
+    (`flatcv.h` and `flatcv.c`)
 
 
 ## Usage

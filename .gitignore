@@ -1,3 +1,6 @@
+.aider*
 apply_test
 flatcv
+flatcv.c
+flatcv.h
 test_bin

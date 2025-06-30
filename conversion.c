@@ -7,8 +7,12 @@
 #include <string.h>
 #include <time.h>
 
-#include "flatcv.h"
+#ifndef FLATCV_AMALGAMATION          /* normal (non-amalgamated) build */
+#include "conversion.h"
 #include "perspectivetransform.h"
+#else                                /* amalgamated build: already in flatcv.h */
+#include "flatcv.h"
+#endif
 
 // Avoid using floating point arithmetic by pre-multiplying the weights
 const unsigned char R_WEIGHT = 76;  // 0.299 * 256
