@@ -9,6 +9,7 @@ Simple computer vision library in pure C.
 - No macros and preprocessor usage
 - Available as an amalgamation where all code is combined into one file.
     (`flatcv.h` and `flatcv.c`)
+- No fusing of image transformations
 
 
 ## Usage

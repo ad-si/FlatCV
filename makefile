@@ -15,6 +15,15 @@ flatcv:
 	gcc -Wall -lm cli.c conversion.c perspectivetransform.c -o $@
 
 
+.PHONY: build
+build: flatcv
+
+
+.PHONY: install
+install: build
+	sudo cp ./flatcv /usr/local/bin
+
+
 images/grayscale.jpeg: images/parrot.jpeg flatcv
 	./flatcv $< grayscale $@
 
