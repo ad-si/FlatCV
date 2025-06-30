@@ -2,6 +2,10 @@
 help: makefile
 	@tail -n +4 makefile | grep ".PHONY"
 
+# All source / header files in repository
+SRC_FILES := $(wildcard *.c)
+HDR_FILES := $(wildcard *.h)
+
 
 .PHONY: test
 test:
@@ -11,7 +15,7 @@ test:
 		&& ./apply_test
 
 
-flatcv:
+flatcv: $(SRC_FILES) $(HDR_FILES)
 	gcc -Wall -lm cli.c conversion.c perspectivetransform.c -o $@
 
 
@@ -28,10 +32,13 @@ images/grayscale.jpeg: images/parrot.jpeg flatcv
 	./flatcv $< grayscale $@
 
 images/blur.jpeg: images/parrot.jpeg flatcv
-	./flatcv $< '(blur 9)' $@
+	./flatcv $< blur 9 $@
 
 images/grayscale_blur.jpeg: images/parrot.jpeg flatcv
-	./flatcv $< grayscale '(blur 9)' $@
+	./flatcv $< grayscale, blur 9 $@
+
+images/bw_smart.png: images/parrot.jpeg flatcv
+	./flatcv $< bw_smart $@
 
 
 flatcv.h: perspectivetransform.h conversion.h

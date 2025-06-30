@@ -66,43 +66,82 @@ void add_operation(Pipeline* p, const char* op, double param, int has_param) {
   p->count++;
 }
 
+/* Remove leading and trailing white-space, returns pointer to first
+   non-blank char (string is modified in place). */
+static char* trim_whitespace(char *s) {
+  while (*s && isspace((unsigned char)*s)) s++;        // left-trim
+  if (*s == '\0') return s;
+  char *end = s + strlen(s) - 1;
+  while (end > s && isspace((unsigned char)*end)) end--;
+  *(end + 1) = '\0';                                   // right-trim
+  return s;
+}
+
 char* skip_whitespace(char* str) {
   while (*str && isspace(*str)) str++;
   return str;
 }
 
-int parse_pipeline(int argc, char* argv[], int start_idx, int end_idx, Pipeline* pipeline) {
-  for (int i = start_idx; i < end_idx; i++) {
-    char* arg = argv[i];
+int parse_pipeline(int argc, char* argv[], int start_idx, int end_idx, Pipeline* pipeline)
+{
+  /* 1. build one big string from all arguments that form the pipeline */
+  size_t total_len = 0;
+  for (int i = start_idx; i < end_idx; ++i)
+    total_len += strlen(argv[i]) + 2;          // space OR ", "
 
-    if (arg[0] == '(') {
-      // Operation with parameter in parentheses
-      char* content = arg + 1;
-      char* end_paren = strchr(content, ')');
-      if (!end_paren) {
-        fprintf(stderr, "Error: Missing closing parenthesis in '%s'\n", arg);
-        return 0;
-      }
+  char *combined = malloc(total_len + 1);
+  if (!combined) { fprintf(stderr,"Error: out of memory\n"); return 0; }
 
-      *end_paren = '\0';
-      content = skip_whitespace(content);
+  combined[0] = '\0';
+  for (int i = start_idx; i < end_idx; ++i) {
+    const char *tok = argv[i];
 
-      char* param_str = strchr(content, ' ');
-      if (param_str) {
-        *param_str = '\0';
-        param_str = skip_whitespace(param_str + 1);
-        double param = atof(param_str);
-        add_operation(pipeline, content, param, 1);
-      } else {
-        add_operation(pipeline, content, 0.0, 0);
-      }
+    /* add delimiter before every token except the first one            *
+     * – a comma if the token starts a new operation,                   *
+     * – a blank if the token is the numeric parameter of the
+     *   previous operation                                             */
+    if (i > start_idx) {
+      char *endptr;
+      /* token is pure number?  (strtod succeeds and consumes whole string) */
+      strtod(tok, &endptr);
+      if (*endptr == '\0')
+        strcat(combined, " ");     /* parameter -> keep with previous op */
+      else
+        strcat(combined, ", ");    /* new operation -> separate by comma */
+    }
 
-      *end_paren = ')';
+    strcat(combined, tok);
+  }
+
+  /* 2. split the combined string by commas – each chunk is one operation */
+  char *saveptr;
+  for (char *tok = strtok_r(combined, ",", &saveptr);
+       tok;
+       tok = strtok_r(NULL, ",", &saveptr))
+  {
+    char *piece = trim_whitespace(tok);
+    if (*piece == '\0') continue;              // empty fragment, skip
+
+    /* optional surrounding parentheses */
+    size_t len = strlen(piece);
+    if (piece[0] == '(' && piece[len-1] == ')') {
+      piece[len-1] = '\0';
+      piece = trim_whitespace(piece + 1);
+    }
+    if (*piece == '\0') continue;
+
+    /* split into operation name and (optional) numeric parameter */
+    char *space = strchr(piece, ' ');
+    if (space) {
+      *space = '\0';
+      double param = atof(trim_whitespace(space + 1));
+      add_operation(pipeline, piece, param, 1);
     } else {
-      // Simple operation without parameters
-      add_operation(pipeline, arg, 0.0, 0);
+      add_operation(pipeline, piece, 0.0, 0);
     }
   }
+
+  free(combined);
   return 1;
 }
 

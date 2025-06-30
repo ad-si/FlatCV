@@ -388,6 +388,8 @@ unsigned char const * const apply_gaussian_blur(
   unsigned char const * const data
 ) {
   unsigned int img_length_px = width * height;
+  if (radius == 0) return memcpy(malloc(width*height*4), data, width*height*4);
+
   unsigned char *blurred_data = malloc(img_length_px * 4);
 
   if (!blurred_data) { // Memory allocation failed

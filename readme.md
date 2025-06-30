@@ -15,11 +15,25 @@ Simple computer vision library in pure C.
 ## Usage
 
 FlatCV can either be used as a C library or via its CLI.
-The CLI supports edit pipelines which sequentially applies all transformations.
+The CLI supports edit pipelines which sequentially apply all transformations.
+
+```sh
+flatcv <input> <comma-separated-edit-pipeline> <output>
+```
+
+As commas are not special characters in shells,
+you can write the edit pipeline without quotes.
+Both variants yield the same result:
+
+```sh
+flatcv i.jpg 'grayscale, blur 9' o.jpg
+flatcv i.jpg grayscale, blur 9 o.jpg
+```
 
 Command | Output
 --------|-------
 `viu i.jpg` | ![Parrot](./images/parrot.jpeg)
 `flatcv i.jpg grayscale o.jpg` | ![Parrot Grayscale](./images/grayscale.jpeg)
-`flatcv i.jpg (blur 9) o.jpg` | ![Parrot Blur](./images/blur.jpeg)
-`flatcv i.jpg grayscale (blur 9) o.jpg` | ![Parrot Grayscale and Blur](./images/grayscale_blur.jpeg)
+`flatcv i.jpg blur 9 o.jpg` | ![Parrot Blur](./images/blur.jpeg)
+`flatcv i.jpg grayscale, blur 9 o.jpg` | ![Parrot Grayscale and Blur](./images/grayscale_blur.jpeg)
+`flatcv i.jpg bw_smart o.jpg` | ![Smart Binarization](./images/bw_smart.png)
