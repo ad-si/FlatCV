@@ -536,6 +536,15 @@ unsigned char const * const bw_smart(
   for (unsigned int i = 0; i < img_length_px; i++) {
     unsigned int rgba_idx = i * 4;
     int high_freq_val = 127 + grayscale_data[rgba_idx] - blurred_data[rgba_idx];
+
+    // Clamp the value to [0, 255] to prevent overflow
+    if (high_freq_val < 0) {
+      high_freq_val = 0;
+    }
+    else if (high_freq_val > 255) {
+      high_freq_val = 255;
+    }
+
     high_freq_data[rgba_idx] = high_freq_val; // R
     high_freq_data[rgba_idx + 1] = high_freq_val; // G
     high_freq_data[rgba_idx + 2] = high_freq_val; // B
