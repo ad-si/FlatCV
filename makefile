@@ -60,30 +60,34 @@ flatcv: $(HDR_FILES) $(SRC_FILES)
 		-Iinclude src/cli.c src/conversion.c src/perspectivetransform.c \
 		-lm -o $@
 
+.PHONY: mac-build
+mac-build: flatcv
+	cp flatcv flatcv_mac_arm64
+
 
 # Linux - Build binary inside Docker and copy it back to host
-flatcv-linux: Dockerfile
+flatcv_linux_arm64: Dockerfile
 	docker build -t flatcv-build .
 	docker create --name flatcv-tmp flatcv-build
-	docker cp flatcv-tmp:/flatcv ./flatcv-linux
+	docker cp flatcv-tmp:/flatcv ./flatcv_linux_arm64
 	docker rm flatcv-tmp
 
 .PHONY: lin-build
-lin-build: flatcv-linux
+lin-build: flatcv_linux_arm64
 
 
 # Windows - Cross-compilation with mingw-w64
-flatcv.exe: $(HDR_FILES) $(SRC_FILES)
+flatcv_windows_x86_64.exe: $(HDR_FILES) $(SRC_FILES)
 	x86_64-w64-mingw32-gcc -Wall -static -static-libgcc \
 		-Iinclude src/cli.c src/conversion.c src/perspectivetransform.c \
 		-lm -o $@
 
 .PHONY: win-build
-win-build: flatcv.exe
+win-build: flatcv_windows_x86_64.exe
 
 
 .PHONY: win-test
-win-test: flatcv.exe
+win-test: flatcv_windows_x86_64.exe
 	@WINEDEBUG=-all \
 		MVK_CONFIG_LOG_LEVEL=None \
 		wine $<
@@ -121,6 +125,11 @@ combine: flatcv.h flatcv.c
 .PHONY: docs
 docs:
 	doxygen ./doxyfile
+
+
+.PHONY: release
+release: build combine mac-build lin-build win-build
+	@echo "1. Add binaries to GitHub release: https://github.com/ad-si/FlatCV/releases"
 
 
 .PHONY: clean
