@@ -88,16 +88,16 @@ install: build
 	sudo cp ./flatcv /usr/local/bin
 
 
-images/grayscale.jpeg: images/parrot.jpeg flatcv
+imgs/grayscale.jpeg: imgs/parrot.jpeg flatcv
 	./flatcv $< grayscale $@
 
-images/blur.jpeg: images/parrot.jpeg flatcv
+imgs/blur.jpeg: imgs/parrot.jpeg flatcv
 	./flatcv $< blur 9 $@
 
-images/grayscale_blur.jpeg: images/parrot.jpeg flatcv
+imgs/grayscale_blur.jpeg: imgs/parrot.jpeg flatcv
 	./flatcv $< grayscale, blur 9 $@
 
-images/bw_smart.png: images/parrot.jpeg flatcv
+imgs/bw_smart.png: imgs/parrot.jpeg flatcv
 	./flatcv $< bw_smart $@
 
 

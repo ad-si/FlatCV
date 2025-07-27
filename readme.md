@@ -32,8 +32,8 @@ flatcv i.jpg grayscale, blur 9 o.jpg
 
 Command | Output
 --------|-------
-`viu i.jpg` | ![Parrot](./images/parrot.jpeg)
-`flatcv i.jpg grayscale o.jpg` | ![Parrot Grayscale](./images/grayscale.jpeg)
-`flatcv i.jpg blur 9 o.jpg` | ![Parrot Blur](./images/blur.jpeg)
-`flatcv i.jpg grayscale, blur 9 o.jpg` | ![Parrot Grayscale and Blur](./images/grayscale_blur.jpeg)
-`flatcv i.jpg bw_smart o.jpg` | ![Smart Binarization](./images/bw_smart.png)
+`viu i.jpg` | ![Parrot](./imgs/parrot.jpeg)
+`flatcv i.jpg grayscale o.jpg` | ![Parrot Grayscale](./imgs/grayscale.jpeg)
+`flatcv i.jpg blur 9 o.jpg` | ![Parrot Blur](./imgs/blur.jpeg)
+`flatcv i.jpg grayscale, blur 9 o.jpg` | ![Parrot Grayscale and Blur](./imgs/grayscale_blur.jpeg)
+`flatcv i.jpg bw_smart o.jpg` | ![Smart Binarization](./imgs/bw_smart.png)
