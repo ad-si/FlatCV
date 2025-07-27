@@ -24,6 +24,9 @@
             gcc
             gnumake
           ];
+          shellHook = ''
+            cargo install --locked scrut@0.4.1
+          '';
         };
         formatter = pkgs.nixfmt-tree; # Format this file with `nix fmt`
       }

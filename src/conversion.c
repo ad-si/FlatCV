@@ -509,8 +509,6 @@ unsigned char const * const bw_smart(
   bool use_double_threshold,
   unsigned char const * const data
 ) {
-  clock_t start_time = clock();
-
   unsigned char const * const grayscale_data = grayscale(width, height, data);
 
   // Calculate blur radius dependent on image size
@@ -552,10 +550,6 @@ unsigned char const * const bw_smart(
   );
 
   free(high_freq_data);
-
-  clock_t end_time = clock();
-  double runtime = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-  printf("bw_smart runtime: %f ms\n", runtime * 1000);
 
   return final_data;
 }

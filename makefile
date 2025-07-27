@@ -20,6 +20,9 @@ test: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 		-o apply_test \
 	&& ./apply_test
 
+	# Integration tests for CLI
+	scrut test --work-directory=$$(pwd) tests/cli.md
+
 
 .PHONY: test-extended
 test-extended:
@@ -86,19 +89,6 @@ build: flatcv
 .PHONY: install
 install: build
 	sudo cp ./flatcv /usr/local/bin
-
-
-imgs/grayscale.jpeg: imgs/parrot.jpeg flatcv
-	./flatcv $< grayscale $@
-
-imgs/blur.jpeg: imgs/parrot.jpeg flatcv
-	./flatcv $< blur 9 $@
-
-imgs/grayscale_blur.jpeg: imgs/parrot.jpeg flatcv
-	./flatcv $< grayscale, blur 9 $@
-
-imgs/bw_smart.png: imgs/parrot.jpeg flatcv
-	./flatcv $< bw_smart $@
 
 
 flatcv.h: include/perspectivetransform.h include/conversion.h
