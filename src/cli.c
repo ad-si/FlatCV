@@ -34,8 +34,8 @@ void print_usage(const char* program_name) {
   printf("  Use parentheses for operations with parameters: (blur 3.0)\n");
   printf("\nExamples:\n");
   printf("  %s input.jpg grayscale output.jpg\n", program_name);
-  printf("  %s input.jpg grayscale (blur 3.0) output.jpg\n", program_name);
-  printf("  %s input.jpg (blur 2.0) threshold output.jpg\n", program_name);
+  printf("  %s input.jpg grayscale, blur 3 output.jpg\n", program_name);
+  printf("  %s input.jpg blur 2, threshold output.jpg\n", program_name);
 }
 
 Pipeline* create_pipeline() {
