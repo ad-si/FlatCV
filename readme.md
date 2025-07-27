@@ -1,6 +1,6 @@
 # FlatCV
 
-Simple computer vision library in pure C.
+Simple image processing and computer vision library in pure C.
 
 "Simple" means:
 
@@ -33,7 +33,11 @@ flatcv i.jpg grayscale, blur 9 o.jpg
 Command | Output
 --------|-------
 `viu i.jpg` | ![Parrot](./imgs/parrot.jpeg)
-`flatcv i.jpg grayscale o.jpg` | ![Parrot Grayscale](./imgs/grayscale.jpeg)
-`flatcv i.jpg blur 9 o.jpg` | ![Parrot Blur](./imgs/blur.jpeg)
-`flatcv i.jpg grayscale, blur 9 o.jpg` | ![Parrot Grayscale and Blur](./imgs/grayscale_blur.jpeg)
-`flatcv i.jpg bw_smart o.jpg` | ![Smart Binarization](./imgs/bw_smart.png)
+`flatcv i.jpg grayscale o.jpg` | ![Parrot Grayscale](./imgs/parrot_grayscale.jpeg)
+`flatcv i.jpg blur 9 o.jpg` | ![Parrot Blur](./imgs/parrot_blur.jpeg)
+`flatcv i.jpg grayscale, blur 9 o.jpg` | ![Parrot Grayscale and Blur](./imgs/parrot_grayscale_blur.jpeg)
+
+Command | Output
+--------|-------
+`viu i.jpg` | ![Parrot](./imgs/page.png)
+`flatcv i.jpg bw_smart o.jpg` | ![Smart Binarization](./imgs/page_bw_smart.png)

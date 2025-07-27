@@ -8,8 +8,8 @@ HDR_FILES := $(wildcard include/*.h)
 TEST_FILES := $(wildcard tests/*.c)
 
 
-.PHONY: test
-test: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
+.PHONY: test-units
+test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 	gcc -Wall \
 		-Iinclude tests/test.c src/conversion.c src/perspectivetransform.c \
 		-o test_bin \
@@ -20,8 +20,15 @@ test: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 		-o apply_test \
 	&& ./apply_test
 
+
+.PHONY: test-integration
+test-integration: build tests/cli.md
 	# Integration tests for CLI
 	scrut test --work-directory=$$(pwd) tests/cli.md
+
+
+.PHONY: test
+test: test-units test-integration
 
 
 .PHONY: test-extended
