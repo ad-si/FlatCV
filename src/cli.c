@@ -29,6 +29,7 @@ void print_usage(const char* program_name) {
   printf("  blur <radius>   - Apply gaussian blur with radius\n");
   printf("  threshold     - Apply Otsu threshold\n");
   printf("  bw_smart      - Smart black and white conversion\n");
+  printf("  bw_smooth     - Smooth (anti-aliased) black and white conversion\n");
   printf("\nPipeline syntax:\n");
   printf("  Operations are applied in sequence\n");
   printf("  Use parentheses for operations with parameters: (blur 3.0)\n");
@@ -148,17 +149,24 @@ int parse_pipeline(int argc, char* argv[], int start_idx, int end_idx, Pipeline*
 unsigned char* apply_operation(int width, int height, const char* operation, double param, int has_param, unsigned char* input_data) {
   if (strcmp(operation, "grayscale") == 0) {
     return (unsigned char*)grayscale(width, height, input_data);
-  } else if (strcmp(operation, "blur") == 0) {
+  }
+  else if (strcmp(operation, "blur") == 0) {
     if (!has_param) {
       fprintf(stderr, "Error: blur operation requires radius parameter\n");
       return NULL;
     }
     return (unsigned char*)apply_gaussian_blur(width, height, param, input_data);
-  } else if (strcmp(operation, "threshold") == 0) {
+  }
+  else if (strcmp(operation, "threshold") == 0) {
     return (unsigned char*)otsu_threshold_rgba(width, height, false, input_data);
-  } else if (strcmp(operation, "bw_smart") == 0) {
+  }
+  else if (strcmp(operation, "bw_smart") == 0) {
     return (unsigned char*)bw_smart(width, height, false, input_data);
-  } else {
+  }
+  else if (strcmp(operation, "bw_smooth") == 0) {
+    return (unsigned char*)bw_smart(width, height, true, input_data);
+  }
+  else {
     fprintf(stderr, "Error: Unknown operation '%s'\n", operation);
     return NULL;
   }

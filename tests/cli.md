@@ -49,11 +49,11 @@ $ git diff --quiet imgs/parrot_grayscale_blur.jpeg
 
 ## Page Image
 
-### Smart Black and White Conversion
+### Smart Black & White Conversion
 
 ```scrut
 $ ./flatcv imgs/page.png bw_smart imgs/page_bw_smart.png
-Loaded image: 1536x1024 with 3 channels
+Loaded image: 384x256 with 4 channels
 Executing pipeline with 1 operations:
 Applying operation: bw_smart
 Successfully saved processed image to 'imgs/page_bw_smart.png'
@@ -61,4 +61,19 @@ Successfully saved processed image to 'imgs/page_bw_smart.png'
 
 ```scrut
 $ git diff --quiet imgs/page_bw_smart.png
+```
+
+
+### Smooth (Anti-Aliased) and Smart Black & White Conversion
+
+```scrut
+$ ./flatcv imgs/page.png bw_smooth imgs/page_bw_smooth.png
+Loaded image: 384x256 with 4 channels
+Executing pipeline with 1 operations:
+Applying operation: bw_smooth
+Successfully saved processed image to 'imgs/page_bw_smooth.png'
+```
+
+```scrut
+$ git diff --quiet imgs/page_bw_smooth.png
 ```

@@ -41,3 +41,4 @@ Command | Output
 --------|-------
 `viu i.jpg` | ![Parrot](./imgs/page.png)
 `flatcv i.jpg bw_smart o.jpg` | ![Smart Binarization](./imgs/page_bw_smart.png)
+`flatcv i.jpg bw_smooth o.jpg` | ![Smooth Binarization](./imgs/page_bw_smooth.png)
