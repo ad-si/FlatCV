@@ -3,20 +3,80 @@ help: makefile
 	@tail -n +4 makefile | grep ".PHONY"
 
 # All source / header files in repository
-SRC_FILES := $(wildcard *.c)
-HDR_FILES := $(wildcard *.h)
+SRC_FILES := $(wildcard src/*.c)
+HDR_FILES := $(wildcard include/*.h)
+TEST_FILES := $(wildcard tests/*.c)
 
 
 .PHONY: test
-test:
-	gcc -Wall test.c conversion.c perspectivetransform.c -o test_bin \
-		&& ./test_bin
-	gcc -Wall conversion.c perspectivetransform.c apply_test.c -o apply_test \
-		&& ./apply_test
+test: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
+	gcc -Wall \
+		-Iinclude tests/test.c src/conversion.c src/perspectivetransform.c \
+		-o test_bin \
+	&& ./test_bin
+
+	gcc -Wall \
+		-Iinclude src/conversion.c src/perspectivetransform.c tests/apply_test.c \
+		-o apply_test \
+	&& ./apply_test
 
 
-flatcv: $(SRC_FILES) $(HDR_FILES)
-	gcc -Wall -lm cli.c conversion.c perspectivetransform.c -o $@
+.PHONY: test-extended
+test-extended:
+	gcc \
+		-Wall \
+		-Wextra \
+		-Wpedantic \
+		-Wshadow \
+		-Wformat=2 \
+		-Wcast-align \
+		-Wconversion \
+		-Wsign-conversion \
+		-Wnull-dereference \
+		-Wduplicated-cond \
+		-Wduplicated-branches \
+		-Wlogical-op \
+		-Wuseless-cast \
+		-Wno-unused-parameter \
+		-Werror \
+		-g \
+		-fsanitize=undefined,address \
+		-fno-omit-frame-pointer \
+		-Iinclude src/*.c tests/*.c
+
+
+flatcv: $(HDR_FILES) $(SRC_FILES)
+	gcc -Wall \
+		-Iinclude src/cli.c src/conversion.c src/perspectivetransform.c \
+		-lm -o $@
+
+
+# Linux - Build binary inside Docker and copy it back to host
+flatcv-linux: Dockerfile
+	docker build -t flatcv-build .
+	docker create --name flatcv-tmp flatcv-build
+	docker cp flatcv-tmp:/flatcv ./flatcv-linux
+	docker rm flatcv-tmp
+
+.PHONY: lin-build
+lin-build: flatcv-linux
+
+
+# Windows - Cross-compilation with mingw-w64
+flatcv.exe: $(HDR_FILES) $(SRC_FILES)
+	x86_64-w64-mingw32-gcc -Wall -static -static-libgcc \
+		-Iinclude src/cli.c src/conversion.c src/perspectivetransform.c \
+		-lm -o $@
+
+.PHONY: win-build
+win-build: flatcv.exe
+
+
+.PHONY: win-test
+win-test: flatcv.exe
+	@WINEDEBUG=-all \
+		MVK_CONFIG_LOG_LEVEL=None \
+		wine $<
 
 
 .PHONY: build
@@ -41,20 +101,20 @@ images/bw_smart.png: images/parrot.jpeg flatcv
 	./flatcv $< bw_smart $@
 
 
-flatcv.h: perspectivetransform.h conversion.h
+flatcv.h: include/perspectivetransform.h include/conversion.h
 	@echo '/* FlatCV - Amalgamated public header (auto-generated) */' > $@
 	@echo '#ifndef FLATCV_H' >> $@
 	@echo '#define FLATCV_H' >> $@
-	@cat perspectivetransform.h >> $@
-	@cat conversion.h >> $@
+	@cat include/perspectivetransform.h >> $@
+	@cat include/conversion.h >> $@
 	@echo '#endif /* FLATCV_H */' >> $@
 
-flatcv.c: flatcv.h conversion.c perspectivetransform.c
+flatcv.c: flatcv.h src/conversion.c src/perspectivetransform.c
 	@echo '/* FlatCV - Amalgamated implementation (auto-generated) */' > $@
 	@echo '#define FLATCV_AMALGAMATION' >> $@
 	@echo '#include "flatcv.h"' >> $@
-	@cat conversion.c >> $@
-	@cat perspectivetransform.c >> $@
+	@cat src/conversion.c >> $@
+	@cat src/perspectivetransform.c >> $@
 	@echo '/* End of FlatCV amalgamation */' >> $@
 
 .PHONY: combine
