@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -184,7 +185,12 @@ unsigned char* execute_pipeline(int width, int height, Pipeline* pipeline, unsig
     }
     printf("\n");
 
+    clock_t start_time = clock();
     unsigned char* result = apply_operation(width, height, op->operation, op->param, op->has_param, current_data);
+    clock_t end_time = clock();
+
+    double elapsed_time_ms = ((double)(end_time - start_time)) / CLOCKS_PER_SEC * 1000.0;
+    printf("  → Completed in %.1f ms\n", elapsed_time_ms);
 
     if (!result) {
       if (temp_data && temp_data != input_data) {

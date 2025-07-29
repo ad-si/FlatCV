@@ -9,6 +9,7 @@ $ ./flatcv imgs/parrot.jpeg grayscale imgs/parrot_grayscale.jpeg
 Loaded image: 512x512 with 3 channels
 Executing pipeline with 1 operations:
 Applying operation: grayscale
+  → Completed in \d+.\d+ ms (regex)
 Successfully saved processed image to 'imgs/parrot_grayscale.jpeg'
 ```
 
@@ -24,6 +25,7 @@ $ ./flatcv imgs/parrot.jpeg blur 9 imgs/parrot_blur.jpeg
 Loaded image: 512x512 with 3 channels
 Executing pipeline with 1 operations:
 Applying operation: blur with parameter: 9.00
+  → Completed in \d+.\d+ ms (regex)
 Successfully saved processed image to 'imgs/parrot_blur.jpeg'
 ```
 
@@ -39,7 +41,9 @@ $ ./flatcv imgs/parrot.jpeg grayscale, blur 9 imgs/parrot_grayscale_blur.jpeg
 Loaded image: 512x512 with 3 channels
 Executing pipeline with 2 operations:
 Applying operation: grayscale
+  → Completed in \d+.\d+ ms (regex)
 Applying operation: blur with parameter: 9.00
+  → Completed in \d+.\d+ ms (regex)
 Successfully saved processed image to 'imgs/parrot_grayscale_blur.jpeg'
 ```
 
@@ -56,6 +60,7 @@ $ ./flatcv imgs/page.png bw_smart imgs/page_bw_smart.png
 Loaded image: 384x256 with 4 channels
 Executing pipeline with 1 operations:
 Applying operation: bw_smart
+  → Completed in \d+.\d+ ms (regex)
 Successfully saved processed image to 'imgs/page_bw_smart.png'
 ```
 
@@ -71,6 +76,7 @@ $ ./flatcv imgs/page.png bw_smooth imgs/page_bw_smooth.png
 Loaded image: 384x256 with 4 channels
 Executing pipeline with 1 operations:
 Applying operation: bw_smooth
+  → Completed in \d+.\d+ ms (regex)
 Successfully saved processed image to 'imgs/page_bw_smooth.png'
 ```
 
