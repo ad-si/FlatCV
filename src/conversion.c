@@ -450,6 +450,17 @@ unsigned char const * const apply_gaussian_blur(
     }
   }
 
+  // Create temporary buffer for vertical pass to avoid reading from buffer being written to
+  unsigned char *temp_data = malloc(img_length_px * 4);
+  if (!temp_data) {
+    free(blurred_data);
+    free(kernel);
+    return NULL;
+  }
+  
+  // Copy horizontal blur result to temp buffer
+  memcpy(temp_data, blurred_data, img_length_px * 4);
+
   // Apply the kernel in the vertical direction
   for (unsigned int x = 0; x < width; x++) {
     for (unsigned int y = 0; y < height; y++) {
@@ -470,9 +481,9 @@ unsigned char const * const apply_gaussian_blur(
         float weight = kernel[k + (int)radius];
         weight_sum += weight;
 
-        r_sum += blurred_data[img_rgba_index] * weight;
-        g_sum += blurred_data[img_rgba_index + 1] * weight;
-        b_sum += blurred_data[img_rgba_index + 2] * weight;
+        r_sum += temp_data[img_rgba_index] * weight;
+        g_sum += temp_data[img_rgba_index + 1] * weight;
+        b_sum += temp_data[img_rgba_index + 2] * weight;
       }
 
       unsigned int rgba_index = (y * width + x) * 4;
@@ -482,6 +493,8 @@ unsigned char const * const apply_gaussian_blur(
       blurred_data[rgba_index + 3] = 255;
     }
   }
+
+  free(temp_data);
 
   free(kernel);
 
