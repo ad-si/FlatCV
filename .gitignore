@@ -1,8 +1,9 @@
-.aider*
-.direnv
-apply_test
-docs
-flatcv
-flatcv.c
-flatcv.h
-test_bin
+/.aider*
+/.direnv
+/docs
+/flatcv
+/flatcv.c
+/flatcv.h
+/flatcv_*
+/test_bin
+/tmp

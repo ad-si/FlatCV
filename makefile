@@ -10,12 +10,12 @@ TEST_FILES := $(wildcard tests/*.c)
 
 .PHONY: test-units
 test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
-	gcc -Wall \
+	gcc -Wall -Werror \
 		-Iinclude tests/test.c src/conversion.c src/perspectivetransform.c \
 		-o test_bin \
 	&& ./test_bin
 
-	gcc -Wall \
+	gcc -Wall -Werror \
 		-Iinclude src/conversion.c src/perspectivetransform.c tests/apply_test.c \
 		-o apply_test \
 	&& ./apply_test
@@ -55,8 +55,13 @@ test-extended:
 		-Iinclude src/*.c tests/*.c
 
 
+.PHONY: benchmark
+benchmark: build
+	@./benchmark.sh
+
+
 flatcv: $(HDR_FILES) $(SRC_FILES)
-	gcc -Wall \
+	gcc -Wall -Werror \
 		-Iinclude src/cli.c src/conversion.c src/perspectivetransform.c \
 		-lm -o $@
 
@@ -78,7 +83,7 @@ lin-build: flatcv_linux_arm64
 
 # Windows - Cross-compilation with mingw-w64
 flatcv_windows_x86_64.exe: $(HDR_FILES) $(SRC_FILES)
-	x86_64-w64-mingw32-gcc -Wall -static -static-libgcc \
+	x86_64-w64-mingw32-gcc -Wall -Werror -static -static-libgcc \
 		-Iinclude src/cli.c src/conversion.c src/perspectivetransform.c \
 		-lm -o $@
 

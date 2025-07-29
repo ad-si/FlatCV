@@ -23,6 +23,9 @@
             doxygen
             gcc
             gnumake
+            graphicsmagick
+            hyperfine
+            imagemagick
           ];
           shellHook = ''
             cargo install --locked scrut@0.4.1
