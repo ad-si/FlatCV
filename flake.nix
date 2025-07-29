@@ -21,6 +21,7 @@
             bash
             coreutils
             doxygen
+            clang-tools  # For clang-format
             gcc
             gnumake
             graphicsmagick

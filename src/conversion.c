@@ -10,10 +10,10 @@
 #include <string.h>
 #include <time.h>
 
-#ifndef FLATCV_AMALGAMATION          /* normal (non-amalgamated) build */
+#ifndef FLATCV_AMALGAMATION /* normal (non-amalgamated) build */
 #include "conversion.h"
 #include "perspectivetransform.h"
-#else                                /* amalgamated build: already in flatcv.h */
+#else /* amalgamated build: already in flatcv.h */
 #include "flatcv.h"
 #endif
 
@@ -31,10 +31,10 @@ const unsigned char B_WEIGHT = 30;  // 0.114 * 256
  * @param data Pointer to the pixel data.
  * @return Pointer to the grayscale image data.
  */
-unsigned char const * const grayscale(
+unsigned char const *const grayscale(
   unsigned int width,
   unsigned int height,
-  unsigned char const * const data
+  unsigned char const *const data
 ) {
   unsigned int img_length_byte = width * height * 4;
   unsigned char *grayscale_data = malloc(img_length_byte);
@@ -62,7 +62,6 @@ unsigned char const * const grayscale(
   return grayscale_data;
 }
 
-
 /**
  * Convert raw RGBA row-major top-to-bottom image data
  * to RGBA row-major top-to-bottom grayscale image data
@@ -76,10 +75,10 @@ unsigned char const * const grayscale(
  * @param data Pointer to the pixel data.
  * @return Pointer to the grayscale image data.
  */
-unsigned char const * const grayscale_stretch(
+unsigned char const *const grayscale_stretch(
   unsigned int width,
   unsigned int height,
-  unsigned char const * const data
+  unsigned char const *const data
 ) {
   unsigned int img_length_byte = width * height * 4;
   unsigned char *grayscale_data = malloc(img_length_byte);
@@ -151,9 +150,11 @@ unsigned char const * const grayscale_stretch(
 
     if (gray < min_val) {
       gray = 0;
-    } else if (gray > max_val) {
+    }
+    else if (gray > max_val) {
       gray = 255;
-    } else {
+    }
+    else {
       gray = (gray - min_val) * 255 / range;
     }
 
@@ -165,7 +166,6 @@ unsigned char const * const grayscale_stretch(
 
   return grayscale_data;
 }
-
 
 /**
  * Convert raw RGBA row-major top-to-bottom image data
@@ -179,7 +179,7 @@ unsigned char const * const grayscale_stretch(
 unsigned char *rgba_to_grayscale(
   unsigned int width,
   unsigned int height,
-  unsigned char const * const data
+  unsigned char const *const data
 ) {
   unsigned int img_length_px = width * height;
   unsigned char *grayscale_data = malloc(img_length_px);
@@ -204,15 +204,14 @@ unsigned char *rgba_to_grayscale(
   return grayscale_data;
 }
 
-
 /**
-  * Apply a global threshold to the image data.
-  *
-  * @param img_length_px Length of the image data in pixels.
-  * @param data Pointer to the image data.
-  * @param threshold Threshold value.
-  *
-  */
+ * Apply a global threshold to the image data.
+ *
+ * @param img_length_px Length of the image data in pixels.
+ * @param data Pointer to the image data.
+ * @param threshold Threshold value.
+ *
+ */
 void apply_global_threshold(
   unsigned int img_length_px,
   unsigned char *data,
@@ -223,18 +222,17 @@ void apply_global_threshold(
   }
 }
 
-
 /**
-  * Applies two thresholds to the image data by blackening pixels
-  * below the lower threshold and whitening pixels above the upper threshold.
-  * Pixels between the two thresholds are scaled to the range [0, 255].
-  *
-  * @param img_length_px Length of the image data in pixels.
-  * @param data Pointer to the image data.
-  * @param lower_threshold Every pixel below this value will be blackened.
-  * @param upper_threshold Every pixel above this value will be whitened.
-  *
-  */
+ * Applies two thresholds to the image data by blackening pixels
+ * below the lower threshold and whitening pixels above the upper threshold.
+ * Pixels between the two thresholds are scaled to the range [0, 255].
+ *
+ * @param img_length_px Length of the image data in pixels.
+ * @param data Pointer to the image data.
+ * @param lower_threshold Every pixel below this value will be blackened.
+ * @param upper_threshold Every pixel above this value will be whitened.
+ *
+ */
 void apply_double_threshold(
   unsigned int img_length_px,
   unsigned char *data,
@@ -249,24 +247,24 @@ void apply_double_threshold(
       data[i] = 255;
     }
     else {
-      data[i] = (data[i] - lower_threshold) * 255 / (upper_threshold - lower_threshold);
+      data[i] =
+        (data[i] - lower_threshold) * 255 / (upper_threshold - lower_threshold);
     }
   }
 }
 
-
 /**
-  * Convert single channel grayscale image data to
-  * RGBA row-major top-to-bottom image data.
-  *
-  * @param width Width of the image.
-  * @param height Height of the image.
-  * @param data Pointer to the pixel data.
-  */
-unsigned char const * const single_to_multichannel(
+ * Convert single channel grayscale image data to
+ * RGBA row-major top-to-bottom image data.
+ *
+ * @param width Width of the image.
+ * @param height Height of the image.
+ * @param data Pointer to the pixel data.
+ */
+unsigned char const *const single_to_multichannel(
   unsigned int width,
   unsigned int height,
-  unsigned char const * const data
+  unsigned char const *const data
 ) {
   unsigned int img_length_px = width * height;
   unsigned char *multichannel_data = malloc(img_length_px * 4);
@@ -286,21 +284,20 @@ unsigned char const * const single_to_multichannel(
   return multichannel_data;
 }
 
-
 /**
-  * Apply Otsu's thresholding algorithm to the image data.
-  *
-  * @param width Width of the image.
-  * @param height Height of the image.
-  * @param use_double_threshold Whether to use double thresholding.
-  * @param data Pointer to the pixel data.
-  * @return Pointer to the monochrome image data.
-  */
-unsigned char const * const otsu_threshold_rgba(
+ * Apply Otsu's thresholding algorithm to the image data.
+ *
+ * @param width Width of the image.
+ * @param height Height of the image.
+ * @param use_double_threshold Whether to use double thresholding.
+ * @param data Pointer to the pixel data.
+ * @return Pointer to the monochrome image data.
+ */
+unsigned char const *const otsu_threshold_rgba(
   unsigned int width,
   unsigned int height,
   bool use_double_threshold,
-  unsigned char const * const data
+  unsigned char const *const data
 ) {
   unsigned char *grayscale_img = rgba_to_grayscale(width, height, data);
   unsigned int img_length_px = width * height;
@@ -337,8 +334,8 @@ unsigned char const * const otsu_threshold_rgba(
     float mean1 = cumulative_mean / cumulative_sum;
     float mean2 = (global_mean - cumulative_mean) / (1 - cumulative_sum);
 
-    float class_variance = cumulative_sum * (1 - cumulative_sum) *
-                            (mean1 - mean2) * (mean1 - mean2);
+    float class_variance =
+      cumulative_sum * (1 - cumulative_sum) * (mean1 - mean2) * (mean1 - mean2);
 
     if (class_variance > max_variance) {
       max_variance = class_variance;
@@ -357,41 +354,35 @@ unsigned char const * const otsu_threshold_rgba(
     );
   }
   else {
-    apply_global_threshold(
-      img_length_px,
-      grayscale_img,
-      optimal_threshold
-    );
+    apply_global_threshold(img_length_px, grayscale_img, optimal_threshold);
   }
 
-  unsigned char const * const monochrome_data = single_to_multichannel(
-    width,
-    height,
-    grayscale_img
-  );
+  unsigned char const *const monochrome_data =
+    single_to_multichannel(width, height, grayscale_img);
 
   free(grayscale_img);
 
   return monochrome_data;
 }
 
-
 /**
-  * Apply gaussian blur to the image data.
-  *
-  * @param width Width of the image.
-  * @param height Height of the image.
-  * @param data Pointer to the pixel data.
-  * @return Pointer to the blurred image data.
-  */
-unsigned char const * const apply_gaussian_blur(
+ * Apply gaussian blur to the image data.
+ *
+ * @param width Width of the image.
+ * @param height Height of the image.
+ * @param data Pointer to the pixel data.
+ * @return Pointer to the blurred image data.
+ */
+unsigned char const *const apply_gaussian_blur(
   unsigned int width,
   unsigned int height,
   double radius,
-  unsigned char const * const data
+  unsigned char const *const data
 ) {
   unsigned int img_length_px = width * height;
-  if (radius == 0) return memcpy(malloc(width*height*4), data, width*height*4);
+  if (radius == 0) {
+    return memcpy(malloc(width * height * 4), data, width * height * 4);
+  }
 
   unsigned char *blurred_data = malloc(img_length_px * 4);
 
@@ -450,14 +441,15 @@ unsigned char const * const apply_gaussian_blur(
     }
   }
 
-  // Create temporary buffer for vertical pass to avoid reading from buffer being written to
+  // Create temporary buffer for vertical pass to avoid reading from buffer
+  // being written to
   unsigned char *temp_data = malloc(img_length_px * 4);
   if (!temp_data) {
     free(blurred_data);
     free(kernel);
     return NULL;
   }
-  
+
   // Copy horizontal blur result to temp buffer
   memcpy(temp_data, blurred_data, img_length_px * 4);
 
@@ -503,37 +495,33 @@ unsigned char const * const apply_gaussian_blur(
 
 #include <time.h>
 
-
 /**
-  * Convert image to anti-aliased black and white.
-  * 1. Convert the image to grayscale.
-  * 2. Subtract blurred image from the original image to get the high frequencies.
-  * 3. Apply OTSU's threshold to get the optimal threshold.
-  * 4. Apply the threshold + offset to get the anti-aliased image.
-  *
-  * @param width Width of the image.
-  * @param height Height of the image.
-  * @param data Pointer to the pixel data.
-  * @return Pointer to the blurred image data.
-  */
-unsigned char const * const bw_smart(
+ * Convert image to anti-aliased black and white.
+ * 1. Convert the image to grayscale.
+ * 2. Subtract blurred image from the original image to get the high
+ * frequencies.
+ * 3. Apply OTSU's threshold to get the optimal threshold.
+ * 4. Apply the threshold + offset to get the anti-aliased image.
+ *
+ * @param width Width of the image.
+ * @param height Height of the image.
+ * @param data Pointer to the pixel data.
+ * @return Pointer to the blurred image data.
+ */
+unsigned char const *const bw_smart(
   unsigned int width,
   unsigned int height,
   bool use_double_threshold,
-  unsigned char const * const data
+  unsigned char const *const data
 ) {
-  unsigned char const * const grayscale_data = grayscale(width, height, data);
+  unsigned char const *const grayscale_data = grayscale(width, height, data);
 
   // Calculate blur radius dependent on image size
   // (Empirical formula after testing)
   double blurRadius = (sqrt((double)width * (double)height)) * 0.1;
 
-  unsigned char const * const blurred_data = apply_gaussian_blur(
-    width,
-    height,
-    blurRadius,
-    grayscale_data
-  );
+  unsigned char const *const blurred_data =
+    apply_gaussian_blur(width, height, blurRadius, grayscale_data);
 
   unsigned int img_length_px = width * height;
   unsigned char *high_freq_data = malloc(img_length_px * 4);
@@ -558,18 +546,17 @@ unsigned char const * const bw_smart(
       high_freq_val = 255;
     }
 
-    high_freq_data[rgba_idx] = high_freq_val; // R
+    high_freq_data[rgba_idx] = high_freq_val;     // R
     high_freq_data[rgba_idx + 1] = high_freq_val; // G
     high_freq_data[rgba_idx + 2] = high_freq_val; // B
-    high_freq_data[rgba_idx + 3] = 255; // A
+    high_freq_data[rgba_idx + 3] = 255;           // A
   }
 
   free((void *)grayscale_data);
   free((void *)blurred_data);
 
-  unsigned char const * const final_data = otsu_threshold_rgba(
-    width, height, use_double_threshold, high_freq_data
-  );
+  unsigned char const *const final_data =
+    otsu_threshold_rgba(width, height, use_double_threshold, high_freq_data);
 
   free(high_freq_data);
 

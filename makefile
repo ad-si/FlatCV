@@ -8,6 +8,11 @@ HDR_FILES := $(wildcard include/*.h)
 TEST_FILES := $(wildcard tests/*.c)
 
 
+.PHONY: format
+format:
+	clang-format -i $$(fd -e h -e c . src tests)
+
+
 .PHONY: test-units
 test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 	gcc -Wall -Werror \

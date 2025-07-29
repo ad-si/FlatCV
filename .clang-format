@@ -1,0 +1,14 @@
+---
+AlignAfterOpenBracket: BlockIndent
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackArguments: false
+BinPackParameters: false
+BraceWrapping:
+  BeforeElse: true
+BreakBeforeBraces: Custom
+ContinuationIndentWidth: 2
+IndentWidth: 2
+InsertBraces: true
+SortIncludes: true
+...
