@@ -562,3 +562,89 @@ unsigned char const *const bw_smart(
 
   return final_data;
 }
+
+/**
+ * Resize an image by given resize factors using bilinear interpolation.
+ *
+ * @param width Width of the input image.
+ * @param height Height of the input image.
+ * @param resize_x Horizontal resize factor (e.g., 2.0 for 2x, 0.5 for half).
+ * @param resize_y Vertical resize factor (e.g., 2.0 for 2x, 0.5 for half).
+ * @param out_width Pointer to store the output image width.
+ * @param out_height Pointer to store the output image height.
+ * @param data Pointer to the input pixel data.
+ * @return Pointer to the resized image data.
+ */
+unsigned char const *const resize(
+  unsigned int width,
+  unsigned int height,
+  double resize_x,
+  double resize_y,
+  unsigned int *out_width,
+  unsigned int *out_height,
+  unsigned char const *const data
+) {
+  if (resize_x <= 0.0 || resize_y <= 0.0) {
+    return NULL;
+  }
+
+  *out_width = (unsigned int)(width * resize_x);
+  *out_height = (unsigned int)(height * resize_y);
+
+  if (*out_width == 0 || *out_height == 0) {
+    return NULL;
+  }
+
+  unsigned int out_img_length = *out_width * *out_height * 4;
+  unsigned char *resized_data = malloc(out_img_length);
+
+  if (!resized_data) {
+    return NULL;
+  }
+
+  for (unsigned int out_y = 0; out_y < *out_height; out_y++) {
+    for (unsigned int out_x = 0; out_x < *out_width; out_x++) {
+      double src_x = out_x / resize_x;
+      double src_y = out_y / resize_y;
+
+      int x0 = (int)floor(src_x);
+      int y0 = (int)floor(src_y);
+      int x1 = x0 + 1;
+      int y1 = y0 + 1;
+
+      if (x0 >= 0 && x0 < width && y0 >= 0 && y0 < height) {
+        int x1c = (x1 < width) ? x1 : x0;
+        int y1c = (y1 < height) ? y1 : y0;
+
+        double dx = src_x - x0;
+        double dy = src_y - y0;
+
+        if (x1c == x0) {
+          dx = 0.0;
+        }
+        if (y1c == y0) {
+          dy = 0.0;
+        }
+
+        unsigned char *p00 = (unsigned char *)&data[(y0 * width + x0) * 4];
+        unsigned char *p01 = (unsigned char *)&data[(y0 * width + x1c) * 4];
+        unsigned char *p10 = (unsigned char *)&data[(y1c * width + x0) * 4];
+        unsigned char *p11 = (unsigned char *)&data[(y1c * width + x1c) * 4];
+
+        for (int c = 0; c < 4; c++) {
+          resized_data[(out_y * *out_width + out_x) * 4 + c] =
+            (unsigned char)(p00[c] * (1 - dx) * (1 - dy) +
+                            p01[c] * dx * (1 - dy) + p10[c] * (1 - dx) * dy +
+                            p11[c] * dx * dy);
+        }
+      }
+      else {
+        for (int c = 0; c < 4; c++) {
+          resized_data[(out_y * *out_width + out_x) * 4 + c] = 0;
+        }
+      }
+    }
+  }
+
+  return resized_data;
+}

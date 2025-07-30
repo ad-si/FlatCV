@@ -40,3 +40,13 @@ unsigned char const * const bw_smart(
   bool use_double_threshold,
   unsigned char const * const data
 );
+
+unsigned char const * const resize(
+  unsigned int width,
+  unsigned int height,
+  double scale_x,
+  double scale_y,
+  unsigned int* out_width,
+  unsigned int* out_height,
+  unsigned char const * const data
+);

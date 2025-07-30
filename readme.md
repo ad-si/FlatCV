@@ -15,6 +15,8 @@ Simple image processing and computer vision library in pure C.
 
 ## Usage
 
+### CLI
+
 FlatCV can either be used as a C library or via its CLI.
 The CLI supports edit pipelines which sequentially apply all transformations.
 
@@ -36,6 +38,7 @@ Command | Output
 `viu i.jpg` | ![Parrot](./imgs/parrot.jpeg)
 `flatcv i.jpg grayscale o.jpg` | ![Parrot Grayscale](./imgs/parrot_grayscale.jpeg)
 `flatcv i.jpg blur 9 o.jpg` | ![Parrot Blur](./imgs/parrot_blur.jpeg)
+`flatcv i.jpg resize 0.5 o.jpg` | ![Parrot 0.5x Resize](./imgs/parrot_resize_half.jpeg)
 `flatcv i.jpg grayscale, blur 9 o.jpg` | ![Parrot Grayscale and Blur](./imgs/parrot_grayscale_blur.jpeg)
 
 Command | Output
@@ -43,6 +46,26 @@ Command | Output
 `viu i.jpg` | ![Parrot](./imgs/page.png)
 `flatcv i.jpg bw_smart o.jpg` | ![Smart Binarization](./imgs/page_bw_smart.png)
 `flatcv i.jpg bw_smooth o.jpg` | ![Smooth Binarization](./imgs/page_bw_smooth.png)
+
+
+### Library
+
+```c
+#include "flatcv.h"
+
+// Resize an image to half size
+unsigned char const * half_size = resize(
+    input_width, input_height,
+    0.5, 0.5,
+    &out_width, &out_height,
+    input_data
+);
+
+// Do something with the resized image
+
+// Free the allocated memory
+free(half_size);
+```
 
 
 ## FAQ
