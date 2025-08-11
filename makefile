@@ -7,6 +7,9 @@ SRC_FILES := $(wildcard src/*.c)
 HDR_FILES := $(wildcard include/*.h)
 TEST_FILES := $(wildcard tests/*.c)
 
+# Source files excluding CLI (for library builds)
+LIB_SRC_FILES := $(filter-out src/cli.c, $(SRC_FILES))
+
 
 .PHONY: format
 format:
@@ -16,12 +19,12 @@ format:
 .PHONY: test-units
 test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 	gcc -Wall -Werror \
-		-Iinclude tests/test.c src/conversion.c src/perspectivetransform.c \
-		-o test_bin \
+		-Iinclude tests/test.c $(LIB_SRC_FILES) \
+		-lm -o test_bin \
 	&& ./test_bin
 
 	gcc -Wall -Werror \
-		-Iinclude src/conversion.c src/perspectivetransform.c tests/apply_test.c \
+		-Iinclude $(LIB_SRC_FILES) tests/apply_test.c \
 		-o apply_test \
 	&& ./apply_test
 
@@ -33,7 +36,7 @@ test-integration: build tests/cli.md
 
 
 .PHONY: test
-test: test-units test-integration
+test: build test-units test-integration
 
 
 .PHONY: test-extended
@@ -67,7 +70,7 @@ benchmark: build
 
 flatcv: $(HDR_FILES) $(SRC_FILES)
 	gcc -Wall -Werror \
-		-Iinclude src/cli.c src/conversion.c src/perspectivetransform.c \
+		-Iinclude $(SRC_FILES) \
 		-lm -o $@
 
 .PHONY: mac-build
@@ -89,7 +92,7 @@ lin-build: flatcv_linux_arm64
 # Windows - Cross-compilation with mingw-w64
 flatcv_windows_x86_64.exe: $(HDR_FILES) $(SRC_FILES)
 	x86_64-w64-mingw32-gcc -Wall -Werror -static -static-libgcc \
-		-Iinclude src/cli.c src/conversion.c src/perspectivetransform.c \
+		-Iinclude $(SRC_FILES) \
 		-lm -o $@
 
 .PHONY: win-build
@@ -120,12 +123,11 @@ flatcv.h: include/perspectivetransform.h include/conversion.h
 	@cat include/conversion.h >> $@
 	@echo '#endif /* FLATCV_H */' >> $@
 
-flatcv.c: flatcv.h src/conversion.c src/perspectivetransform.c
+flatcv.c: flatcv.h $(LIB_SRC_FILES)
 	@echo '/* FlatCV - Amalgamated implementation (auto-generated) */' > $@
 	@echo '#define FLATCV_AMALGAMATION' >> $@
 	@echo '#include "flatcv.h"' >> $@
-	@cat src/conversion.c >> $@
-	@cat src/perspectivetransform.c >> $@
+	@for src in $(LIB_SRC_FILES); do cat $$src >> $@; done
 	@echo '/* End of FlatCV amalgamation */' >> $@
 
 .PHONY: combine
