@@ -18,7 +18,7 @@
  * Return a grayscale image where the foreground color is white and the
  * background color is black.
  *
- * @param image_data Point32_ter to the input image data (RGBA format).
+ * @param image_data Pointer to the input image data (RGBA format).
  * @param width Width of the image.
  * @param height Height of the image.
  * @param foreground_hex Hex color code for the foreground color (e.g.,

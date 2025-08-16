@@ -92,10 +92,10 @@ static QueueItem dequeue(Queue *q) {
  *
  * @param width Width of the image.
  * @param height Height of the image.
- * @param grayscale_data Point32_ter to the input grayscale image data.
+ * @param grayscale_data Pointer to the input grayscale image data.
  * @param markers Array of Point2D markers with x,y coordinates.
  * @param num_markers Number of markers in the array.
- * @return Point32_ter to the segmented image data.
+ * @return Pointer to the segmented image data.
  */
 uint8_t *fcv_watershed_segmentation(
   uint32_t width,

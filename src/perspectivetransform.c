@@ -117,7 +117,7 @@ Matrix3x3 *fcv_calculate_perspective_transform(
   static Matrix3x3 identity = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 
   if (!src_corners || !dst_corners) {
-    log("Error: NULL point32_ter passed to calculate_perspective_transform\n");
+    log("Error: NULL pointer passed to calculate_perspective_transform\n");
     return &identity;
   }
 

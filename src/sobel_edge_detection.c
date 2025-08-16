@@ -25,8 +25,8 @@
  * @param height Height of the image.
  * @param channels Number of channels in the input image.
  *                 (1: Grayscale, 3: RGB, 4: RGBA)
- * @param data Point32_ter to the input pixel data.
- * @return Point32_ter to the single-channel grayscale edge-detected image data.
+ * @param data Pointer to the input pixel data.
+ * @return Pointer to the single-channel grayscale edge-detected image data.
  */
 uint8_t *fcv_sobel_edge_detection(
   uint32_t width,

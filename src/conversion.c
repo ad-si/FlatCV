@@ -28,8 +28,8 @@
  *
  * @param width Width of the image.
  * @param height Height of the image.
- * @param data Point32_ter to the pixel data.
- * @return Point32_ter to the grayscale image data.
+ * @param data Pointer to the pixel data.
+ * @return Pointer to the grayscale image data.
  */
 uint8_t *
 fcv_grayscale(uint32_t width, uint32_t height, uint8_t const *const data) {
@@ -69,8 +69,8 @@ fcv_grayscale(uint32_t width, uint32_t height, uint8_t const *const data) {
 
  * @param width Width of the image.
  * @param height Height of the image.
- * @param data Point32_ter to the pixel data.
- * @return Point32_ter to the grayscale image data.
+ * @param data Pointer to the pixel data.
+ * @return Pointer to the grayscale image data.
  */
 uint8_t *fcv_grayscale_stretch(
   uint32_t width,
@@ -168,7 +168,7 @@ uint8_t *fcv_grayscale_stretch(
  * Apply a global threshold to the image data.
  *
  * @param img_length_px Length of the image data in pixels.
- * @param data Point32_ter to the image data.
+ * @param data Pointer to the image data.
  * @param threshold Threshold value.
  *
  */
@@ -188,7 +188,7 @@ void fcv_apply_global_threshold(
  * Pixels between the two thresholds are scaled to the range [0, 255].
  *
  * @param img_length_px Length of the image data in pixels.
- * @param data Point32_ter to the image data.
+ * @param data Pointer to the image data.
  * @param lower_threshold Every pixel below this value will be blackened.
  * @param upper_threshold Every pixel above this value will be whitened.
  *
@@ -219,8 +219,8 @@ void apply_double_threshold(
  * @param width Width of the image.
  * @param height Height of the image.
  * @param use_double_threshold Whether to use double thresholding.
- * @param data Point32_ter to the pixel data.
- * @return Point32_ter to the monochrome image data.
+ * @param data Pointer to the pixel data.
+ * @return Pointer to the monochrome image data.
  */
 uint8_t *fcv_otsu_threshold_rgba(
   uint32_t width,
@@ -299,8 +299,8 @@ uint8_t *fcv_otsu_threshold_rgba(
  *
  * @param width Width of the image.
  * @param height Height of the image.
- * @param data Point32_ter to the pixel data.
- * @return Point32_ter to the blurred image data.
+ * @param data Pointer to the pixel data.
+ * @return Pointer to the blurred image data.
  */
 uint8_t *fcv_apply_gaussian_blur(
   uint32_t width,
@@ -434,8 +434,8 @@ uint8_t *fcv_apply_gaussian_blur(
  *
  * @param width Width of the image.
  * @param height Height of the image.
- * @param data Point32_ter to the pixel data.
- * @return Point32_ter to the blurred image data.
+ * @param data Pointer to the pixel data.
+ * @return Pointer to the blurred image data.
  */
 uint8_t *fcv_bw_smart(
   uint32_t width,
@@ -504,10 +504,10 @@ uint8_t *fcv_bw_smart(
  * @param height Height of the input image.
  * @param resize_x Horizontal resize factor (e.g., 2.0 for 2x, 0.5 for half).
  * @param resize_y Vertical resize factor (e.g., 2.0 for 2x, 0.5 for half).
- * @param out_width Point32_ter to store the output image width.
- * @param out_height Point32_ter to store the output image height.
- * @param data Point32_ter to the input pixel data.
- * @return Point32_ter to the resized image data.
+ * @param out_width Pointer to store the output image width.
+ * @param out_height Pointer to store the output image height.
+ * @param data Pointer to the input pixel data.
+ * @return Pointer to the resized image data.
  */
 uint8_t *fcv_resize(
   uint32_t width,

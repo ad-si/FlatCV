@@ -116,7 +116,7 @@ void fcv_fill_disk_lines(
  * @param radius Radius of the circle.
  * @param center_x X coordinate of the circle center.
  * @param center_y Y coordinate of the circle center.
- * @param data Point32_ter to the pixel data (modified in-place).
+ * @param data Pointer to the pixel data (modified in-place).
  */
 void fcv_draw_circle(
   uint32_t width,
@@ -185,7 +185,7 @@ void fcv_draw_circle(
  * @param radius Radius of the disk.
  * @param center_x X coordinate of the disk center.
  * @param center_y Y coordinate of the disk center.
- * @param data Point32_ter to the pixel data (modified in-place).
+ * @param data Pointer to the pixel data (modified in-place).
  */
 void fcv_draw_disk(
   uint32_t width,

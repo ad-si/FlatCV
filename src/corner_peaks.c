@@ -61,11 +61,11 @@ static double euclidean_distance(Point2D a, Point2D b) {
  *
  * @param width Width of the image.
  * @param height Height of the image.
- * @param data Point32_ter to the 2 channel (w and q) corner response data.
+ * @param data Pointer to the 2 channel (w and q) corner response data.
  * @param min_distance Minimum distance between peaks.
  * @param accuracy_thresh Threshold for accuracy measure (w).
  * @param roundness_thresh Threshold for roundness measure (q).
- * @return Point32_ter to CornerPeaks structure containing detected peaks.
+ * @return Pointer to CornerPeaks structure containing detected peaks.
  */
 CornerPeaks *fcv_corner_peaks(
   uint32_t width,
