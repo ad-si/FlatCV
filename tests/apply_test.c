@@ -1,10 +1,11 @@
-#include "conversion.h"
-#include "perspectivetransform.h"
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "conversion.h"
+#include "perspectivetransform.h"
 
 int translate_matrix_test() {
   printf("🎬 Start translate matrix test …\n");

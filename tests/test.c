@@ -1,10 +1,16 @@
-#include "conversion.h"
-#include "perspectivetransform.h"
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+#include "binary_closing_disk.h"
+#include "conversion.h"
+#include "corner_peaks.h"
+#include "foerstner_corner.h"
+#include "perspectivetransform.h"
+#include "rgba_to_grayscale.h"
 
 int test_otsu_threshold() {
   unsigned int width = 4;
@@ -203,9 +209,422 @@ int test_perspective_transform_float() {
   }
 }
 
+void free_corner_peaks(CornerPeaks *peaks) {
+  if (peaks) {
+    free(peaks->points);
+    free(peaks);
+  }
+}
+
+int test_foerstner_corner() {
+  // Create a simple test image with a corner pattern (5x5 RGBA)
+  unsigned int width = 5;
+  unsigned int height = 5;
+
+  // Create a simple corner pattern: white square on black background
+  unsigned char data[100] = {
+    // Row 0: all black
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    // Row 1: black, then white corner
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    // Row 2: black, then white corner
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    // Row 3: all black
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    // Row 4: all black
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255
+  };
+
+  // Convert RGBA to grayscale first
+  unsigned char *gray_data = rgba_to_grayscale(width, height, data);
+  if (!gray_data) {
+    printf("❌ Foerstner corner test failed: grayscale conversion failed\n");
+    return 1;
+  }
+
+  double sigma = 1.0;
+  unsigned char const *const result =
+    foerstner_corner(width, height, gray_data, sigma);
+
+  free(gray_data);
+
+  if (result == NULL) {
+    printf("❌ Foerstner corner test failed: NULL result\n");
+    return 1;
+  }
+
+  // Basic sanity checks:
+  // 1. Function should return valid pointer
+  // 2. Result should have 2 channels (w and q measures)
+  // 3. Values should be in [0, 255] range
+  bool test_ok = true;
+
+  for (unsigned int i = 0; i < width * height * 2; i++) {
+    if (result[i] > 255) {
+      printf(
+        "❌ Foerstner corner test failed: value %d out of range at index %d\n",
+        result[i],
+        i
+      );
+      test_ok = false;
+      break;
+    }
+  }
+
+  // Test specific corner response (corner should be at position (3,1) or (3,2))
+  // The exact values depend on implementation details, so we just check for
+  // reasonable response
+  unsigned int corner_idx1 = (1 * width + 3) * 2; // (3,1) w measure
+  unsigned int corner_idx2 = (2 * width + 3) * 2; // (3,2) w measure
+
+  // Corner areas should have some response (not zero)
+  if (result[corner_idx1] == 0 && result[corner_idx2] == 0) {
+    printf("❌ Foerstner corner test failed: no corner response detected\n");
+    test_ok = false;
+  }
+
+  free((void *)result);
+
+  if (test_ok) {
+    printf("✅ Foerstner corner test passed\n");
+    return 0;
+  }
+  else {
+    printf("❌ Foerstner corner test failed\n");
+    return 1;
+  }
+}
+
+int test_corner_peaks() {
+  // Test with simple synthetic corner response data (5x5 image, 2 channels)
+  unsigned int width = 5;
+  unsigned int height = 5;
+
+  // Create test data: 2-channel image (w and q measures from Foerstner)
+  // Channel 0 (w): corner strength, Channel 1 (q): roundness
+  unsigned char data[50]; // 5x5x2 = 50 bytes
+  memset(data, 0, 50);
+
+  // Create some artificial corner responses at positions (1,1) and (3,3)
+  data[(1 * width + 1) * 2 + 0] = 200; // Strong corner at (1,1)
+  data[(1 * width + 1) * 2 + 1] = 150;
+
+  data[(3 * width + 3) * 2 + 0] = 180; // Another corner at (3,3)
+  data[(3 * width + 3) * 2 + 1] = 140;
+
+  // Add some weaker responses nearby
+  data[(1 * width + 2) * 2 + 0] = 100; // Weaker neighbor
+  data[(2 * width + 1) * 2 + 0] = 90;  // Weaker neighbor
+
+  // Test 1: Basic functionality
+  CornerPeaks *peaks = corner_peaks(width, height, data, 1, 0.5, 0.3);
+
+  if (!peaks) {
+    printf("❌ Corner peaks test failed: NULL result\n");
+    return 1;
+  }
+
+  bool test_ok = true;
+
+  // Should find the two strong corners
+  if (peaks->count != 2) {
+    printf(
+      "❌ Corner peaks test failed: expected 2 peaks, got %u\n",
+      peaks->count
+    );
+    test_ok = false;
+  }
+  else {
+    // Check if we found the expected corners
+    bool found_corner1 = false, found_corner3 = false;
+
+    for (unsigned int i = 0; i < peaks->count; i++) {
+      if (peaks->points[i].x == 1.0 && peaks->points[i].y == 1.0) {
+        found_corner1 = true;
+      }
+      if (peaks->points[i].x == 3.0 && peaks->points[i].y == 3.0) {
+        found_corner3 = true;
+      }
+    }
+
+    if (!found_corner1) {
+      printf("❌ Corner peaks test failed: corner at (1,1) not found\n");
+      test_ok = false;
+    }
+    if (!found_corner3) {
+      printf("❌ Corner peaks test failed: corner at (3,3) not found\n");
+      test_ok = false;
+    }
+  }
+
+  free_corner_peaks(peaks);
+
+  // Test 2: Minimum distance suppression
+  peaks = corner_peaks(width, height, data, 3, 0.5, 0.3); // min_distance = 3
+
+  if (!peaks) {
+    printf("❌ Corner peaks test failed: NULL result on min_distance test\n");
+    return 1;
+  }
+
+  // With min_distance=3, the corners at (1,1) and (3,3) are distance 2.83
+  // apart, so they should both be kept. But if we had closer corners, one would
+  // be suppressed.
+  if (peaks->count > 2) {
+    printf(
+      "❌ Corner peaks test failed: too many peaks with min_distance=3: %u\n",
+      peaks->count
+    );
+    test_ok = false;
+  }
+
+  free_corner_peaks(peaks);
+
+  // Test 3: High threshold (should find no peaks)
+  peaks = corner_peaks(width, height, data, 1, 0.98, 0.98);
+
+  if (!peaks) {
+    printf("❌ Corner peaks test failed: NULL result on high threshold test\n");
+    return 1;
+  }
+
+  if (peaks->count != 0) {
+    printf(
+      "❌ Corner peaks test failed: expected 0 peaks with high threshold, got "
+      "%u\n",
+      peaks->count
+    );
+    test_ok = false;
+  }
+
+  free_corner_peaks(peaks);
+
+  // Test 4: NULL input
+  peaks = corner_peaks(width, height, NULL, 1, 0.5, 0.3);
+  if (peaks != NULL) {
+    printf("❌ Corner peaks test failed: should return NULL for NULL input\n");
+    test_ok = false;
+    free_corner_peaks(peaks);
+  }
+
+  if (test_ok) {
+    printf("✅ Corner peaks test passed\n");
+    return 0;
+  }
+  else {
+    printf("❌ Corner peaks test failed\n");
+    return 1;
+  }
+}
+
+int test_binary_closing_disk() {
+  // Test 1: Basic functionality with simple binary image
+  unsigned int width = 7;
+  unsigned int height = 7;
+  int radius = 1;
+
+  // Create test binary image with a small gap
+  unsigned char data[49] = {0,   0,   0,   0,   0, 0,   0,   0,   255, 255,
+                            0,   255, 255, 0,   0, 255, 255, 0,   255, 255,
+                            0,   0,   0,   0,   0, 0,   0,   0,   0,   255,
+                            255, 0,   255, 255, 0, 0,   255, 255, 0,   255,
+                            255, 0,   0,   0,   0, 0,   0,   0,   0};
+
+  unsigned char const *result =
+    binary_closing_disk(data, width, height, radius);
+
+  if (!result) {
+    printf("❌ Binary closing disk test failed: NULL result\n");
+    return 1;
+  }
+
+  bool test_ok = true;
+
+  // After closing with radius 1, the gap in the middle should be filled
+  // Check some key positions that should be white after closing
+  int center_idx = 3 * width + 3; // Center position (3,3)
+  if (result[center_idx] != 255) {
+    printf("❌ Binary closing disk test failed: gap not closed at center\n");
+    test_ok = false;
+  }
+
+  // Check that corners are still black
+  if (result[0] != 0 || result[6] != 0 || result[42] != 0 || result[48] != 0) {
+    printf("❌ Binary closing disk test failed: corners should remain black\n");
+    test_ok = false;
+  }
+
+  free((void *)result);
+
+  // Test 2: Edge case - radius 0 (should return copy of original)
+  result = binary_closing_disk(data, width, height, 0);
+  if (!result) {
+    printf("❌ Binary closing disk test failed: NULL result for radius 0\n");
+    return 1;
+  }
+
+  // With radius 0, image should be unchanged
+  for (int i = 0; i < width * height; i++) {
+    if (result[i] != data[i]) {
+      printf(
+        "❌ Binary closing disk test failed: radius 0 should not change image\n"
+      );
+      test_ok = false;
+      break;
+    }
+  }
+
+  free((void *)result);
+
+  // Test 3: NULL input
+  result = binary_closing_disk(NULL, width, height, radius);
+  if (result != NULL) {
+    printf(
+      "❌ Binary closing disk test failed: should return NULL for NULL input\n"
+    );
+    test_ok = false;
+    free((void *)result);
+  }
+
+  // Test 4: Invalid dimensions
+  result = binary_closing_disk(data, 0, height, radius);
+  if (result != NULL) {
+    printf(
+      "❌ Binary closing disk test failed: should return NULL for width 0\n"
+    );
+    test_ok = false;
+    free((void *)result);
+  }
+
+  result = binary_closing_disk(data, width, 0, radius);
+  if (result != NULL) {
+    printf(
+      "❌ Binary closing disk test failed: should return NULL for height 0\n"
+    );
+    test_ok = false;
+    free((void *)result);
+  }
+
+  // Test 5: Negative radius
+  result = binary_closing_disk(data, width, height, -1);
+  if (result != NULL) {
+    printf(
+      "❌ Binary closing disk test failed: should return NULL for negative "
+      "radius\n"
+    );
+    test_ok = false;
+    free((void *)result);
+  }
+
+  if (test_ok) {
+    printf("✅ Binary closing disk test passed\n");
+    return 0;
+  }
+  else {
+    printf("❌ Binary closing disk test failed\n");
+    return 1;
+  }
+}
+
 int main() {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
-      !test_perspective_transform_float()) {
+      !test_perspective_transform_float() && !test_foerstner_corner() &&
+      !test_corner_peaks() && !test_binary_closing_disk()) {
     printf("✅ All tests passed\n");
     return 0;
   }

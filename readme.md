@@ -17,6 +17,7 @@ Simple image processing and computer vision library in pure C.
     than one file over multiple cores anyways.
     Yet, it's still often faster than GraphicsMagick with multiple threads.
     (See [benchmark](#benchmark) below.)
+- No GPU acceleration
 - Only uses functions from the C standard library.
 
 
@@ -40,19 +41,18 @@ flatcv i.jpg 'grayscale, blur 9' o.jpg
 flatcv i.jpg grayscale, blur 9 o.jpg
 ```
 
-Command | Output
---------|-------
-`viu i.jpg` | ![Parrot](./imgs/parrot.jpeg)
-`flatcv i.jpg grayscale o.jpg` | ![Parrot Grayscale](./imgs/parrot_grayscale.jpeg)
-`flatcv i.jpg blur 9 o.jpg` | ![Parrot Blur](./imgs/parrot_blur.jpeg)
-`flatcv i.jpg resize 0.5 o.jpg` | ![Parrot 0.5x Resize](./imgs/parrot_resize_half.jpeg)
-`flatcv i.jpg grayscale, blur 9 o.jpg` | ![Parrot Grayscale and Blur](./imgs/parrot_grayscale_blur.jpeg)
 
-Command | Output
---------|-------
-`viu i.jpg` | ![Parrot](./imgs/page.png)
-`flatcv i.jpg bw_smart o.jpg` | ![Smart Binarization](./imgs/page_bw_smart.png)
-`flatcv i.jpg bw_smooth o.jpg` | ![Smooth Binarization](./imgs/page_bw_smooth.png)
+#### Examples
+
+Check out the [full documentation](./tests/cli.md)
+for more examples and usage instructions.
+
+Command | Input | Output
+--------|-------|--------
+`flatcv i.jpg grayscale o.jpg` | ![Parrot](./imgs/parrot.jpeg) | ![Parrot Grayscale](./imgs/parrot_grayscale.jpeg)
+`flatcv i.jpg grayscale, blur 9 o.jpg` | ![Parrot](./imgs/parrot.jpeg) | ![Parrot Grayscale and Blur](./imgs/parrot_grayscale_blur.jpeg)
+`flatcv i.jpg bw_smooth o.jpg` | ![Parrot](./imgs/page.png) | ![Smooth Binarization](./imgs/page_bw_smooth.png)
+`flatcv i.jpg watershed 0x0 300x200 599x0 o.jpg` | ![Parrot](./imgs/elevation_3_basins_gradient.png) | ![Watershed Segmentation](./imgs/elevation_3_basins_gradient_watershed.png)
 
 
 ### Library
@@ -80,7 +80,7 @@ free(half_size);
 ### Why is this written in C?
 
 - **Most portable language** \
-    Almost every other language has some support to integrate C code
+    Almost every other language has support to integrate C code
     in one way or another.
     Especially since it's available a single file
     that can be vendored into your project.

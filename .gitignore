@@ -1,9 +1,10 @@
 /.aider*
 /.direnv
+/apply_test
 /docs
 /flatcv
+/flatcv_*
 /flatcv.c
 /flatcv.h
-/flatcv_*
 /test_bin
 /tmp

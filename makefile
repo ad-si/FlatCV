@@ -4,11 +4,17 @@ help: makefile
 
 # All source / header files in repository
 SRC_FILES := $(wildcard src/*.c)
-HDR_FILES := $(wildcard include/*.h)
-TEST_FILES := $(wildcard tests/*.c)
-
 # Source files excluding CLI (for library builds)
 LIB_SRC_FILES := $(filter-out src/cli.c, $(SRC_FILES))
+
+HDR_FILES := $(wildcard include/*.h)
+HDR_SRC_FILES := \
+	$(filter-out include/stb_image.h, \
+	$(filter-out include/stb_image_write.h, \
+	$(HDR_FILES)))
+
+TEST_FILES := $(wildcard tests/*.c)
+
 
 
 .PHONY: format
@@ -115,19 +121,25 @@ install: build
 	sudo cp ./flatcv /usr/local/bin
 
 
-flatcv.h: include/perspectivetransform.h include/conversion.h
+flatcv.h: $(HDR_SRC_FILES)
 	@echo '/* FlatCV - Amalgamated public header (auto-generated) */' > $@
 	@echo '#ifndef FLATCV_H' >> $@
 	@echo '#define FLATCV_H' >> $@
-	@cat include/perspectivetransform.h >> $@
-	@cat include/conversion.h >> $@
+	@echo '#define FLATCV_AMALGAMATION' >> $@
+	@for src in $(HDR_SRC_FILES); do \
+			echo "// File: $$src" >> $@; \
+			cat $$src >> $@; \
+		done
 	@echo '#endif /* FLATCV_H */' >> $@
 
 flatcv.c: flatcv.h $(LIB_SRC_FILES)
 	@echo '/* FlatCV - Amalgamated implementation (auto-generated) */' > $@
 	@echo '#define FLATCV_AMALGAMATION' >> $@
 	@echo '#include "flatcv.h"' >> $@
-	@for src in $(LIB_SRC_FILES); do cat $$src >> $@; done
+	@for src in $(LIB_SRC_FILES); do \
+			echo "// File: $$src" >> $@; \
+			cat $$src >> $@; \
+		done
 	@echo '/* End of FlatCV amalgamation */' >> $@
 
 .PHONY: combine

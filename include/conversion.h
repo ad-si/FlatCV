@@ -1,4 +1,6 @@
+#ifndef FLATCV_AMALGAMATION
 #pragma once
+#endif
 
 #include <stdbool.h>
 
