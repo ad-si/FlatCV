@@ -13,6 +13,7 @@
 #include "conversion.h"
 #include "crop.h"
 #include "draw.h"
+#include "extract_document.h"
 #include "foerstner_corner.h"
 #include "perspectivetransform.h"
 #include "rgba_to_grayscale.h"
@@ -54,19 +55,33 @@ void print32_t_usage(const char *program_name) {
     "  bw_smooth       - Smooth (anti-aliased) black and white conversion\n"
   );
   printf("  detect_corners  - Detect corners and output as JSON\n");
-  printf("  draw_corners    - Detect corners and draw circles at each corner\n");
+  printf(
+    "  draw_corners    - Detect corners and draw circles at each corner\n"
+  );
   printf("  sobel           - Apply Sobel edge detection\n");
   printf(
     "  circle <hex_color> <radius> <x>x<y> - Draw a colored circle at position "
     "(x,y)\n"
   );
-  printf("  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
-         "position "
-         "(x,y)\n");
-  printf("  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
-         "markers at "
-         "specified coordinates\n");
+  printf(
+    "  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
+    "position "
+    "(x,y)\n"
+  );
+  printf(
+    "  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
+    "markers at "
+    "specified coordinates\n"
+  );
   printf("  crop <widthxheight+x+y> - Crop the image\n");
+  printf(
+    "  extract_document - Extract document using corner detection and "
+    "perspective transform (auto-size)\n"
+  );
+  printf(
+    "  extract_document_to <output_width>x<output_height> - Extract document "
+    "to specific dimensions\n"
+  );
   printf("\nPipeline syntax:\n");
   printf("  Operations are applied in sequence\n");
   printf("  Use parentheses for operations with parameters: (blur 3.0)\n");
@@ -89,6 +104,11 @@ void print32_t_usage(const char *program_name) {
   );
   printf(
     "  %s input.jpg \"watershed '100x50 200x150 300x100'\" output.jpg\n",
+    program_name
+  );
+  printf("  %s input.jpg \"extract_document\" output.jpg\n", program_name);
+  printf(
+    "  %s input.jpg \"extract_document_to 800x600\" output.jpg\n",
     program_name
   );
 }
@@ -571,6 +591,55 @@ int32_t parse_pipeline(
           return 0;
         }
       }
+      else if (strcmp(piece, "extract_document_to") == 0) {
+        // Parse output dimensions in format "widthxheight"
+        char *params_copy = strdup(params_str);
+        char *x_pos = strchr(params_copy, 'x');
+        if (x_pos) {
+          *x_pos = '\0';
+          uint32_t out_width = (uint32_t)atoi(trim_whitespace(params_copy));
+          uint32_t out_height = (uint32_t)atoi(trim_whitespace(x_pos + 1));
+
+          if (out_width > 0 && out_height > 0) {
+            add_operation(
+              pipeline,
+              piece,
+              (double)out_width,
+              1,
+              (double)out_height,
+              1,
+              0.0,
+              0,
+              0.0,
+              0,
+              NULL,
+              0
+            );
+          }
+          else {
+            fprintf(
+              stderr,
+              "Error: extract_document_to requires positive dimensions\n"
+            );
+            free(params_copy);
+            return 0;
+          }
+          free(params_copy);
+        }
+        else {
+          fprintf(
+            stderr,
+            "Error: extract_document_to operation requires format "
+            "'widthxheight' (e.g., 800x600)\n"
+          );
+          free(params_copy);
+          return 0;
+        }
+      }
+      else if (strcmp(piece, "extract_document") == 0) {
+        // Auto-size version - no parameters needed
+        add_operation(pipeline, piece, 0.0, 0, 0.0, 0, 0.0, 0, 0.0, 0, NULL, 0);
+      }
       else {
         /* Regular numeric parameter parsing for other operations */
         char *space2 = strchr(params_str, ' ');
@@ -645,8 +714,9 @@ uint8_t *apply_operation(
       fprintf(stderr, "Error: blur operation requires radius parameter\n");
       return NULL;
     }
-    return (uint8_t *)
-      fcv_apply_gaussian_blur(*width, *height, param, input_data);
+    return (
+      uint8_t *
+    )fcv_apply_gaussian_blur(*width, *height, param, input_data);
   }
   else if (strcmp(operation, "resize") == 0) {
     double resize_x, resize_y;
@@ -715,8 +785,9 @@ uint8_t *apply_operation(
     return result;
   }
   else if (strcmp(operation, "threshold") == 0) {
-    return (uint8_t *)
-      fcv_otsu_threshold_rgba(*width, *height, false, input_data);
+    return (
+      uint8_t *
+    )fcv_otsu_threshold_rgba(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smart") == 0) {
     return (uint8_t *)fcv_bw_smart(*width, *height, false, input_data);
@@ -730,7 +801,11 @@ uint8_t *apply_operation(
     printf("    \"corners\": {\n");
     printf("      \"top_left\": [%.2f, %.2f],\n", corners.tl_x, corners.tl_y);
     printf("      \"top_right\": [%.2f, %.2f],\n", corners.tr_x, corners.tr_y);
-    printf("      \"bottom_right\": [%.2f, %.2f],\n", corners.br_x, corners.br_y);
+    printf(
+      "      \"bottom_right\": [%.2f, %.2f],\n",
+      corners.br_x,
+      corners.br_y
+    );
     printf("      \"bottom_left\": [%.2f, %.2f]\n", corners.bl_x, corners.bl_y);
     printf("    }\n");
     printf("  }\n");
@@ -759,10 +834,46 @@ uint8_t *apply_operation(
     memcpy(result, input_data, img_length_byte);
 
     // Draw circles at each corner (using red color and radius of 5)
-    fcv_draw_circle(*width, *height, 4, "FF0000", 5, corners.tl_x, corners.tl_y, result);
-    fcv_draw_circle(*width, *height, 4, "FF0000", 5, corners.tr_x, corners.tr_y, result);
-    fcv_draw_circle(*width, *height, 4, "FF0000", 5, corners.br_x, corners.br_y, result);
-    fcv_draw_circle(*width, *height, 4, "FF0000", 5, corners.bl_x, corners.bl_y, result);
+    fcv_draw_circle(
+      *width,
+      *height,
+      4,
+      "FF0000",
+      5,
+      corners.tl_x,
+      corners.tl_y,
+      result
+    );
+    fcv_draw_circle(
+      *width,
+      *height,
+      4,
+      "FF0000",
+      5,
+      corners.tr_x,
+      corners.tr_y,
+      result
+    );
+    fcv_draw_circle(
+      *width,
+      *height,
+      4,
+      "FF0000",
+      5,
+      corners.br_x,
+      corners.br_y,
+      result
+    );
+    fcv_draw_circle(
+      *width,
+      *height,
+      4,
+      "FF0000",
+      5,
+      corners.bl_x,
+      corners.bl_y,
+      result
+    );
 
     return result;
   }
@@ -967,6 +1078,51 @@ uint8_t *apply_operation(
     }
     return result;
   }
+  else if (strcmp(operation, "extract_document") == 0) {
+    // Auto-size version
+    uint32_t output_width, output_height;
+    uint8_t *result = fcv_extract_document_auto(
+      *width,
+      *height,
+      input_data,
+      &output_width,
+      &output_height
+    );
+
+    if (result) {
+      *width = output_width;
+      *height = output_height;
+    }
+
+    return result;
+  }
+  else if (strcmp(operation, "extract_document_to") == 0) {
+    if (!has_param || !has_param2) {
+      fprintf(
+        stderr,
+        "Error: extract_document_to operation requires output dimensions\n"
+      );
+      return NULL;
+    }
+
+    uint32_t output_width = (uint32_t)param;
+    uint32_t output_height = (uint32_t)param2;
+
+    uint8_t *result = fcv_extract_document(
+      *width,
+      *height,
+      input_data,
+      output_width,
+      output_height
+    );
+
+    if (result) {
+      *width = output_width;
+      *height = output_height;
+    }
+
+    return result;
+  }
   else {
     fprintf(stderr, "Error: Unknown operation '%s'\n", operation);
     return NULL;
@@ -1056,15 +1212,15 @@ int32_t main(int32_t argc, char *argv[]) {
   }
 
   const char *input_path = argv[1];
-  
+
   // Check if this is a detect_corners operation (no output image required)
   int32_t is_detect_corners_only = 0;
   if (argc == 3 && strcmp(argv[2], "detect_corners") == 0) {
     is_detect_corners_only = 1;
   }
-  
+
   const char *output_path = is_detect_corners_only ? NULL : argv[argc - 1];
-  
+
   if (!is_detect_corners_only && argc < 4) {
     print32_t_usage(argv[0]);
     return 1;
