@@ -15,7 +15,7 @@
 // #define DEBUG_LOGGING
 
 #ifdef DEBUG_LOGGING
-#define log(msg) printf("DEBUG: %s\n", msg)
+#define log(msg) print32_tf("DEBUG: %s\n", msg)
 #else
 #define log(msg) // No operation
 #endif
@@ -24,10 +24,10 @@
  * Helper function to solve 8x8 linear system using Gaussian elimination
  * Returns 1 on success, 0 on failure
  */
-int solve_linear_system(double A[8][8], double b[8], double x[8]) {
-  const int n = 8;
+int32_t solve_linear_system(double A[8][8], double b[8], double x[8]) {
+  const int32_t n = 8;
   const double epsilon = 1e-10;
-  int i, j, k;
+  int32_t i, j, k;
 
   // Create augmented matrix [A|b] with extra safety margin
   double aug[8][10]; // One extra column for safety
@@ -43,7 +43,7 @@ int solve_linear_system(double A[8][8], double b[8], double x[8]) {
   // Gaussian elimination with partial pivoting
   for (i = 0; i < n; i++) {
     // Find pivot
-    int max_row = i;
+    int32_t max_row = i;
     double max_val = fabs(aug[i][i]);
 
     for (k = i + 1; k < n; k++) {
@@ -115,13 +115,13 @@ calculate_perspective_transform(Corners *src_corners, Corners *dst_corners) {
   static Matrix3x3 identity = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 
   if (!src_corners || !dst_corners) {
-    log("Error: NULL pointer passed to calculate_perspective_transform\n");
+    log("Error: NULL point32_ter passed to calculate_perspective_transform\n");
     return &identity;
   }
 
 #ifdef DEBUG_LOGGING
-  printf("[C] Calculating perspective transform:\n");
-  printf(
+  print32_tf("[C] Calculating perspective transform:\n");
+  print32_tf(
     "src_corners:\ntl(%f, %f)\ntr(%f, %f)\nbr(%f, %f)\nbl(%f, %f)\n\n",
     src_corners->tl_x,
     src_corners->tl_y,
@@ -132,7 +132,7 @@ calculate_perspective_transform(Corners *src_corners, Corners *dst_corners) {
     src_corners->bl_x,
     src_corners->bl_y
   );
-  printf(
+  print32_tf(
     "dst_corners:\ntl(%f, %f)\ntr(%f, %f)\nbr(%f, %f)\nbl(%f, %f)\n\n",
     dst_corners->tl_x,
     dst_corners->tl_y,
@@ -159,7 +159,7 @@ calculate_perspective_transform(Corners *src_corners, Corners *dst_corners) {
   }
 
   // Set up the system of equations
-  for (int i = 0; i < 4; i++) {
+  for (int32_t i = 0; i < 4; i++) {
     double srcX = 0.0, srcY = 0.0, dstX = 0.0, dstY = 0.0;
 
     // Safely extract coordinates
@@ -220,7 +220,7 @@ calculate_perspective_transform(Corners *src_corners, Corners *dst_corners) {
   }
 
   // Validate solution
-  for (int i = 0; i < 8; i++) {
+  for (int32_t i = 0; i < 8; i++) {
     if (isnan(x[i]) || isinf(x[i]) || fabs(x[i]) > 1e6) {
       log("Error: Invalid solution values detected\n");
       return &identity;
@@ -231,10 +231,10 @@ calculate_perspective_transform(Corners *src_corners, Corners *dst_corners) {
   *result = (Matrix3x3){x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], 1.0};
 
 #ifdef DEBUG_LOGGING
-  printf("Result matrix:\n");
-  printf("%f, %f, %f\n", result->m00, result->m01, result->m02);
-  printf("%f, %f, %f\n", result->m10, result->m11, result->m12);
-  printf("%f, %f, %f\n", result->m20, result->m21, result->m22);
+  print32_tf("Result matrix:\n");
+  print32_tf("%f, %f, %f\n", result->m00, result->m01, result->m02);
+  print32_tf("%f, %f, %f\n", result->m10, result->m11, result->m12);
+  print32_tf("%f, %f, %f\n", result->m20, result->m21, result->m22);
 #endif
 
   // Final validation of the result matrix
@@ -254,23 +254,23 @@ calculate_perspective_transform(Corners *src_corners, Corners *dst_corners) {
 /**
  * Apply the transformation matrix to the input image
  * and store the result in the output image.
- * Use bilinear interpolation to calculate final pixel values.
+ * Use bilinear int32_terpolation to calculate final pixel values.
  */
-unsigned char *apply_matrix_3x3(
-  int in_width,
-  int in_height,
-  unsigned char *in_data,
-  int out_width,
-  int out_height,
+uint8_t *apply_matrix_3x3(
+  int32_t in_width,
+  int32_t in_height,
+  uint8_t *in_data,
+  int32_t out_width,
+  int32_t out_height,
   Matrix3x3 *tmat
 ) {
 #ifdef DEBUG_LOGGING
-  printf("Input data:\n");
-  for (int i = 0; i < in_width; i++) {
-    for (int j = 0; j < in_height; j++) {
-      printf("%d ", in_data[(i * in_width + j) * 4]);
+  print32_tf("Input data:\n");
+  for (int32_t i = 0; i < in_width; i++) {
+    for (int32_t j = 0; j < in_height; j++) {
+      print32_tf("%d ", in_data[(i * in_width + j) * 4]);
     }
-    printf("\n");
+    print32_tf("\n");
   }
 #endif
 
@@ -281,16 +281,15 @@ unsigned char *apply_matrix_3x3(
     tmat->m12 = in_height - 1;
   }
 
-  unsigned char *out_data =
-    calloc(out_width * out_height * 4, sizeof(unsigned char));
+  uint8_t *out_data = calloc(out_width * out_height * 4, sizeof(uint8_t));
 
   if (!out_data) { // Memory allocation failed
     return NULL;
   }
 
   // Iterate through every pixel in the output image
-  for (int out_y = 0; out_y < out_height; ++out_y) {
-    for (int out_x = 0; out_x < out_width; ++out_x) {
+  for (int32_t out_y = 0; out_y < out_height; ++out_y) {
+    for (int32_t out_x = 0; out_x < out_width; ++out_x) {
       // Apply the inverse transformation to find the corresponding source pixel
       double w = tmat->m20 * out_x + tmat->m21 * out_y + tmat->m22;
       if (fabs(w) < 1e-10) {
@@ -300,19 +299,19 @@ unsigned char *apply_matrix_3x3(
       double srcX = (tmat->m00 * out_x + tmat->m01 * out_y + tmat->m02) / w;
       double srcY = (tmat->m10 * out_x + tmat->m11 * out_y + tmat->m12) / w;
 
-      // Convert source coordinates to integers
-      int x0 = (int)floor(srcX);
-      int y0 = (int)floor(srcY);
-      int x1 = x0 + 1;
-      int y1 = y0 + 1;
+      // Convert source coordinates to int32_tegers
+      int32_t x0 = (int32_t)floor(srcX);
+      int32_t y0 = (int32_t)floor(srcY);
+      int32_t x1 = x0 + 1;
+      int32_t y1 = y0 + 1;
 
       // Verify that the anchor pixel is inside the source image
       if (x0 >= 0 && x0 < in_width && y0 >= 0 && y0 < in_height) {
 
         // Clamp the neighbor coordinates so that a (degenerated)
-        // bilinear interpolation can be applied at the image borders.
-        int x1c = (x1 < in_width) ? x1 : x0;
-        int y1c = (y1 < in_height) ? y1 : y0;
+        // bilinear int32_terpolation can be applied at the image borders.
+        int32_t x1c = (x1 < in_width) ? x1 : x0;
+        int32_t y1c = (y1 < in_height) ? y1 : y0;
 
         double dx = srcX - x0;
         double dy = srcY - y0;
@@ -325,28 +324,27 @@ unsigned char *apply_matrix_3x3(
           dy = 0.0;
         }
 
-        unsigned char *p00 = &in_data[(y0 * in_width + x0) * 4];
-        unsigned char *p01 = &in_data[(y0 * in_width + x1c) * 4];
-        unsigned char *p10 = &in_data[(y1c * in_width + x0) * 4];
-        unsigned char *p11 = &in_data[(y1c * in_width + x1c) * 4];
+        uint8_t *p00 = &in_data[(y0 * in_width + x0) * 4];
+        uint8_t *p01 = &in_data[(y0 * in_width + x1c) * 4];
+        uint8_t *p10 = &in_data[(y1c * in_width + x0) * 4];
+        uint8_t *p11 = &in_data[(y1c * in_width + x1c) * 4];
 
-        for (int c = 0; c < 4; ++c) {
+        for (int32_t c = 0; c < 4; ++c) {
           out_data[(out_y * out_width + out_x) * 4 + c] =
-            (unsigned char)(p00[c] * (1 - dx) * (1 - dy) +
-                            p01[c] * dx * (1 - dy) + p10[c] * (1 - dx) * dy +
-                            p11[c] * dx * dy);
+            (uint8_t)(p00[c] * (1 - dx) * (1 - dy) + p01[c] * dx * (1 - dy) +
+                      p10[c] * (1 - dx) * dy + p11[c] * dx * dy);
         }
       }
     }
   }
 
 #ifdef DEBUG_LOGGING
-  printf("Output data:\n");
-  for (int i = 0; i < out_width; i++) {
-    for (int j = 0; j < out_height; j++) {
-      printf("%d ", out_data[(i * out_width + j) * 4]);
+  print32_tf("Output data:\n");
+  for (int32_t i = 0; i < out_width; i++) {
+    for (int32_t j = 0; j < out_height; j++) {
+      print32_tf("%d ", out_data[(i * out_width + j) * 4]);
     }
-    printf("\n");
+    print32_tf("\n");
   }
 #endif
 

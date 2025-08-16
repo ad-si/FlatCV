@@ -16,9 +16,9 @@
 // Helper function to parse hex color code to RGB values
 void parse_hex_color(
   const char *hex_color,
-  unsigned char *r,
-  unsigned char *g,
-  unsigned char *b
+  uint8_t *r,
+  uint8_t *g,
+  uint8_t *b
 ) {
   const char *hex = hex_color;
 
@@ -37,7 +37,7 @@ void parse_hex_color(
   }
 
   // Validate that all characters are valid hex digits
-  for (int i = 0; i < 6; i++) {
+  for (int32_t i = 0; i < 6; i++) {
     if (!((hex[i] >= '0' && hex[i] <= '9') ||
           (hex[i] >= 'A' && hex[i] <= 'F') ||
           (hex[i] >= 'a' && hex[i] <= 'f'))) {
@@ -50,7 +50,7 @@ void parse_hex_color(
   }
 
   // Parse hex values
-  unsigned int rgb_value;
+  uint32_t rgb_value;
   sscanf(hex, "%x", &rgb_value);
 
   *r = (rgb_value >> 16) & 0xFF;

@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,20 +13,18 @@
 #include "perspectivetransform.h"
 #include "rgba_to_grayscale.h"
 
-int test_otsu_threshold() {
-  unsigned int width = 4;
-  unsigned int height = 4;
-  unsigned char data[64] = {1, 1, 1, 255, 2, 2, 2, 255, 9, 9, 9, 255,
-                            8, 8, 8, 255, 2, 2, 2, 255, 1, 1, 1, 255,
-                            9, 9, 9, 255, 7, 7, 7, 255, 2, 2, 2, 255,
-                            0, 0, 0, 255, 8, 8, 8, 255, 2, 2, 2, 255,
-                            0, 0, 0, 255, 2, 2, 2, 255, 9, 9, 9, 255,
-                            8, 8, 8, 255};
+int32_t test_otsu_threshold() {
+  uint32_t width = 4;
+  uint32_t height = 4;
+  uint8_t data[64] = {1, 1, 1, 255, 2, 2, 2, 255, 9, 9, 9, 255, 8, 8, 8, 255,
+                      2, 2, 2, 255, 1, 1, 1, 255, 9, 9, 9, 255, 7, 7, 7, 255,
+                      2, 2, 2, 255, 0, 0, 0, 255, 8, 8, 8, 255, 2, 2, 2, 255,
+                      0, 0, 0, 255, 2, 2, 2, 255, 9, 9, 9, 255, 8, 8, 8, 255};
 
-  unsigned char const *const monochrome_data =
+  uint8_t const *const monochrome_data =
     otsu_threshold_rgba(width, height, false, data);
 
-  unsigned char expected_data[64] = {
+  uint8_t expected_data[64] = {
     0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255,
     0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255,
     0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255, 0,   0,   0,   255,
@@ -34,7 +33,7 @@ int test_otsu_threshold() {
 
   bool test_ok = true;
 
-  for (unsigned int i = 0; i < 64; i++) {
+  for (uint32_t i = 0; i < 64; i++) {
     if (monochrome_data[i] != expected_data[i]) {
       test_ok = false;
       printf(
@@ -59,7 +58,7 @@ int test_otsu_threshold() {
   }
 }
 
-int test_perspective_transform() {
+int32_t test_perspective_transform() {
   Corners src = {
     100,
     100, // Top-left
@@ -134,7 +133,7 @@ int test_perspective_transform() {
   }
 }
 
-int test_perspective_transform_float() {
+int32_t test_perspective_transform_float() {
   Corners src = {
     278.44,
     182.23, // Top-left
@@ -216,128 +215,128 @@ void free_corner_peaks(CornerPeaks *peaks) {
   }
 }
 
-int test_foerstner_corner() {
+int32_t test_foerstner_corner() {
   // Create a simple test image with a corner pattern (5x5 RGBA)
-  unsigned int width = 5;
-  unsigned int height = 5;
+  uint32_t width = 5;
+  uint32_t height = 5;
 
   // Create a simple corner pattern: white square on black background
-  unsigned char data[100] = {// Row 0: all black
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             // Row 1: black, then white corner
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             // Row 2: black, then white corner
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             255,
-                             // Row 3: all black
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             // Row 4: all black
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255,
-                             0,
-                             0,
-                             0,
-                             255
+  uint8_t data[100] = {// Row 0: all black
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       // Row 1: black, then white corner
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       // Row 2: black, then white corner
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       // Row 3: all black
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       // Row 4: all black
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255
   };
 
   // Convert RGBA to grayscale first
-  unsigned char *gray_data = rgba_to_grayscale(width, height, data);
+  uint8_t *gray_data = rgba_to_grayscale(width, height, data);
   if (!gray_data) {
     printf("❌ Foerstner corner test failed: grayscale conversion failed\n");
     return 1;
   }
 
   double sigma = 1.0;
-  unsigned char *result = foerstner_corner(width, height, gray_data, sigma);
+  uint8_t *result = foerstner_corner(width, height, gray_data, sigma);
 
   free(gray_data);
 
@@ -347,7 +346,7 @@ int test_foerstner_corner() {
   }
 
   // Basic sanity checks:
-  // 1. Function should return valid pointer
+  // 1. Function should return valid point32_ter
   // 2. Result should have 2 channels (w and q measures)
   // 3. Values should be in [0, 255] range
   bool test_ok = true;
@@ -355,8 +354,8 @@ int test_foerstner_corner() {
   // Test specific corner response (corner should be at position (3,1) or (3,2))
   // The exact values depend on implementation details, so we just check for
   // reasonable response
-  unsigned int corner_idx1 = (1 * width + 3) * 2; // (3,1) w measure
-  unsigned int corner_idx2 = (2 * width + 3) * 2; // (3,2) w measure
+  uint32_t corner_idx1 = (1 * width + 3) * 2; // (3,1) w measure
+  uint32_t corner_idx2 = (2 * width + 3) * 2; // (3,2) w measure
 
   // Corner areas should have some response (not zero)
   if (result[corner_idx1] == 0 && result[corner_idx2] == 0) {
@@ -376,14 +375,14 @@ int test_foerstner_corner() {
   }
 }
 
-int test_corner_peaks() {
+int32_t test_corner_peaks() {
   // Test with simple synthetic corner response data (5x5 image, 2 channels)
-  unsigned int width = 5;
-  unsigned int height = 5;
+  uint32_t width = 5;
+  uint32_t height = 5;
 
   // Create test data: 2-channel image (w and q measures from Foerstner)
   // Channel 0 (w): corner strength, Channel 1 (q): roundness
-  unsigned char data[50]; // 5x5x2 = 50 bytes
+  uint8_t data[50]; // 5x5x2 = 50 bytes
   memset(data, 0, 50);
 
   // Create some artificial corner responses at positions (1,1) and (3,3)
@@ -419,7 +418,7 @@ int test_corner_peaks() {
     // Check if we found the expected corners
     bool found_corner1 = false, found_corner3 = false;
 
-    for (unsigned int i = 0; i < peaks->count; i++) {
+    for (uint32_t i = 0; i < peaks->count; i++) {
       if (peaks->points[i].x == 1.0 && peaks->points[i].y == 1.0) {
         found_corner1 = true;
       }
@@ -498,21 +497,19 @@ int test_corner_peaks() {
   }
 }
 
-int test_binary_closing_disk() {
+int32_t test_binary_closing_disk() {
   // Test 1: Basic functionality with simple binary image
-  unsigned int width = 7;
-  unsigned int height = 7;
-  int radius = 1;
+  uint32_t width = 7;
+  uint32_t height = 7;
+  int32_t radius = 1;
 
   // Create test binary image with a small gap
-  unsigned char data[49] = {0,   0,   0,   0,   0, 0,   0,   0,   255, 255,
-                            0,   255, 255, 0,   0, 255, 255, 0,   255, 255,
-                            0,   0,   0,   0,   0, 0,   0,   0,   0,   255,
-                            255, 0,   255, 255, 0, 0,   255, 255, 0,   255,
-                            255, 0,   0,   0,   0, 0,   0,   0,   0};
+  uint8_t data[49] = {0, 0,   0,   0, 0,   0,   0, 0, 255, 255, 0, 255, 255, 0,
+                      0, 255, 255, 0, 255, 255, 0, 0, 0,   0,   0, 0,   0,   0,
+                      0, 255, 255, 0, 255, 255, 0, 0, 255, 255, 0, 255, 255, 0,
+                      0, 0,   0,   0, 0,   0,   0};
 
-  unsigned char const *result =
-    binary_closing_disk(data, width, height, radius);
+  uint8_t const *result = binary_closing_disk(data, width, height, radius);
 
   if (!result) {
     printf("❌ Binary closing disk test failed: NULL result\n");
@@ -523,7 +520,7 @@ int test_binary_closing_disk() {
 
   // After closing with radius 1, the gap in the middle should be filled
   // Check some key positions that should be white after closing
-  int center_idx = 3 * width + 3; // Center position (3,3)
+  int32_t center_idx = 3 * width + 3; // Center position (3,3)
   if (result[center_idx] != 255) {
     printf("❌ Binary closing disk test failed: gap not closed at center\n");
     test_ok = false;
@@ -545,7 +542,7 @@ int test_binary_closing_disk() {
   }
 
   // With radius 0, image should be unchanged
-  for (unsigned int i = 0; i < width * height; i++) {
+  for (uint32_t i = 0; i < width * height; i++) {
     if (result[i] != data[i]) {
       printf(
         "❌ Binary closing disk test failed: radius 0 should not change image\n"
@@ -607,7 +604,7 @@ int test_binary_closing_disk() {
   }
 }
 
-int main() {
+int32_t main() {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
       !test_perspective_transform_float() && !test_foerstner_corner() &&
       !test_corner_peaks() && !test_binary_closing_disk()) {

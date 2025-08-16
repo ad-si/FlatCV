@@ -2,9 +2,11 @@
 #pragma once
 #endif
 
+#include <stdint.h>
+
 void parse_hex_color(
   const char *hex_color,
-  unsigned char *r,
-  unsigned char *g,
-  unsigned char *b
+  uint8_t *r,
+  uint8_t *g,
+  uint8_t *b
 );

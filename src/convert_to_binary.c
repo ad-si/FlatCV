@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +18,7 @@
  * Return a grayscale image where the foreground color is white and the
  * background color is black.
  *
- * @param image_data Pointer to the input image data (RGBA format).
+ * @param image_data Point32_ter to the input image data (RGBA format).
  * @param width Width of the image.
  * @param height Height of the image.
  * @param foreground_hex Hex color code for the foreground color (e.g.,
@@ -25,10 +26,10 @@
  * @param background_hex Hex color code for the background color (e.g.,
  * "00FF00").
  */
-unsigned char *convert_to_binary(
-  const unsigned char *image_data,
-  int width,
-  int height,
+uint8_t *convert_to_binary(
+  const uint8_t *image_data,
+  int32_t width,
+  int32_t height,
   const char *foreground_hex,
   const char *background_hex
 ) {
@@ -38,24 +39,24 @@ unsigned char *convert_to_binary(
   assert(foreground_hex != NULL);
   assert(background_hex != NULL);
 
-  unsigned char *result = malloc(width * height);
+  uint8_t *result = malloc(width * height);
   if (!result) {
     fprintf(stderr, "Error: Failed to allocate memory for binary image\n");
     exit(EXIT_FAILURE);
   }
 
-  unsigned char r_fg, g_fg, b_fg;
+  uint8_t r_fg, g_fg, b_fg;
   parse_hex_color(foreground_hex, &r_fg, &g_fg, &b_fg);
 
-  unsigned char r_bg, g_bg, b_bg;
+  uint8_t r_bg, g_bg, b_bg;
   parse_hex_color(background_hex, &r_bg, &g_bg, &b_bg);
 
-  for (int i = 0; i < width * height * 4; i += 4) {
-    unsigned char r = image_data[i];
-    unsigned char g = image_data[i + 1];
-    unsigned char b = image_data[i + 2];
+  for (int32_t i = 0; i < width * height * 4; i += 4) {
+    uint8_t r = image_data[i];
+    uint8_t g = image_data[i + 1];
+    uint8_t b = image_data[i + 2];
 
-    int pixel_index = i / 4;
+    int32_t pixel_index = i / 4;
     if (r == r_fg && g == g_fg && b == b_fg) {
       // Convert foreground color to white
       result[pixel_index] = 255;

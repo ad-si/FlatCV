@@ -26,31 +26,31 @@
  * @param new_height The height of the crop area.
  * @return Pointer to the new cropped image data.
  */
-unsigned char *crop(
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  unsigned char const *const data,
-  unsigned int x,
-  unsigned int y,
-  unsigned int new_width,
-  unsigned int new_height
+uint8_t *crop(
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  uint8_t const *const data,
+  uint32_t x,
+  uint32_t y,
+  uint32_t new_width,
+  uint32_t new_height
 ) {
   if (x + new_width > width || y + new_height > height) {
     fprintf(stderr, "Crop area is outside the original image bounds.\n");
     return NULL;
   }
 
-  unsigned char *cropped_data = malloc(new_width * new_height * channels);
+  uint8_t *cropped_data = malloc(new_width * new_height * channels);
   if (!cropped_data) {
     fprintf(stderr, "Memory allocation failed for cropped image.\n");
     return NULL;
   }
 
-  unsigned int row_bytes = new_width * channels;
-  for (unsigned int i = 0; i < new_height; ++i) {
-    unsigned int src_index = ((y + i) * width + x) * channels;
-    unsigned int dst_index = i * row_bytes;
+  uint32_t row_bytes = new_width * channels;
+  for (uint32_t i = 0; i < new_height; ++i) {
+    uint32_t src_index = ((y + i) * width + x) * channels;
+    uint32_t dst_index = i * row_bytes;
     memcpy(cropped_data + dst_index, data + src_index, row_bytes);
   }
 

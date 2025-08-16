@@ -17,10 +17,10 @@
 /** Implementation of the Foerstner corner measure response image.
  * Expected input is a grayscale image.
  */
-unsigned char *foerstner_corner(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const *const gray_data,
+uint8_t *foerstner_corner(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const *const gray_data,
   double sigma
 ) {
   if (!gray_data || width == 0 || height == 0) {
@@ -38,9 +38,9 @@ unsigned char *foerstner_corner(
   }
 
   // Compute image gradients using Sobel-like operators
-  for (unsigned int y = 1; y < height - 1; y++) {
-    for (unsigned int x = 1; x < width - 1; x++) {
-      unsigned int idx = y * width + x;
+  for (uint32_t y = 1; y < height - 1; y++) {
+    for (uint32_t x = 1; x < width - 1; x++) {
+      uint32_t idx = y * width + x;
 
       // Sobel X kernel: [-1 0 1; -2 0 2; -1 0 1]
       double gx = 0.0;
@@ -79,7 +79,7 @@ unsigned char *foerstner_corner(
     return NULL;
   }
 
-  for (unsigned int i = 0; i < width * height; i++) {
+  for (uint32_t i = 0; i < width * height; i++) {
     Axx[i] = grad_x[i] * grad_x[i];
     Axy[i] = grad_x[i] * grad_y[i];
     Ayy[i] = grad_y[i] * grad_y[i];
@@ -87,11 +87,11 @@ unsigned char *foerstner_corner(
 
   // Apply Gaussian smoothing to structure tensor elements
   // For simplicity, use a basic box filter approximation when sigma is small
-  int kernel_size = (int)(3 * sigma) | 1; // Ensure odd size
+  int32_t kernel_size = (int32_t)(3 * sigma) | 1; // Ensure odd size
   if (kernel_size < 3) {
     kernel_size = 3;
   }
-  int half_kernel = kernel_size / 2;
+  int32_t half_kernel = kernel_size / 2;
 
   double *Axx_smooth = calloc(width * height, sizeof(double));
   double *Axy_smooth = calloc(width * height, sizeof(double));
@@ -110,15 +110,15 @@ unsigned char *foerstner_corner(
   }
 
   // Simple box filter smoothing
-  for (unsigned int y = half_kernel; y < height - half_kernel; y++) {
-    for (unsigned int x = half_kernel; x < width - half_kernel; x++) {
-      unsigned int idx = y * width + x;
+  for (uint32_t y = half_kernel; y < height - half_kernel; y++) {
+    for (uint32_t x = half_kernel; x < width - half_kernel; x++) {
+      uint32_t idx = y * width + x;
       double sum_xx = 0.0, sum_xy = 0.0, sum_yy = 0.0;
-      int count = 0;
+      int32_t count = 0;
 
-      for (int ky = -half_kernel; ky <= half_kernel; ky++) {
-        for (int kx = -half_kernel; kx <= half_kernel; kx++) {
-          int sample_idx = (y + ky) * width + (x + kx);
+      for (int32_t ky = -half_kernel; ky <= half_kernel; ky++) {
+        for (int32_t kx = -half_kernel; kx <= half_kernel; kx++) {
+          int32_t sample_idx = (y + ky) * width + (x + kx);
           sum_xx += Axx[sample_idx];
           sum_xy += Axy[sample_idx];
           sum_yy += Ayy[sample_idx];
@@ -133,7 +133,7 @@ unsigned char *foerstner_corner(
   }
 
   // Compute Foerstner measures w and q
-  unsigned char *result = malloc(width * height * 2); // 2 channels: w, q
+  uint8_t *result = malloc(width * height * 2); // 2 channels: w, q
   if (!result) {
     free(grad_x);
     free(grad_y);
@@ -165,7 +165,7 @@ unsigned char *foerstner_corner(
   }
 
   // First pass: compute w and q values and find maximum for normalization
-  for (unsigned int i = 0; i < width * height; i++) {
+  for (uint32_t i = 0; i < width * height; i++) {
     double det_A =
       Axx_smooth[i] * Ayy_smooth[i] - Axy_smooth[i] * Axy_smooth[i];
     double trace_A = Axx_smooth[i] + Ayy_smooth[i];
@@ -189,14 +189,14 @@ unsigned char *foerstner_corner(
   }
 
   // Second pass: normalize and convert to bytes
-  for (unsigned int i = 0; i < width * height; i++) {
-    unsigned char w_byte = 0, q_byte = 0;
+  for (uint32_t i = 0; i < width * height; i++) {
+    uint8_t w_byte = 0, q_byte = 0;
 
     if (max_w > 0.0) {
-      w_byte = (unsigned char)(255.0 * w_values[i] / max_w);
+      w_byte = (uint8_t)(255.0 * w_values[i] / max_w);
     }
     if (max_q > 0.0) {
-      q_byte = (unsigned char)(255.0 * q_values[i] / max_q);
+      q_byte = (uint8_t)(255.0 * q_values[i] / max_q);
     }
 
     result[i * 2] = w_byte;     // w measure

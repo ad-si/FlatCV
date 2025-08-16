@@ -2,13 +2,15 @@
 #pragma once
 #endif
 
-unsigned char *crop(
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  unsigned char const * const data,
-  unsigned int x,
-  unsigned int y,
-  unsigned int new_width,
-  unsigned int new_height
+#include <stdint.h>
+
+uint8_t *crop(
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  uint8_t const * const data,
+  uint32_t x,
+  uint32_t y,
+  uint32_t new_width,
+  uint32_t new_height
 );

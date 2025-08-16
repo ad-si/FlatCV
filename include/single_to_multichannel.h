@@ -2,8 +2,10 @@
 #pragma once
 #endif
 
-unsigned char *single_to_multichannel(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const *const data
+#include <stdint.h>
+
+uint8_t *single_to_multichannel(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const *const data
 );

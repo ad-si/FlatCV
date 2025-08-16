@@ -22,27 +22,24 @@
  * @param data Pointer to the pixel data.
  * @return Pointer to the single channel grayscale image data.
  */
-unsigned char *rgba_to_grayscale(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const *const data
-) {
-  unsigned int img_length_px = width * height;
-  unsigned char *grayscale_data = malloc(img_length_px);
+uint8_t *
+rgba_to_grayscale(uint32_t width, uint32_t height, uint8_t const *const data) {
+  uint32_t img_length_px = width * height;
+  uint8_t *grayscale_data = malloc(img_length_px);
 
   if (!grayscale_data) { // Memory allocation failed
     return NULL;
   }
 
   // Process each pixel row by row
-  for (unsigned int i = 0; i < width * height; i++) {
-    unsigned int rgba_index = i * 4;
+  for (uint32_t i = 0; i < width * height; i++) {
+    uint32_t rgba_index = i * 4;
 
-    unsigned char r = data[rgba_index];
-    unsigned char g = data[rgba_index + 1];
-    unsigned char b = data[rgba_index + 2];
+    uint8_t r = data[rgba_index];
+    uint8_t g = data[rgba_index + 1];
+    uint8_t b = data[rgba_index + 2];
 
-    unsigned char gray = (r * R_WEIGHT + g * G_WEIGHT + b * B_WEIGHT) >> 8;
+    uint8_t gray = (r * R_WEIGHT + g * G_WEIGHT + b * B_WEIGHT) >> 8;
 
     grayscale_data[i] = gray;
   }

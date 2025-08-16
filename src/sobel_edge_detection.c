@@ -25,26 +25,26 @@
  * @param height Height of the image.
  * @param channels Number of channels in the input image.
  *                 (1: Grayscale, 3: RGB, 4: RGBA)
- * @param data Pointer to the input pixel data.
- * @return Pointer to the single-channel grayscale edge-detected image data.
+ * @param data Point32_ter to the input pixel data.
+ * @return Point32_ter to the single-channel grayscale edge-detected image data.
  */
-unsigned char *sobel_edge_detection(
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  unsigned char const *const data
+uint8_t *sobel_edge_detection(
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  uint8_t const *const data
 ) {
   if (!data || width == 0 || height == 0) {
     return NULL;
   }
 
-  unsigned int img_length_px = width * height;
-  unsigned char *grayscale_data;
+  uint32_t img_length_px = width * height;
+  uint8_t *grayscale_data;
   bool allocated_grayscale = false;
 
   if (channels == 1) {
     // Single-channel input, use data directly
-    grayscale_data = (unsigned char *)data;
+    grayscale_data = (uint8_t *)data;
     allocated_grayscale = false;
   }
   else {
@@ -56,7 +56,7 @@ unsigned char *sobel_edge_detection(
     allocated_grayscale = true;
   }
 
-  unsigned char *sobel_data = malloc(img_length_px);
+  uint8_t *sobel_data = malloc(img_length_px);
   if (!sobel_data) {
     if (allocated_grayscale) {
       free(grayscale_data);
@@ -65,8 +65,8 @@ unsigned char *sobel_edge_detection(
   }
 
   // Sobel kernels
-  int sobel_x[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
-  int sobel_y[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+  int32_t sobel_x[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+  int32_t sobel_y[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
 
   // Temporary buffer to store magnitudes for normalization
   double *magnitudes = malloc(img_length_px * sizeof(double));
@@ -82,32 +82,32 @@ unsigned char *sobel_edge_detection(
   double max_magnitude = 0.0;
 
   // First pass: calculate all magnitudes and find min/max
-  for (unsigned int y = 0; y < height; y++) {
-    for (unsigned int x = 0; x < width; x++) {
-      int gx = 0;
-      int gy = 0;
+  for (uint32_t y = 0; y < height; y++) {
+    for (uint32_t x = 0; x < width; x++) {
+      int32_t gx = 0;
+      int32_t gy = 0;
 
       // Apply Sobel kernels
-      for (int ky = -1; ky <= 1; ky++) {
-        for (int kx = -1; kx <= 1; kx++) {
-          int px = x + kx;
-          int py = y + ky;
+      for (int32_t ky = -1; ky <= 1; ky++) {
+        for (int32_t kx = -1; kx <= 1; kx++) {
+          int32_t px = x + kx;
+          int32_t py = y + ky;
 
           // Handle boundaries by using nearest pixel values
           if (px < 0) {
             px = 0;
           }
-          if ((unsigned int)px >= width) {
+          if ((uint32_t)px >= width) {
             px = width - 1;
           }
           if (py < 0) {
             py = 0;
           }
-          if ((unsigned int)py >= height) {
+          if ((uint32_t)py >= height) {
             py = height - 1;
           }
 
-          unsigned char pixel = grayscale_data[py * width + px];
+          uint8_t pixel = grayscale_data[py * width + px];
           gx += pixel * sobel_x[ky + 1][kx + 1];
           gy += pixel * sobel_y[ky + 1][kx + 1];
         }
@@ -131,13 +131,13 @@ unsigned char *sobel_edge_detection(
     range = 1.0; // Avoid division by zero
   }
 
-  for (unsigned int y = 0; y < height; y++) {
-    for (unsigned int x = 0; x < width; x++) {
+  for (uint32_t y = 0; y < height; y++) {
+    for (uint32_t x = 0; x < width; x++) {
       double magnitude = magnitudes[y * width + x];
 
       // Normalize to 0-255 range based on actual min/max
-      int final_magnitude =
-        (int)(((magnitude - min_magnitude) / range) * 255.0);
+      int32_t final_magnitude =
+        (int32_t)(((magnitude - min_magnitude) / range) * 255.0);
 
       sobel_data[y * width + x] = final_magnitude;
     }

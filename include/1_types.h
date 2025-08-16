@@ -2,6 +2,8 @@
 #pragma once
 #endif
 
+#include <stdint.h>
+
 typedef struct {
   double x;
   double y;

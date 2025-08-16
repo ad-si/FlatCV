@@ -21,20 +21,20 @@
  * @param height Height of the image.
  * @param data Pointer to the pixel data.
  */
-unsigned char *single_to_multichannel(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const *const data
+uint8_t *single_to_multichannel(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const *const data
 ) {
-  unsigned int img_length_px = width * height;
-  unsigned char *multichannel_data = malloc(img_length_px * 4);
+  uint32_t img_length_px = width * height;
+  uint8_t *multichannel_data = malloc(img_length_px * 4);
 
   if (!multichannel_data) { // Memory allocation failed
     return NULL;
   }
 
-  for (unsigned int i = 0; i < img_length_px; i++) {
-    unsigned int rgba_index = i * 4;
+  for (uint32_t i = 0; i < img_length_px; i++) {
+    uint32_t rgba_index = i * 4;
     multichannel_data[rgba_index] = data[i];
     multichannel_data[rgba_index + 1] = data[i];
     multichannel_data[rgba_index + 2] = data[i];

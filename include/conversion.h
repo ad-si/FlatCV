@@ -3,52 +3,53 @@
 #endif
 
 #include <stdbool.h>
+#include <stdint.h>
 
-unsigned char *apply_gaussian_blur(
-  unsigned int width,
-  unsigned int height,
+uint8_t *apply_gaussian_blur(
+  uint32_t width,
+  uint32_t height,
   double radius,
-  unsigned char const * const data
+  uint8_t const * const data
 );
 
-unsigned char *grayscale(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const * const data
+uint8_t *grayscale(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const * const data
 );
 
-unsigned char *grayscale_stretch(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const * const data
+uint8_t *grayscale_stretch(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const * const data
 );
 
 void apply_global_threshold(
-  unsigned int img_length,
-  unsigned char *data,
-  unsigned char threshold
+  uint32_t img_length,
+  uint8_t *data,
+  uint8_t threshold
 );
 
-unsigned char *otsu_threshold_rgba(
-  unsigned int width,
-  unsigned int height,
+uint8_t *otsu_threshold_rgba(
+  uint32_t width,
+  uint32_t height,
   bool use_double_threshold,
-  unsigned char const * const data
+  uint8_t const * const data
 );
 
-unsigned char *bw_smart(
-  unsigned int width,
-  unsigned int height,
+uint8_t *bw_smart(
+  uint32_t width,
+  uint32_t height,
   bool use_double_threshold,
-  unsigned char const * const data
+  uint8_t const * const data
 );
 
-unsigned char *resize(
-  unsigned int width,
-  unsigned int height,
+uint8_t *resize(
+  uint32_t width,
+  uint32_t height,
   double scale_x,
   double scale_y,
-  unsigned int* out_width,
-  unsigned int* out_height,
-  unsigned char const * const data
+  uint32_t* out_width,
+  uint32_t* out_height,
+  uint8_t const * const data
 );

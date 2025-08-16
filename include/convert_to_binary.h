@@ -2,10 +2,12 @@
 #pragma once
 #endif
 
-unsigned char *convert_to_binary(
-  const unsigned char *image_data,
-  int width,
-  int height,
+#include <stdint.h>
+
+uint8_t *convert_to_binary(
+  const uint8_t *image_data,
+  int32_t width,
+  int32_t height,
   const char *foreground_hex,
   const char *background_hex
 );

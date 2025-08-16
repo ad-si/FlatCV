@@ -28,30 +28,26 @@
  *
  * @param width Width of the image.
  * @param height Height of the image.
- * @param data Pointer to the pixel data.
- * @return Pointer to the grayscale image data.
+ * @param data Point32_ter to the pixel data.
+ * @return Point32_ter to the grayscale image data.
  */
-unsigned char *grayscale(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const *const data
-) {
-  unsigned int img_length_byte = width * height * 4;
-  unsigned char *grayscale_data = malloc(img_length_byte);
+uint8_t *grayscale(uint32_t width, uint32_t height, uint8_t const *const data) {
+  uint32_t img_length_byte = width * height * 4;
+  uint8_t *grayscale_data = malloc(img_length_byte);
 
   if (!grayscale_data) { // Memory allocation failed
     return NULL;
   }
 
   // Process each pixel row by row
-  for (unsigned int i = 0; i < width * height; i++) {
-    unsigned int rgba_index = i * 4;
+  for (uint32_t i = 0; i < width * height; i++) {
+    uint32_t rgba_index = i * 4;
 
-    unsigned char r = data[rgba_index];
-    unsigned char g = data[rgba_index + 1];
-    unsigned char b = data[rgba_index + 2];
+    uint8_t r = data[rgba_index];
+    uint8_t g = data[rgba_index + 1];
+    uint8_t b = data[rgba_index + 2];
 
-    unsigned char gray = (r * R_WEIGHT + g * G_WEIGHT + b * B_WEIGHT) >> 8;
+    uint8_t gray = (r * R_WEIGHT + g * G_WEIGHT + b * B_WEIGHT) >> 8;
 
     grayscale_data[rgba_index] = gray;
     grayscale_data[rgba_index + 1] = gray;
@@ -72,51 +68,48 @@ unsigned char *grayscale(
 
  * @param width Width of the image.
  * @param height Height of the image.
- * @param data Pointer to the pixel data.
- * @return Pointer to the grayscale image data.
+ * @param data Point32_ter to the pixel data.
+ * @return Point32_ter to the grayscale image data.
  */
-unsigned char *grayscale_stretch(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const *const data
-) {
-  unsigned int img_length_byte = width * height * 4;
-  unsigned char *grayscale_data = malloc(img_length_byte);
+uint8_t *
+grayscale_stretch(uint32_t width, uint32_t height, uint8_t const *const data) {
+  uint32_t img_length_byte = width * height * 4;
+  uint8_t *grayscale_data = malloc(img_length_byte);
 
   if (!grayscale_data) { // Memory allocation failed
     return NULL;
   }
 
-  unsigned int img_length_px = width * height;
+  uint32_t img_length_px = width * height;
   // Ignore 1.5625 % of the pixels
-  unsigned int num_pixels_to_ignore = img_length_px >> 6;
+  uint32_t num_pixels_to_ignore = img_length_px >> 6;
 
-  unsigned char *gray_values = malloc(img_length_px);
+  uint8_t *gray_values = malloc(img_length_px);
   if (!gray_values) { // Memory allocation failed
     free(grayscale_data);
     return NULL;
   }
 
   // Process each pixel row by row to get grayscale values
-  for (unsigned int i = 0; i < img_length_px; i++) {
-    unsigned int rgba_index = i * 4;
+  for (uint32_t i = 0; i < img_length_px; i++) {
+    uint32_t rgba_index = i * 4;
 
-    unsigned char r = data[rgba_index];
-    unsigned char g = data[rgba_index + 1];
-    unsigned char b = data[rgba_index + 2];
+    uint8_t r = data[rgba_index];
+    uint8_t g = data[rgba_index + 1];
+    uint8_t b = data[rgba_index + 2];
 
     gray_values[i] = (r * R_WEIGHT + g * G_WEIGHT + b * B_WEIGHT) >> 8;
   }
 
   // Use counting sort to find the 1.5625% darkest and brightest pixels
-  unsigned int histogram[256] = {0};
-  for (unsigned int i = 0; i < img_length_px; i++) {
+  uint32_t histogram[256] = {0};
+  for (uint32_t i = 0; i < img_length_px; i++) {
     histogram[gray_values[i]]++;
   }
 
-  unsigned int cumulative_count = 0;
-  unsigned char min_val = 0;
-  for (unsigned int i = 0; i < 256; i++) {
+  uint32_t cumulative_count = 0;
+  uint8_t min_val = 0;
+  for (uint32_t i = 0; i < 256; i++) {
     cumulative_count += histogram[i];
     if (cumulative_count > num_pixels_to_ignore) {
       min_val = i;
@@ -125,8 +118,8 @@ unsigned char *grayscale_stretch(
   }
 
   cumulative_count = 0;
-  unsigned char max_val = 255;
-  for (int i = 255; i >= 0; i--) {
+  uint8_t max_val = 255;
+  for (int32_t i = 255; i >= 0; i--) {
     cumulative_count += histogram[i];
     if (cumulative_count > num_pixels_to_ignore) {
       max_val = i;
@@ -136,17 +129,17 @@ unsigned char *grayscale_stretch(
 
   free(gray_values);
 
-  unsigned char range = max_val - min_val;
+  uint8_t range = max_val - min_val;
 
   // Process each pixel row by row
-  for (unsigned int i = 0; i < img_length_px; i++) {
-    unsigned int rgba_index = i * 4;
+  for (uint32_t i = 0; i < img_length_px; i++) {
+    uint32_t rgba_index = i * 4;
 
-    unsigned char r = data[rgba_index];
-    unsigned char g = data[rgba_index + 1];
-    unsigned char b = data[rgba_index + 2];
+    uint8_t r = data[rgba_index];
+    uint8_t g = data[rgba_index + 1];
+    uint8_t b = data[rgba_index + 2];
 
-    unsigned char gray = (r * R_WEIGHT + g * G_WEIGHT + b * B_WEIGHT) >> 8;
+    uint8_t gray = (r * R_WEIGHT + g * G_WEIGHT + b * B_WEIGHT) >> 8;
 
     if (gray < min_val) {
       gray = 0;
@@ -171,16 +164,16 @@ unsigned char *grayscale_stretch(
  * Apply a global threshold to the image data.
  *
  * @param img_length_px Length of the image data in pixels.
- * @param data Pointer to the image data.
+ * @param data Point32_ter to the image data.
  * @param threshold Threshold value.
  *
  */
 void apply_global_threshold(
-  unsigned int img_length_px,
-  unsigned char *data,
-  unsigned char threshold
+  uint32_t img_length_px,
+  uint8_t *data,
+  uint8_t threshold
 ) {
-  for (unsigned int i = 0; i < img_length_px; i++) {
+  for (uint32_t i = 0; i < img_length_px; i++) {
     data[i] = data[i] > threshold ? 255 : 0;
   }
 }
@@ -191,18 +184,18 @@ void apply_global_threshold(
  * Pixels between the two thresholds are scaled to the range [0, 255].
  *
  * @param img_length_px Length of the image data in pixels.
- * @param data Pointer to the image data.
+ * @param data Point32_ter to the image data.
  * @param lower_threshold Every pixel below this value will be blackened.
  * @param upper_threshold Every pixel above this value will be whitened.
  *
  */
 void apply_double_threshold(
-  unsigned int img_length_px,
-  unsigned char *data,
-  unsigned char lower_threshold,
-  unsigned char upper_threshold
+  uint32_t img_length_px,
+  uint8_t *data,
+  uint8_t lower_threshold,
+  uint8_t upper_threshold
 ) {
-  for (unsigned int i = 0; i < img_length_px; i++) {
+  for (uint32_t i = 0; i < img_length_px; i++) {
     if (data[i] < lower_threshold) {
       data[i] = 0;
     }
@@ -222,40 +215,40 @@ void apply_double_threshold(
  * @param width Width of the image.
  * @param height Height of the image.
  * @param use_double_threshold Whether to use double thresholding.
- * @param data Pointer to the pixel data.
- * @return Pointer to the monochrome image data.
+ * @param data Point32_ter to the pixel data.
+ * @return Point32_ter to the monochrome image data.
  */
-unsigned char *otsu_threshold_rgba(
-  unsigned int width,
-  unsigned int height,
+uint8_t *otsu_threshold_rgba(
+  uint32_t width,
+  uint32_t height,
   bool use_double_threshold,
-  unsigned char const *const data
+  uint8_t const *const data
 ) {
-  unsigned char *grayscale_img = rgba_to_grayscale(width, height, data);
-  unsigned int img_length_px = width * height;
+  uint8_t *grayscale_img = rgba_to_grayscale(width, height, data);
+  uint32_t img_length_px = width * height;
 
-  unsigned int histogram[256] = {0};
-  for (unsigned int i = 0; i < img_length_px; i++) {
+  uint32_t histogram[256] = {0};
+  for (uint32_t i = 0; i < img_length_px; i++) {
     histogram[grayscale_img[i]]++;
   }
 
   float histogram_norm[256] = {0};
-  for (unsigned int i = 0; i < 256; i++) {
+  for (uint32_t i = 0; i < 256; i++) {
     histogram_norm[i] = (float)histogram[i] / img_length_px;
   }
 
   float global_mean = 0.0;
 
-  for (unsigned int i = 0; i < 256; i++) {
+  for (uint32_t i = 0; i < 256; i++) {
     global_mean += i * histogram_norm[i];
   }
 
   float cumulative_sum = 0.0;
   float cumulative_mean = 0.0;
   float max_variance = 0.0;
-  int optimal_threshold = 0;
+  int32_t optimal_threshold = 0;
 
-  for (unsigned int i = 0; i < 256; i++) {
+  for (uint32_t i = 0; i < 256; i++) {
     cumulative_sum += histogram_norm[i];
     cumulative_mean += i * histogram_norm[i];
 
@@ -275,7 +268,7 @@ unsigned char *otsu_threshold_rgba(
     }
   }
 
-  const int threshold_range_offset = 16;
+  const int32_t threshold_range_offset = 16;
 
   if (use_double_threshold) {
     apply_double_threshold(
@@ -289,7 +282,7 @@ unsigned char *otsu_threshold_rgba(
     apply_global_threshold(img_length_px, grayscale_img, optimal_threshold);
   }
 
-  unsigned char *monochrome_data =
+  uint8_t *monochrome_data =
     single_to_multichannel(width, height, grayscale_img);
 
   free(grayscale_img);
@@ -302,27 +295,27 @@ unsigned char *otsu_threshold_rgba(
  *
  * @param width Width of the image.
  * @param height Height of the image.
- * @param data Pointer to the pixel data.
- * @return Pointer to the blurred image data.
+ * @param data Point32_ter to the pixel data.
+ * @return Point32_ter to the blurred image data.
  */
-unsigned char *apply_gaussian_blur(
-  unsigned int width,
-  unsigned int height,
+uint8_t *apply_gaussian_blur(
+  uint32_t width,
+  uint32_t height,
   double radius,
-  unsigned char const *const data
+  uint8_t const *const data
 ) {
-  unsigned int img_length_px = width * height;
+  uint32_t img_length_px = width * height;
   if (radius == 0) {
     return memcpy(malloc(width * height * 4), data, width * height * 4);
   }
 
-  unsigned char *blurred_data = malloc(img_length_px * 4);
+  uint8_t *blurred_data = malloc(img_length_px * 4);
 
   if (!blurred_data) { // Memory allocation failed
     return NULL;
   }
 
-  unsigned int kernel_size = 2 * radius + 1;
+  uint32_t kernel_size = 2 * radius + 1;
   float *kernel = malloc(kernel_size * sizeof(float));
 
   if (!kernel) { // Memory allocation failed
@@ -335,29 +328,29 @@ unsigned char *apply_gaussian_blur(
   float two_sigma_sq = 2 * sigma_sq;
   float sqrt_two_pi_sigma = sqrt(2 * M_PI) * sigma;
 
-  for (unsigned int i = 0; i < kernel_size; i++) {
-    int x = i - radius;
+  for (uint32_t i = 0; i < kernel_size; i++) {
+    int32_t x = i - radius;
     kernel[i] = exp(-(x * x) / two_sigma_sq) / sqrt_two_pi_sigma;
   }
 
   // Apply the kernel in the horizontal direction
-  for (unsigned int y = 0; y < height; y++) {
-    for (unsigned int x = 0; x < width; x++) {
+  for (uint32_t y = 0; y < height; y++) {
+    for (uint32_t x = 0; x < width; x++) {
       float r_sum = 0.0;
       float g_sum = 0.0;
       float b_sum = 0.0;
       float weight_sum = 0.0;
 
-      for (int k = -radius; k <= radius; k++) {
-        int x_offset = x + k;
-        if (x_offset < 0 || (unsigned int)x_offset >= width) {
+      for (int32_t k = -radius; k <= radius; k++) {
+        int32_t x_offset = x + k;
+        if (x_offset < 0 || (uint32_t)x_offset >= width) {
           continue;
         }
 
-        unsigned int img_index = y * width + x_offset;
-        unsigned int img_rgba_index = img_index * 4;
+        uint32_t img_index = y * width + x_offset;
+        uint32_t img_rgba_index = img_index * 4;
 
-        float weight = kernel[k + (int)radius];
+        float weight = kernel[k + (int32_t)radius];
         weight_sum += weight;
 
         r_sum += data[img_rgba_index] * weight;
@@ -365,7 +358,7 @@ unsigned char *apply_gaussian_blur(
         b_sum += data[img_rgba_index + 2] * weight;
       }
 
-      unsigned int rgba_index = (y * width + x) * 4;
+      uint32_t rgba_index = (y * width + x) * 4;
       blurred_data[rgba_index] = r_sum / weight_sum;
       blurred_data[rgba_index + 1] = g_sum / weight_sum;
       blurred_data[rgba_index + 2] = b_sum / weight_sum;
@@ -375,7 +368,7 @@ unsigned char *apply_gaussian_blur(
 
   // Create temporary buffer for vertical pass to avoid reading from buffer
   // being written to
-  unsigned char *temp_data = malloc(img_length_px * 4);
+  uint8_t *temp_data = malloc(img_length_px * 4);
   if (!temp_data) {
     free(blurred_data);
     free(kernel);
@@ -386,23 +379,23 @@ unsigned char *apply_gaussian_blur(
   memcpy(temp_data, blurred_data, img_length_px * 4);
 
   // Apply the kernel in the vertical direction
-  for (unsigned int x = 0; x < width; x++) {
-    for (unsigned int y = 0; y < height; y++) {
+  for (uint32_t x = 0; x < width; x++) {
+    for (uint32_t y = 0; y < height; y++) {
       float r_sum = 0.0;
       float g_sum = 0.0;
       float b_sum = 0.0;
       float weight_sum = 0.0;
 
-      for (int k = -radius; k <= radius; k++) {
-        int y_offset = y + k;
-        if (y_offset < 0 || (unsigned int)y_offset >= height) {
+      for (int32_t k = -radius; k <= radius; k++) {
+        int32_t y_offset = y + k;
+        if (y_offset < 0 || (uint32_t)y_offset >= height) {
           continue;
         }
 
-        unsigned int img_index = y_offset * width + x;
-        unsigned int img_rgba_index = img_index * 4;
+        uint32_t img_index = y_offset * width + x;
+        uint32_t img_rgba_index = img_index * 4;
 
-        float weight = kernel[k + (int)radius];
+        float weight = kernel[k + (int32_t)radius];
         weight_sum += weight;
 
         r_sum += temp_data[img_rgba_index] * weight;
@@ -410,7 +403,7 @@ unsigned char *apply_gaussian_blur(
         b_sum += temp_data[img_rgba_index + 2] * weight;
       }
 
-      unsigned int rgba_index = (y * width + x) * 4;
+      uint32_t rgba_index = (y * width + x) * 4;
       blurred_data[rgba_index] = r_sum / weight_sum;
       blurred_data[rgba_index + 1] = g_sum / weight_sum;
       blurred_data[rgba_index + 2] = b_sum / weight_sum;
@@ -437,26 +430,26 @@ unsigned char *apply_gaussian_blur(
  *
  * @param width Width of the image.
  * @param height Height of the image.
- * @param data Pointer to the pixel data.
- * @return Pointer to the blurred image data.
+ * @param data Point32_ter to the pixel data.
+ * @return Point32_ter to the blurred image data.
  */
-unsigned char *bw_smart(
-  unsigned int width,
-  unsigned int height,
+uint8_t *bw_smart(
+  uint32_t width,
+  uint32_t height,
   bool use_double_threshold,
-  unsigned char const *const data
+  uint8_t const *const data
 ) {
-  unsigned char *grayscale_data = grayscale(width, height, data);
+  uint8_t *grayscale_data = grayscale(width, height, data);
 
   // Calculate blur radius dependent on image size
   // (Empirical formula after testing)
   double blurRadius = (sqrt((double)width * (double)height)) * 0.1;
 
-  unsigned char *blurred_data =
+  uint8_t *blurred_data =
     apply_gaussian_blur(width, height, blurRadius, grayscale_data);
 
-  unsigned int img_length_px = width * height;
-  unsigned char *high_freq_data = malloc(img_length_px * 4);
+  uint32_t img_length_px = width * height;
+  uint8_t *high_freq_data = malloc(img_length_px * 4);
 
   if (!high_freq_data) { // Memory allocation failed
     free((void *)grayscale_data);
@@ -466,9 +459,10 @@ unsigned char *bw_smart(
 
   // Subtract blurred image from the original image to get the high frequencies
   // and invert the high frequencies to get a white background.
-  for (unsigned int i = 0; i < img_length_px; i++) {
-    unsigned int rgba_idx = i * 4;
-    int high_freq_val = 127 + grayscale_data[rgba_idx] - blurred_data[rgba_idx];
+  for (uint32_t i = 0; i < img_length_px; i++) {
+    uint32_t rgba_idx = i * 4;
+    int32_t high_freq_val =
+      127 + grayscale_data[rgba_idx] - blurred_data[rgba_idx];
 
     // Clamp the value to [0, 255] to prevent overflow
     if (high_freq_val < 0) {
@@ -487,7 +481,7 @@ unsigned char *bw_smart(
   free((void *)grayscale_data);
   free((void *)blurred_data);
 
-  unsigned char *final_data =
+  uint8_t *final_data =
     otsu_threshold_rgba(width, height, use_double_threshold, high_freq_data);
 
   free(high_freq_data);
@@ -496,46 +490,46 @@ unsigned char *bw_smart(
 }
 
 /**
- * Resize an image by given resize factors using bilinear interpolation.
+ * Resize an image by given resize factors using bilinear int32_terpolation.
  *
  * @param width Width of the input image.
  * @param height Height of the input image.
  * @param resize_x Horizontal resize factor (e.g., 2.0 for 2x, 0.5 for half).
  * @param resize_y Vertical resize factor (e.g., 2.0 for 2x, 0.5 for half).
- * @param out_width Pointer to store the output image width.
- * @param out_height Pointer to store the output image height.
- * @param data Pointer to the input pixel data.
- * @return Pointer to the resized image data.
+ * @param out_width Point32_ter to store the output image width.
+ * @param out_height Point32_ter to store the output image height.
+ * @param data Point32_ter to the input pixel data.
+ * @return Point32_ter to the resized image data.
  */
-unsigned char *resize(
-  unsigned int width,
-  unsigned int height,
+uint8_t *resize(
+  uint32_t width,
+  uint32_t height,
   double resize_x,
   double resize_y,
-  unsigned int *out_width,
-  unsigned int *out_height,
-  unsigned char const *const data
+  uint32_t *out_width,
+  uint32_t *out_height,
+  uint8_t const *const data
 ) {
   if (resize_x <= 0.0 || resize_y <= 0.0) {
     return NULL;
   }
 
-  *out_width = (unsigned int)(width * resize_x);
-  *out_height = (unsigned int)(height * resize_y);
+  *out_width = (uint32_t)(width * resize_x);
+  *out_height = (uint32_t)(height * resize_y);
 
   if (*out_width == 0 || *out_height == 0) {
     return NULL;
   }
 
-  unsigned int out_img_length = *out_width * *out_height * 4;
-  unsigned char *resized_data = malloc(out_img_length);
+  uint32_t out_img_length = *out_width * *out_height * 4;
+  uint8_t *resized_data = malloc(out_img_length);
 
   if (!resized_data) {
     return NULL;
   }
 
-  for (unsigned int out_y = 0; out_y < *out_height; out_y++) {
-    for (unsigned int out_x = 0; out_x < *out_width; out_x++) {
+  for (uint32_t out_y = 0; out_y < *out_height; out_y++) {
+    for (uint32_t out_x = 0; out_x < *out_width; out_x++) {
       if (resize_x < 1.0 || resize_y < 1.0) {
         double src_x = (out_x + 0.5) / resize_x - 0.5;
         double src_y = (out_y + 0.5) / resize_y - 0.5;
@@ -548,10 +542,10 @@ unsigned char *resize(
         double x_end = src_x + filter_size_x * 0.5;
         double y_end = src_y + filter_size_y * 0.5;
 
-        int ix_start = (int)floor(x_start);
-        int iy_start = (int)floor(y_start);
-        int ix_end = (int)ceil(x_end);
-        int iy_end = (int)ceil(y_end);
+        int32_t ix_start = (int32_t)floor(x_start);
+        int32_t iy_start = (int32_t)floor(y_start);
+        int32_t ix_end = (int32_t)ceil(x_end);
+        int32_t iy_end = (int32_t)ceil(y_end);
 
         if (ix_start < 0) {
           ix_start = 0;
@@ -559,18 +553,18 @@ unsigned char *resize(
         if (iy_start < 0) {
           iy_start = 0;
         }
-        if (ix_end > (int)width) {
+        if (ix_end > (int32_t)width) {
           ix_end = width;
         }
-        if (iy_end > (int)height) {
+        if (iy_end > (int32_t)height) {
           iy_end = height;
         }
 
         double r_sum = 0.0, g_sum = 0.0, b_sum = 0.0;
         double total_weight = 0.0;
 
-        for (int sy = iy_start; sy < iy_end; sy++) {
-          for (int sx = ix_start; sx < ix_end; sx++) {
+        for (int32_t sy = iy_start; sy < iy_end; sy++) {
+          for (int32_t sx = ix_start; sx < ix_end; sx++) {
             double left = sx;
             double right = sx + 1;
             double top = sy;
@@ -586,7 +580,7 @@ unsigned char *resize(
                 (overlap_right - overlap_left) * (overlap_bottom - overlap_top);
               total_weight += weight;
 
-              unsigned int src_idx = (sy * width + sx) * 4;
+              uint32_t src_idx = (sy * width + sx) * 4;
               r_sum += data[src_idx] * weight;
               g_sum += data[src_idx + 1] * weight;
               b_sum += data[src_idx + 2] * weight;
@@ -596,11 +590,11 @@ unsigned char *resize(
 
         if (total_weight > 0.0) {
           resized_data[(out_y * *out_width + out_x) * 4] =
-            (unsigned char)(r_sum / total_weight + 0.5);
+            (uint8_t)(r_sum / total_weight + 0.5);
           resized_data[(out_y * *out_width + out_x) * 4 + 1] =
-            (unsigned char)(g_sum / total_weight + 0.5);
+            (uint8_t)(g_sum / total_weight + 0.5);
           resized_data[(out_y * *out_width + out_x) * 4 + 2] =
-            (unsigned char)(b_sum / total_weight + 0.5);
+            (uint8_t)(b_sum / total_weight + 0.5);
         }
         else {
           resized_data[(out_y * *out_width + out_x) * 4] = 0;
@@ -613,10 +607,10 @@ unsigned char *resize(
         double src_x = (out_x + 0.5) / resize_x - 0.5;
         double src_y = (out_y + 0.5) / resize_y - 0.5;
 
-        int x0 = (int)floor(src_x);
-        int y0 = (int)floor(src_y);
-        int x1 = x0 + 1;
-        int y1 = y0 + 1;
+        int32_t x0 = (int32_t)floor(src_x);
+        int32_t y0 = (int32_t)floor(src_y);
+        int32_t x1 = x0 + 1;
+        int32_t y1 = y0 + 1;
 
         if (x0 < 0) {
           x0 = 0;
@@ -624,10 +618,10 @@ unsigned char *resize(
         if (y0 < 0) {
           y0 = 0;
         }
-        if (x1 >= (int)width) {
+        if (x1 >= (int32_t)width) {
           x1 = width - 1;
         }
-        if (y1 >= (int)height) {
+        if (y1 >= (int32_t)height) {
           y1 = height - 1;
         }
 
@@ -647,18 +641,18 @@ unsigned char *resize(
           dy = 1;
         }
 
-        for (int c = 0; c < 3; c++) {
-          unsigned char p00 = data[(y0 * width + x0) * 4 + c];
-          unsigned char p01 = data[(y0 * width + x1) * 4 + c];
-          unsigned char p10 = data[(y1 * width + x0) * 4 + c];
-          unsigned char p11 = data[(y1 * width + x1) * 4 + c];
+        for (int32_t c = 0; c < 3; c++) {
+          uint8_t p00 = data[(y0 * width + x0) * 4 + c];
+          uint8_t p01 = data[(y0 * width + x1) * 4 + c];
+          uint8_t p10 = data[(y1 * width + x0) * 4 + c];
+          uint8_t p11 = data[(y1 * width + x1) * 4 + c];
 
-          double interpolated = p00 * (1 - dx) * (1 - dy) +
-                                p01 * dx * (1 - dy) + p10 * (1 - dx) * dy +
-                                p11 * dx * dy;
+          double int32_terpolated = p00 * (1 - dx) * (1 - dy) +
+                                    p01 * dx * (1 - dy) + p10 * (1 - dx) * dy +
+                                    p11 * dx * dy;
 
           resized_data[(out_y * *out_width + out_x) * 4 + c] =
-            (unsigned char)(interpolated + 0.5);
+            (uint8_t)(int32_terpolated + 0.5);
         }
 
         resized_data[(out_y * *out_width + out_x) * 4 + 3] = 255;

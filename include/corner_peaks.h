@@ -5,14 +5,14 @@
 
 typedef struct {
   Point2D *points;
-  unsigned int count;
+  uint32_t count;
 } CornerPeaks;
 
 CornerPeaks *corner_peaks(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const *data,
-  unsigned int min_distance,
+  uint32_t width,
+  uint32_t height,
+  uint8_t const *data,
+  uint32_t min_distance,
   double accuracy_thresh,
   double roundness_thresh
 );

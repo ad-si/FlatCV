@@ -2,64 +2,66 @@
 #pragma once
 #endif
 
+#include <stdint.h>
+
 void set_circle_pixel(
-  unsigned char *data,
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  int px,
-  int py,
-  unsigned char r,
-  unsigned char g,
-  unsigned char b
+  uint8_t *data,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  int32_t px,
+  int32_t py,
+  uint8_t r,
+  uint8_t g,
+  uint8_t b
 );
 
 void draw_circle(
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
   const char *hex_color,
   double radius,
   double center_x,
   double center_y,
-  unsigned char *data
+  uint8_t *data
 );
 
 void draw_disk(
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
   const char *hex_color,
   double radius,
   double center_x,
   double center_y,
-  unsigned char *data
+  uint8_t *data
 );
 
 void draw_circle_points(
-  unsigned char *data,
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  int cx,
-  int cy,
-  int x,
-  int y,
-  unsigned char r,
-  unsigned char g,
-  unsigned char b
+  uint8_t *data,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  int32_t cx,
+  int32_t cy,
+  int32_t x,
+  int32_t y,
+  uint8_t r,
+  uint8_t g,
+  uint8_t b
 );
 
 void fill_disk_lines(
-  unsigned char *data,
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  int cx,
-  int cy,
-  int x,
-  int y,
-  unsigned char r,
-  unsigned char g,
-  unsigned char b
+  uint8_t *data,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  int32_t cx,
+  int32_t cy,
+  int32_t x,
+  int32_t y,
+  uint8_t r,
+  uint8_t g,
+  uint8_t b
 );

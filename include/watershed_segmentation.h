@@ -2,11 +2,15 @@
 #pragma once
 #endif
 
-unsigned char *watershed_segmentation(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const * const grayscale_data,
+#include <stdint.h>
+#include <stdbool.h>
+#include "1_types.h"
+
+uint8_t *watershed_segmentation(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const * const grayscale_data,
   Point2D* markers,
-  unsigned int num_markers,
+  uint32_t num_markers,
   bool create_boundaries
 );

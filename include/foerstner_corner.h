@@ -2,9 +2,11 @@
 #pragma once
 #endif
 
-unsigned char *foerstner_corner(
-  unsigned int width,
-  unsigned int height,
-  unsigned char const * const data,
+#include <stdint.h>
+
+uint8_t *foerstner_corner(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const * const data,
   double sigma
 );

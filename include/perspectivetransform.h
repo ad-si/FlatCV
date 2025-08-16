@@ -8,13 +8,13 @@ Matrix3x3 *calculate_perspective_transform(
   Corners *dst_corners
 );
 
-unsigned char *apply_matrix_3x3(
-  int in_width,
-  int in_height,
-  unsigned char *in_data,
-  int out_width,
-  int out_height,
+uint8_t *apply_matrix_3x3(
+  int32_t in_width,
+  int32_t in_height,
+  uint8_t *in_data,
+  int32_t out_width,
+  int32_t out_height,
   Matrix3x3 *tmat
 );
 
-Corners detect_corners(const unsigned char *image, int width, int height);
+Corners detect_corners(const uint8_t *image, int32_t width, int32_t height);

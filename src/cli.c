@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,20 +27,20 @@ typedef struct {
   double param3;
   double param4;
   char param_str[64]; // For string parameters like "50%" or "200x300"
-  int has_param;
-  int has_param2;
-  int has_param3;
-  int has_param4;
-  int has_string_param;
+  int32_t has_param;
+  int32_t has_param2;
+  int32_t has_param3;
+  int32_t has_param4;
+  int32_t has_string_param;
 } PipelineOp;
 
 typedef struct {
   PipelineOp *ops;
-  int count;
-  int capacity;
+  int32_t count;
+  int32_t capacity;
 } Pipeline;
 
-void print_usage(const char *program_name) {
+void print32_t_usage(const char *program_name) {
   printf("Usage: %s <input> <pipeline> <output>\n", program_name);
   printf("Pipeline operations:\n");
   printf("  grayscale       - Convert image to grayscale\n");
@@ -110,15 +111,15 @@ void add_operation(
   Pipeline *p,
   const char *op,
   double param,
-  int has_param,
+  int32_t has_param,
   double param2,
-  int has_param2,
+  int32_t has_param2,
   double param3,
-  int has_param3,
+  int32_t has_param3,
   double param4,
-  int has_param4,
+  int32_t has_param4,
   const char *param_str,
-  int has_string_param
+  int32_t has_string_param
 ) {
   if (p->count >= p->capacity) {
     p->capacity *= 2;
@@ -156,17 +157,17 @@ void add_operation(
   p->count++;
 }
 
-/* Remove leading and trailing white-space, returns pointer to first
+/* Remove leading and trailing white-space, returns point32_ter to first
    non-blank char (string is modified in place). */
 static char *trim_whitespace(char *s) {
-  while (*s && isspace((unsigned char)*s)) {
+  while (*s && isspace((uint8_t)*s)) {
     s++; // left-trim
   }
   if (*s == '\0') {
     return s;
   }
   char *end = s + strlen(s) - 1;
-  while (end > s && isspace((unsigned char)*end)) {
+  while (end > s && isspace((uint8_t)*end)) {
     end--;
   }
   *(end + 1) = '\0'; // right-trim
@@ -184,12 +185,12 @@ char *skip_whitespace(char *str) {
  * Parse geometry string (e.g., "50x50+10+20")
  * Returns 1 on success, 0 on failure
  */
-int parse_geometry(
+int32_t parse_geometry(
   const char *geometry,
-  unsigned int *width,
-  unsigned int *height,
-  int *x_offset,
-  int *y_offset
+  uint32_t *width,
+  uint32_t *height,
+  int32_t *x_offset,
+  int32_t *y_offset
 ) {
   if (!geometry || !width || !height || !x_offset || !y_offset) {
     return 0;
@@ -208,8 +209,8 @@ int parse_geometry(
     return 0;
   }
 
-  *width = (unsigned int)w;
-  *height = (unsigned int)h;
+  *width = (uint32_t)w;
+  *height = (uint32_t)h;
 
   // Parse offsets (can be + or -)
   if (*end_ptr == '\0') {
@@ -224,7 +225,7 @@ int parse_geometry(
   if (x < INT_MIN || x > INT_MAX) {
     return 0;
   }
-  *x_offset = (int)x;
+  *x_offset = (int32_t)x;
 
   // Parse y offset
   if (*end_ptr == '\0') {
@@ -237,23 +238,23 @@ int parse_geometry(
   if (y < INT_MIN || y > INT_MAX || *end_ptr != '\0') {
     return 0;
   }
-  *y_offset = (int)y;
+  *y_offset = (int32_t)y;
 
   return 1;
 }
 
-int parse_pipeline(
-  int argc,
+int32_t parse_pipeline(
+  int32_t argc,
   char *argv[],
-  int start_idx,
-  int end_idx,
+  int32_t start_idx,
+  int32_t end_idx,
   Pipeline *pipeline
 ) {
   (void)argc; // Unused parameter
 
   /* 1. build one big string from all arguments that form the pipeline */
   size_t total_len = 0;
-  for (int i = start_idx; i < end_idx; ++i) {
+  for (int32_t i = start_idx; i < end_idx; ++i) {
     total_len += strlen(argv[i]) + 2; // space OR ", "
   }
 
@@ -264,7 +265,7 @@ int parse_pipeline(
   }
 
   combined[0] = '\0';
-  for (int i = start_idx; i < end_idx; ++i) {
+  for (int32_t i = start_idx; i < end_idx; ++i) {
     const char *tok = argv[i];
 
     /* add space before every token except the first one */
@@ -294,7 +295,7 @@ int parse_pipeline(
       continue;
     }
 
-    /* split into operation name and (optional) parameters */
+    /* split int32_to operation name and (optional) parameters */
     char *space = strchr(piece, ' ');
     if (space) {
       *space = '\0';
@@ -525,8 +526,8 @@ int parse_pipeline(
         );
       }
       else if (strcmp(piece, "crop") == 0) {
-        unsigned int crop_width, crop_height;
-        int x_offset, y_offset;
+        uint32_t crop_width, crop_height;
+        int32_t x_offset, y_offset;
         if (parse_geometry(
               params_str,
               &crop_width,
@@ -608,32 +609,31 @@ int parse_pipeline(
   return 1;
 }
 
-unsigned char *apply_operation(
-  int *width,
-  int *height,
+uint8_t *apply_operation(
+  int32_t *width,
+  int32_t *height,
   const char *operation,
   double param,
-  int has_param,
+  int32_t has_param,
   double param2,
-  int has_param2,
+  int32_t has_param2,
   double param3,
-  int has_param3,
+  int32_t has_param3,
   double param4,
-  int has_param4,
+  int32_t has_param4,
   const char *param_str,
-  int has_string_param,
-  unsigned char *input_data
+  int32_t has_string_param,
+  uint8_t *input_data
 ) {
   if (strcmp(operation, "grayscale") == 0) {
-    return (unsigned char *)grayscale(*width, *height, input_data);
+    return (uint8_t *)grayscale(*width, *height, input_data);
   }
   else if (strcmp(operation, "blur") == 0) {
     if (!has_param) {
       fprintf(stderr, "Error: blur operation requires radius parameter\n");
       return NULL;
     }
-    return (unsigned char *)
-      apply_gaussian_blur(*width, *height, param, input_data);
+    return (uint8_t *)apply_gaussian_blur(*width, *height, param, input_data);
   }
   else if (strcmp(operation, "resize") == 0) {
     double resize_x, resize_y;
@@ -683,8 +683,8 @@ unsigned char *apply_operation(
       return NULL;
     }
 
-    unsigned int out_width, out_height;
-    unsigned char *result = (unsigned char *)resize(
+    uint32_t out_width, out_height;
+    uint8_t *result = (uint8_t *)resize(
       *width,
       *height,
       resize_x,
@@ -702,14 +702,13 @@ unsigned char *apply_operation(
     return result;
   }
   else if (strcmp(operation, "threshold") == 0) {
-    return (unsigned char *)
-      otsu_threshold_rgba(*width, *height, false, input_data);
+    return (uint8_t *)otsu_threshold_rgba(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smart") == 0) {
-    return (unsigned char *)bw_smart(*width, *height, false, input_data);
+    return (uint8_t *)bw_smart(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smooth") == 0) {
-    return (unsigned char *)bw_smart(*width, *height, true, input_data);
+    return (uint8_t *)bw_smart(*width, *height, true, input_data);
   }
   else if (strcmp(operation, "detect_corners") == 0) {
     Corners corners = detect_corners(input_data, *width, *height);
@@ -720,24 +719,24 @@ unsigned char *apply_operation(
     printf("    Bottom-left:  (%.2f, %.2f)\n", corners.bl_x, corners.bl_y);
 
     // Return a copy of the input data since we don't modify the image
-    unsigned char *result = malloc(*width * *height * 4);
+    uint8_t *result = malloc(*width * *height * 4);
     if (result) {
       memcpy(result, input_data, *width * *height * 4);
     }
     return result;
   }
   else if (strcmp(operation, "sobel") == 0) {
-    unsigned char *grayscale_sobel =
+    uint8_t *grayscale_sobel =
       sobel_edge_detection(*width, *height, 4, input_data);
     if (!grayscale_sobel) {
       return NULL;
     }
 
     // Convert single-channel grayscale to RGBA format
-    unsigned char *rgba_result =
+    uint8_t *rgba_result =
       single_to_multichannel(*width, *height, grayscale_sobel);
     free(grayscale_sobel);
-    return (unsigned char *)rgba_result;
+    return (uint8_t *)rgba_result;
   }
   else if (strcmp(operation, "circle") == 0) {
     if (!has_string_param || !has_param || !has_param2 || !has_param3) {
@@ -754,8 +753,8 @@ unsigned char *apply_operation(
     double center_y = param3;
     double radius = param;
 
-    unsigned int img_length_byte = (*width) * (*height) * 4;
-    unsigned char *result = malloc(img_length_byte);
+    uint32_t img_length_byte = (*width) * (*height) * 4;
+    uint8_t *result = malloc(img_length_byte);
     if (!result) {
       free(param_copy);
       return NULL;
@@ -779,8 +778,8 @@ unsigned char *apply_operation(
     double center_y = param3;
     double radius = param;
 
-    unsigned int img_length_byte = (*width) * (*height) * 4;
-    unsigned char *result = malloc(img_length_byte);
+    uint32_t img_length_byte = (*width) * (*height) * 4;
+    uint8_t *result = malloc(img_length_byte);
     if (!result) {
       free(param_copy);
       return NULL;
@@ -805,7 +804,7 @@ unsigned char *apply_operation(
     char *param_copy = strdup(param_str);
 
     // Count number of markers by counting spaces + 1
-    int num_markers = 1;
+    int32_t num_markers = 1;
     for (char *p = param_copy; *p; p++) {
       if (*p == ' ') {
         num_markers++;
@@ -820,7 +819,7 @@ unsigned char *apply_operation(
 
     // Parse each marker
     char *token = strtok(param_copy, " ");
-    int marker_idx = 0;
+    int32_t marker_idx = 0;
 
     while (token && marker_idx < num_markers) {
       char *x_pos = strchr(token, 'x');
@@ -844,15 +843,14 @@ unsigned char *apply_operation(
     }
 
     // Convert RGBA to single-channel grayscale for watershed segmentation
-    unsigned char *grayscale_data =
-      rgba_to_grayscale(*width, *height, input_data);
+    uint8_t *grayscale_data = rgba_to_grayscale(*width, *height, input_data);
     if (!grayscale_data) {
       free(markers);
       free(param_copy);
       return NULL;
     }
 
-    unsigned char *result = (unsigned char *)watershed_segmentation(
+    uint8_t *result = (uint8_t *)watershed_segmentation(
       *width,
       *height,
       grayscale_data,
@@ -876,24 +874,24 @@ unsigned char *apply_operation(
     }
     // param and param2 are x_offset and y_offset (can be negative)
     // param3 and param4 are crop_width and crop_height
-    int x_offset = (int)param;
-    int y_offset = (int)param2;
-    unsigned int crop_width = (unsigned int)param3;
-    unsigned int crop_height = (unsigned int)param4;
+    int32_t x_offset = (int32_t)param;
+    int32_t y_offset = (int32_t)param2;
+    uint32_t crop_width = (uint32_t)param3;
+    uint32_t crop_height = (uint32_t)param4;
 
     // Clamp negative offsets to 0
-    unsigned int x = (x_offset < 0) ? 0 : (unsigned int)x_offset;
-    unsigned int y = (y_offset < 0) ? 0 : (unsigned int)y_offset;
+    uint32_t x = (x_offset < 0) ? 0 : (uint32_t)x_offset;
+    uint32_t y = (y_offset < 0) ? 0 : (uint32_t)y_offset;
 
     // Ensure crop area doesn't exceed image bounds
-    if (x >= (unsigned int)*width || y >= (unsigned int)*height) {
+    if (x >= (uint32_t)*width || y >= (uint32_t)*height) {
       fprintf(stderr, "Error: crop offset is outside image bounds\n");
       return NULL;
     }
 
     // Adjust crop dimensions if they would exceed image bounds
-    unsigned int max_width = *width - x;
-    unsigned int max_height = *height - y;
+    uint32_t max_width = *width - x;
+    uint32_t max_height = *height - y;
     if (crop_width > max_width) {
       crop_width = max_width;
     }
@@ -901,7 +899,7 @@ unsigned char *apply_operation(
       crop_height = max_height;
     }
 
-    unsigned char *result =
+    uint8_t *result =
       crop(*width, *height, 4, input_data, x, y, crop_width, crop_height);
     if (result) {
       *width = crop_width;
@@ -915,16 +913,16 @@ unsigned char *apply_operation(
   }
 }
 
-unsigned char *execute_pipeline(
-  int *width,
-  int *height,
+uint8_t *execute_pipeline(
+  int32_t *width,
+  int32_t *height,
   Pipeline *pipeline,
-  unsigned char *input_data
+  uint8_t *input_data
 ) {
-  unsigned char *current_data = input_data;
-  unsigned char *temp_data = NULL;
+  uint8_t *current_data = input_data;
+  uint8_t *temp_data = NULL;
 
-  for (int i = 0; i < pipeline->count; i++) {
+  for (int32_t i = 0; i < pipeline->count; i++) {
     PipelineOp *op = &pipeline->ops[i];
     printf("Applying operation: %s", op->operation);
     if (op->has_string_param) {
@@ -945,7 +943,7 @@ unsigned char *execute_pipeline(
     printf("\n");
 
     clock_t start_time = clock();
-    unsigned char *result = apply_operation(
+    uint8_t *result = apply_operation(
       width,
       height,
       op->operation,
@@ -979,7 +977,7 @@ unsigned char *execute_pipeline(
       return NULL;
     }
 
-    // Free the previous intermediate result (but not the original input)
+    // Free the previous int32_termediate result (but not the original input)
     if (temp_data && temp_data != input_data) {
       free(temp_data);
     }
@@ -991,9 +989,9 @@ unsigned char *execute_pipeline(
   return current_data;
 }
 
-int main(int argc, char *argv[]) {
+int32_t main(int32_t argc, char *argv[]) {
   if (argc < 4) {
-    print_usage(argv[0]);
+    print32_t_usage(argv[0]);
     return 1;
   }
 
@@ -1013,9 +1011,8 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  int width, height, channels;
-  unsigned char *image_data =
-    stbi_load(input_path, &width, &height, &channels, 4);
+  int32_t width, height, channels;
+  uint8_t *image_data = stbi_load(input_path, &width, &height, &channels, 4);
 
   if (!image_data) {
     fprintf(stderr, "Error: Could not load image '%s'\n", input_path);
@@ -1026,7 +1023,7 @@ int main(int argc, char *argv[]) {
   printf("Loaded image: %dx%d with %d channels\n", width, height, channels);
   printf("Executing pipeline with %d operations:\n", pipeline->count);
 
-  unsigned char *result_data =
+  uint8_t *result_data =
     execute_pipeline(&width, &height, pipeline, image_data);
 
   if (!result_data) {
@@ -1038,7 +1035,7 @@ int main(int argc, char *argv[]) {
 
   printf("Final output dimensions: %dx%d\n", width, height);
 
-  int write_result;
+  int32_t write_result;
   const char *ext = strrchr(output_path, '.');
   if (ext && strcmp(ext, ".png") == 0) {
     write_result =

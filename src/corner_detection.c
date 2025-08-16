@@ -40,27 +40,27 @@
  * 9. Use Foerstner corner detector (Harris detector corners are shifted
  * inwards)
  * 10. TODO: Sort corners
- * 11. TODO: Select 4 corners with the largest angle while maintaining their
+ * 11. TODO: Select 4 corners with the largest angle while maint32_taining their
  * order
  * 12. Normalize corners based on scale ratio
  */
-int count_colors(const unsigned char *image, int width, int height) {
+int32_t count_colors(const uint8_t *image, int32_t width, int32_t height) {
   assert(image != NULL);
   assert(width > 0);
   assert(height > 0);
 
-  int color_count = 0;
-  int *color_map = (int *)calloc(256 * 256 * 256, sizeof(int));
+  int32_t color_count = 0;
+  int32_t *color_map = (int32_t *)calloc(256 * 256 * 256, sizeof(int32_t));
   if (!color_map) {
     fprintf(stderr, "Error: Failed to allocate memory for color map\n");
     return -1;
   }
 
-  for (int i = 0; i < width * height * 4; i += 4) {
-    unsigned char r = image[i];
-    unsigned char g = image[i + 1];
-    unsigned char b = image[i + 2];
-    unsigned char a = image[i + 3];
+  for (int32_t i = 0; i < width * height * 4; i += 4) {
+    uint8_t r = image[i];
+    uint8_t g = image[i + 1];
+    uint8_t b = image[i + 2];
+    uint8_t a = image[i + 3];
 
     // Skip fully transparent pixels
     if (a == 0) {
@@ -68,7 +68,7 @@ int count_colors(const unsigned char *image, int width, int height) {
     }
 
     // Create a unique color key
-    int color_key = (r << 16) | (g << 8) | b;
+    int32_t color_key = (r << 16) | (g << 8) | b;
 
     // Increment the count for this color
     if (color_map[color_key] == 0) {
@@ -82,15 +82,15 @@ int count_colors(const unsigned char *image, int width, int height) {
 }
 
 typedef struct {
-  int width;
-  int height;
-  int channels;
-  const unsigned char *data;
+  int32_t width;
+  int32_t height;
+  int32_t channels;
+  const uint8_t *data;
 } Image;
 
 #ifdef DEBUG_LOGGING
 void write_debug_img(Image img, const char *filename) {
-  int result = stbi_write_png(
+  int32_t result = stbi_write_png(
     filename,
     img.width,
     img.height,
@@ -107,7 +107,7 @@ void write_debug_img(Image img, const char *filename) {
 /**
  * Detect corners in the input image.
  */
-Corners detect_corners(const unsigned char *image, int width, int height) {
+Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   assert(image != NULL);
   assert(width > 0);
   assert(height > 0);
@@ -124,16 +124,16 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
   };
 
   // 1. Convert to grayscale
-  unsigned char const *grayscale_image = grayscale(width, height, image);
+  uint8_t const *grayscale_image = grayscale(width, height, image);
   if (!grayscale_image) {
     fprintf(stderr, "Error: Failed to convert image to grayscale\n");
     return default_corners;
   }
 
   // 2. Resize image to 256x256
-  unsigned int out_width = 256;
-  unsigned int out_height = 256;
-  unsigned char const *resized_image = resize(
+  uint32_t out_width = 256;
+  uint32_t out_height = 256;
+  uint8_t const *resized_image = resize(
     width,
     height,
     (double)out_width / width,
@@ -159,7 +159,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 #endif
 
   // 3. Apply Gaussian blur
-  unsigned char const *blurred_image =
+  uint8_t const *blurred_image =
     apply_gaussian_blur(out_width, out_height, 3.0, resized_image);
   // Don't free resized_image here, as it is used for debugging later
   if (!blurred_image) {
@@ -168,8 +168,8 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
   }
 
   // 5. Create elevation map with Sobel edge detection
-  unsigned char *elevation_map = (unsigned char *)
-    sobel_edge_detection(out_width, out_height, 4, blurred_image);
+  uint8_t *elevation_map =
+    (uint8_t *)sobel_edge_detection(out_width, out_height, 4, blurred_image);
   free((void *)blurred_image);
   if (!elevation_map) {
     fprintf(stderr, "Error: Failed to create elevation map with Sobel\n");
@@ -195,7 +195,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 #endif
 
   // 7. Perform watershed segmentation
-  int num_markers = 2;
+  int32_t num_markers = 2;
   Point2D *markers = malloc(num_markers * sizeof(Point2D));
   if (!markers) {
     fprintf(stderr, "Error: Failed to allocate memory for markers\n");
@@ -206,7 +206,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
   markers[0] = (Point2D){.x = out_width / 2.0, .y = out_height / 2.0};
   markers[1] = (Point2D){.x = 0, .y = 0};
 
-  unsigned char *segmented_image = watershed_segmentation(
+  uint8_t *segmented_image = watershed_segmentation(
     out_width,
     out_height,
     elevation_map,
@@ -224,7 +224,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 #endif
 
   // Check if the image has exactly 2 regions (foreground and background)
-  int region_count = count_colors(segmented_image, out_width, out_height);
+  int32_t region_count = count_colors(segmented_image, out_width, out_height);
   if (region_count != 2) {
     fprintf(stderr, "Error: Expected 2 regions, found %d\n", region_count);
     free((void *)segmented_image);
@@ -233,7 +233,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 
   // Convert red pixel (marker 1 - foreground) to white
   // and green pixel (marker 2 - background) to black
-  unsigned char *segmented_binary = convert_to_binary(
+  uint8_t *segmented_binary = convert_to_binary(
     segmented_image,
     out_width,
     out_height,
@@ -249,7 +249,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 #endif
 
   // 8. Smooth the result
-  unsigned char *segmented_closed = binary_closing_disk(
+  uint8_t *segmented_closed = binary_closing_disk(
     segmented_binary,
     out_width,
     out_height,
@@ -267,7 +267,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 #endif
 
   // 9. Find corners in the closed image
-  unsigned char *corner_response = foerstner_corner(
+  uint8_t *corner_response = foerstner_corner(
     out_width,
     out_height,
     segmented_closed,
@@ -280,14 +280,14 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
   }
 
   // Extract `w` channel (error ellipse size) for visualization
-  unsigned char *w_channel = malloc(out_width * out_height);
+  uint8_t *w_channel = malloc(out_width * out_height);
   if (!w_channel) {
     fprintf(stderr, "Error: Failed to allocate memory for w channel\n");
     free((void *)corner_response);
     exit(EXIT_FAILURE);
   }
 
-  for (unsigned int i = 0; i < out_width * out_height; i++) {
+  for (uint32_t i = 0; i < out_width * out_height; i++) {
     w_channel[i] = corner_response[i * 2]; // Extract `w` channel
   }
 
@@ -314,7 +314,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 
 #ifdef DEBUG_LOGGING
   // Draw corner peaks on the resized image
-  for (int i = 0; i < peaks->count; i++) {
+  for (int32_t i = 0; i < peaks->count; i++) {
     draw_circle(
       out_width,
       out_height,
@@ -323,7 +323,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
       2,        // Radius
       peaks->points[i].x,
       peaks->points[i].y,
-      (unsigned char *)resized_image
+      (uint8_t *)resized_image
     );
   }
 

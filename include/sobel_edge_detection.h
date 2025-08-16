@@ -2,9 +2,11 @@
 #pragma once
 #endif
 
-unsigned char *sobel_edge_detection(
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  unsigned char const * const data
+#include <stdint.h>
+
+uint8_t *sobel_edge_detection(
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  uint8_t const * const data
 );

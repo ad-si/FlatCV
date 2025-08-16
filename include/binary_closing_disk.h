@@ -2,9 +2,11 @@
 #pragma once
 #endif
 
-unsigned char *binary_closing_disk(
-  unsigned char const *image_data,
-  int width,
-  int height,
-  int radius
+#include <stdint.h>
+
+uint8_t *binary_closing_disk(
+  uint8_t const *image_data,
+  int32_t width,
+  int32_t height,
+  int32_t radius
 );

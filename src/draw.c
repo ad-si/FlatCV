@@ -18,22 +18,22 @@
  * Helper function to set a pixel to specified color (for circle drawing)
  */
 void set_circle_pixel(
-  unsigned char *data,
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  int px,
-  int py,
-  unsigned char r,
-  unsigned char g,
-  unsigned char b
+  uint8_t *data,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  int32_t px,
+  int32_t py,
+  uint8_t r,
+  uint8_t g,
+  uint8_t b
 ) {
-  if (px >= 0 && px < (int)width && py >= 0 && py < (int)height) {
-    unsigned int pixel_index = (py * width + px) * channels;
+  if (px >= 0 && px < (int32_t)width && py >= 0 && py < (int32_t)height) {
+    uint32_t pixel_index = (py * width + px) * channels;
 
     if (channels == 1) {
       // Grayscale: use luminance formula
-      data[pixel_index] = (unsigned char)(0.299 * r + 0.587 * g + 0.114 * b);
+      data[pixel_index] = (uint8_t)(0.299 * r + 0.587 * g + 0.114 * b);
     }
     else if (channels >= 3) {
       data[pixel_index] = r;     // R
@@ -47,20 +47,20 @@ void set_circle_pixel(
 }
 
 /**
- * Helper function to draw 8 symmetric points of a circle
+ * Helper function to draw 8 symmetric point32_ts of a circle
  */
-void draw_circle_points(
-  unsigned char *data,
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  int cx,
-  int cy,
-  int x,
-  int y,
-  unsigned char r,
-  unsigned char g,
-  unsigned char b
+void draw_circle_point32_ts(
+  uint8_t *data,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  int32_t cx,
+  int32_t cy,
+  int32_t x,
+  int32_t y,
+  uint8_t r,
+  uint8_t g,
+  uint8_t b
 ) {
   set_circle_pixel(data, width, height, channels, cx + x, cy + y, r, g, b);
   set_circle_pixel(data, width, height, channels, cx - x, cy + y, r, g, b);
@@ -76,20 +76,20 @@ void draw_circle_points(
  * Helper function to fill horizontal lines for a filled circle (disk)
  */
 void fill_disk_lines(
-  unsigned char *data,
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
-  int cx,
-  int cy,
-  int x,
-  int y,
-  unsigned char r,
-  unsigned char g,
-  unsigned char b
+  uint8_t *data,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  int32_t cx,
+  int32_t cy,
+  int32_t x,
+  int32_t y,
+  uint8_t r,
+  uint8_t g,
+  uint8_t b
 ) {
   // Fill horizontal lines at y offsets
-  for (int i = cx - x; i <= cx + x; i++) {
+  for (int32_t i = cx - x; i <= cx + x; i++) {
     set_circle_pixel(data, width, height, channels, i, cy + y, r, g, b);
     set_circle_pixel(data, width, height, channels, i, cy - y, r, g, b);
   }
@@ -97,7 +97,7 @@ void fill_disk_lines(
   // Fill horizontal lines at x offsets
   // (avoid duplicating center line when x == y)
   if (x != y) {
-    for (int i = cx - y; i <= cx + y; i++) {
+    for (int32_t i = cx - y; i <= cx + y; i++) {
       set_circle_pixel(data, width, height, channels, i, cy + x, r, g, b);
       set_circle_pixel(data, width, height, channels, i, cy - x, r, g, b);
     }
@@ -116,37 +116,37 @@ void fill_disk_lines(
  * @param radius Radius of the circle.
  * @param center_x X coordinate of the circle center.
  * @param center_y Y coordinate of the circle center.
- * @param data Pointer to the pixel data (modified in-place).
+ * @param data Point32_ter to the pixel data (modified in-place).
  */
 void draw_circle(
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
   const char *hex_color,
   double radius,
   double center_x,
   double center_y,
-  unsigned char *data
+  uint8_t *data
 ) {
   if (!data) {
     return;
   }
 
   // Parse color
-  unsigned char r, g, b;
+  uint8_t r, g, b;
   parse_hex_color(hex_color, &r, &g, &b);
 
-  int radius_int = (int)radius;
-  int cx = (int)center_x;
-  int cy = (int)center_y;
+  int32_t radius_int32_t = (int32_t)radius;
+  int32_t cx = (int32_t)center_x;
+  int32_t cy = (int32_t)center_y;
 
   // Bresenham's circle algorithm
-  int x = 0;
-  int y = radius_int;
-  int d = 3 - 2 * radius_int;
+  int32_t x = 0;
+  int32_t y = radius_int32_t;
+  int32_t d = 3 - 2 * radius_int32_t;
 
-  // Initial points
-  draw_circle_points(data, width, height, channels, cx, cy, x, y, r, g, b);
+  // Initial point32_ts
+  draw_circle_point32_ts(data, width, height, channels, cx, cy, x, y, r, g, b);
 
   while (y >= x) {
     x++;
@@ -157,7 +157,19 @@ void draw_circle(
     else {
       d = d + 4 * x + 6;
     }
-    draw_circle_points(data, width, height, channels, cx, cy, x, y, r, g, b);
+    draw_circle_point32_ts(
+      data,
+      width,
+      height,
+      channels,
+      cx,
+      cy,
+      x,
+      y,
+      r,
+      g,
+      b
+    );
   }
 }
 
@@ -173,34 +185,34 @@ void draw_circle(
  * @param radius Radius of the disk.
  * @param center_x X coordinate of the disk center.
  * @param center_y Y coordinate of the disk center.
- * @param data Pointer to the pixel data (modified in-place).
+ * @param data Point32_ter to the pixel data (modified in-place).
  */
 void draw_disk(
-  unsigned int width,
-  unsigned int height,
-  unsigned int channels,
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
   const char *hex_color,
   double radius,
   double center_x,
   double center_y,
-  unsigned char *data
+  uint8_t *data
 ) {
   if (!data) {
     return;
   }
 
   // Parse color
-  unsigned char r, g, b;
+  uint8_t r, g, b;
   parse_hex_color(hex_color, &r, &g, &b);
 
-  int radius_int = (int)radius;
-  int cx = (int)center_x;
-  int cy = (int)center_y;
+  int32_t radius_int32_t = (int32_t)radius;
+  int32_t cx = (int32_t)center_x;
+  int32_t cy = (int32_t)center_y;
 
   // Bresenham's circle algorithm for filled disk
-  int x = 0;
-  int y = radius_int;
-  int d = 3 - 2 * radius_int;
+  int32_t x = 0;
+  int32_t y = radius_int32_t;
+  int32_t d = 3 - 2 * radius_int32_t;
 
   // Initial filled lines
   fill_disk_lines(data, width, height, channels, cx, cy, x, y, r, g, b);
