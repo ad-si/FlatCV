@@ -53,7 +53,8 @@ void print32_t_usage(const char *program_name) {
   printf(
     "  bw_smooth       - Smooth (anti-aliased) black and white conversion\n"
   );
-  printf("  detect_corners  - Detect corners in the image\n");
+  printf("  detect_corners  - Detect corners and output as JSON\n");
+  printf("  draw_corners    - Detect corners and draw circles at each corner\n");
   printf("  sobel           - Apply Sobel edge detection\n");
   printf(
     "  circle <hex_color> <radius> <x>x<y> - Draw a colored circle at position "
@@ -725,17 +726,44 @@ uint8_t *apply_operation(
   }
   else if (strcmp(operation, "detect_corners") == 0) {
     Corners corners = fcv_detect_corners(input_data, *width, *height);
+    printf("  {\n");
+    printf("    \"corners\": {\n");
+    printf("      \"top_left\": [%.2f, %.2f],\n", corners.tl_x, corners.tl_y);
+    printf("      \"top_right\": [%.2f, %.2f],\n", corners.tr_x, corners.tr_y);
+    printf("      \"bottom_right\": [%.2f, %.2f],\n", corners.br_x, corners.br_y);
+    printf("      \"bottom_left\": [%.2f, %.2f]\n", corners.bl_x, corners.bl_y);
+    printf("    }\n");
+    printf("  }\n");
+
+    // Return a copy of the input data without modification
+    uint8_t *result = malloc(*width * *height * 4);
+    if (result) {
+      memcpy(result, input_data, *width * *height * 4);
+    }
+    return result;
+  }
+  else if (strcmp(operation, "draw_corners") == 0) {
+    Corners corners = fcv_detect_corners(input_data, *width, *height);
     printf("  Detected corners:\n");
     printf("    Top-left:     (%.2f, %.2f)\n", corners.tl_x, corners.tl_y);
     printf("    Top-right:    (%.2f, %.2f)\n", corners.tr_x, corners.tr_y);
     printf("    Bottom-right: (%.2f, %.2f)\n", corners.br_x, corners.br_y);
     printf("    Bottom-left:  (%.2f, %.2f)\n", corners.bl_x, corners.bl_y);
 
-    // Return a copy of the input data since we don't modify the image
-    uint8_t *result = malloc(*width * *height * 4);
-    if (result) {
-      memcpy(result, input_data, *width * *height * 4);
+    // Create a copy of the input data and draw circles at detected corners
+    uint32_t img_length_byte = (*width) * (*height) * 4;
+    uint8_t *result = malloc(img_length_byte);
+    if (!result) {
+      return NULL;
     }
+    memcpy(result, input_data, img_length_byte);
+
+    // Draw circles at each corner (using red color and radius of 5)
+    fcv_draw_circle(*width, *height, 4, "FF0000", 5, corners.tl_x, corners.tl_y, result);
+    fcv_draw_circle(*width, *height, 4, "FF0000", 5, corners.tr_x, corners.tr_y, result);
+    fcv_draw_circle(*width, *height, 4, "FF0000", 5, corners.br_x, corners.br_y, result);
+    fcv_draw_circle(*width, *height, 4, "FF0000", 5, corners.bl_x, corners.bl_y, result);
+
     return result;
   }
   else if (strcmp(operation, "sobel") == 0) {
@@ -1022,17 +1050,30 @@ uint8_t *execute_pipeline(
 }
 
 int32_t main(int32_t argc, char *argv[]) {
-  if (argc < 4) {
+  if (argc < 3) {
     print32_t_usage(argv[0]);
     return 1;
   }
 
   const char *input_path = argv[1];
-  const char *output_path = argv[argc - 1];
+  
+  // Check if this is a detect_corners operation (no output image required)
+  int32_t is_detect_corners_only = 0;
+  if (argc == 3 && strcmp(argv[2], "detect_corners") == 0) {
+    is_detect_corners_only = 1;
+  }
+  
+  const char *output_path = is_detect_corners_only ? NULL : argv[argc - 1];
+  
+  if (!is_detect_corners_only && argc < 4) {
+    print32_t_usage(argv[0]);
+    return 1;
+  }
 
   // Parse pipeline from arguments between input and output
   Pipeline *pipeline = create_pipeline();
-  if (!parse_pipeline(argc, argv, 2, argc - 1, pipeline)) {
+  int32_t pipeline_end_idx = is_detect_corners_only ? argc : argc - 1;
+  if (!parse_pipeline(argc, argv, 2, pipeline_end_idx, pipeline)) {
     free_pipeline(pipeline);
     return 1;
   }
@@ -1065,42 +1106,44 @@ int32_t main(int32_t argc, char *argv[]) {
     return 1;
   }
 
-  printf("Final output dimensions: %dx%d\n", width, height);
+  if (!is_detect_corners_only) {
+    printf("Final output dimensions: %dx%d\n", width, height);
 
-  int32_t write_result;
-  const char *ext = strrchr(output_path, '.');
-  if (ext && strcmp(ext, ".png") == 0) {
-    write_result =
-      stbi_write_png(output_path, width, height, 4, result_data, width * 4);
-  }
-  else if (ext && (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0)) {
-    if (pipeline_has_binarization(pipeline)) {
-      fprintf(
-        stderr,
-        "WARNING: Saving binarized image as JPEG will result in quality loss "
-        "due to compression artifacts. "
-        "Please use PNG format instead.\n"
-      );
+    int32_t write_result;
+    const char *ext = strrchr(output_path, '.');
+    if (ext && strcmp(ext, ".png") == 0) {
+      write_result =
+        stbi_write_png(output_path, width, height, 4, result_data, width * 4);
     }
-    write_result =
-      stbi_write_jpg(output_path, width, height, 4, result_data, 90);
-  }
-  else {
-    write_result =
-      stbi_write_png(output_path, width, height, 4, result_data, width * 4);
-  }
-
-  if (!write_result) {
-    fprintf(stderr, "Error: Could not save image to '%s'\n", output_path);
-    stbi_image_free(image_data);
-    if (result_data != image_data) {
-      free(result_data);
+    else if (ext && (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0)) {
+      if (pipeline_has_binarization(pipeline)) {
+        fprintf(
+          stderr,
+          "WARNING: Saving binarized image as JPEG will result in quality loss "
+          "due to compression artifacts. "
+          "Please use PNG format instead.\n"
+        );
+      }
+      write_result =
+        stbi_write_jpg(output_path, width, height, 4, result_data, 90);
     }
-    free_pipeline(pipeline);
-    return 1;
-  }
+    else {
+      write_result =
+        stbi_write_png(output_path, width, height, 4, result_data, width * 4);
+    }
 
-  printf("Successfully saved processed image to '%s'\n", output_path);
+    if (!write_result) {
+      fprintf(stderr, "Error: Could not save image to '%s'\n", output_path);
+      stbi_image_free(image_data);
+      if (result_data != image_data) {
+        free(result_data);
+      }
+      free_pipeline(pipeline);
+      return 1;
+    }
+
+    printf("Successfully saved processed image to '%s'\n", output_path);
+  }
 
   stbi_image_free(image_data);
   if (result_data != image_data) {

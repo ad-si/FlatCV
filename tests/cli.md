@@ -407,6 +407,44 @@ Successfully saved processed image to 'imgs/parrot_circle_disk_combo.png'
 ```
 
 
+## Corner Detection
+
+### Detect Corners
+
+```scrut
+$ ./flatcv imgs/receipt.jpeg detect_corners
+Loaded image: 1024x1024 with 3 channels
+Executing pipeline with 1 operations:
+Applying operation: detect_corners
+  {
+    "corners": {
+      "top_left": [332.00, 68.00],
+      "top_right": [692.00, 76.00],
+      "bottom_right": [720.00, 956.00],
+      "bottom_left": [352.00, 960.00]
+    }
+  }
+  → Completed in \d+.\d+ ms \(output: 1024x1024\) (regex)
+```
+
+### Draw Corners
+
+```scrut
+$ ./flatcv imgs/receipt.jpeg draw_corners imgs/receipt_corners.png
+Loaded image: 1024x1024 with 3 channels
+Executing pipeline with 1 operations:
+Applying operation: draw_corners
+  Detected corners:
+    Top-left:     (332.00, 68.00)
+    Top-right:    (692.00, 76.00)
+    Bottom-right: (720.00, 956.00)
+    Bottom-left:  (352.00, 960.00)
+  → Completed in \d+.\d+ ms \(output: 1024x1024\) (regex)
+Final output dimensions: 1024x1024
+Successfully saved processed image to 'imgs/receipt_corners.png'
+```
+
+
 ## Segmentation
 
 ### Watershed

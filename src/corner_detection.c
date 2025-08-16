@@ -334,16 +334,21 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 #endif
   free((void *)resized_image);
 
+  // Scale corners back to original image dimensions
+  double scale_x = (double)width / out_width;
+  double scale_y = (double)height / out_height;
+
   Corners corners = {
-    .tl_x = peaks->points[0].x,
-    .tl_y = peaks->points[0].y,
-    .tr_x = peaks->points[1].x,
-    .tr_y = peaks->points[1].y,
-    .br_x = peaks->points[2].x,
-    .br_y = peaks->points[2].y,
-    .bl_x = peaks->points[3].x,
-    .bl_y = peaks->points[3].y
+    .tl_x = peaks->points[0].x * scale_x,
+    .tl_y = peaks->points[0].y * scale_y,
+    .tr_x = peaks->points[1].x * scale_x,
+    .tr_y = peaks->points[1].y * scale_y,
+    .br_x = peaks->points[2].x * scale_x,
+    .br_y = peaks->points[2].y * scale_y,
+    .bl_x = peaks->points[3].x * scale_x,
+    .bl_y = peaks->points[3].y * scale_y
   };
 
+  free(peaks);
   return corners;
 }
