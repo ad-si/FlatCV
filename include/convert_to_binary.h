@@ -2,7 +2,7 @@
 #pragma once
 #endif
 
-unsigned char const *const convert_to_binary(
+unsigned char *convert_to_binary(
   const unsigned char *image_data,
   int width,
   int height,

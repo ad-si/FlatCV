@@ -2,7 +2,7 @@
 #pragma once
 #endif
 
-unsigned char const * const watershed_segmentation(
+unsigned char *watershed_segmentation(
   unsigned int width,
   unsigned int height,
   unsigned char const * const grayscale_data,

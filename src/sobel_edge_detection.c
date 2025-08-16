@@ -97,13 +97,13 @@ unsigned char *sobel_edge_detection(
           if (px < 0) {
             px = 0;
           }
-          if (px >= width) {
+          if ((unsigned int)px >= width) {
             px = width - 1;
           }
           if (py < 0) {
             py = 0;
           }
-          if (py >= height) {
+          if ((unsigned int)py >= height) {
             py = height - 1;
           }
 

@@ -25,7 +25,7 @@
  * @param background_hex Hex color code for the background color (e.g.,
  * "00FF00").
  */
-unsigned char const *const convert_to_binary(
+unsigned char *convert_to_binary(
   const unsigned char *image_data,
   int width,
   int height,

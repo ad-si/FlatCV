@@ -187,6 +187,8 @@ int parse_pipeline(
   int end_idx,
   Pipeline *pipeline
 ) {
+  (void)argc; // Unused parameter
+
   /* 1. build one big string from all arguments that form the pipeline */
   size_t total_len = 0;
   for (int i = start_idx; i < end_idx; ++i) {
@@ -649,7 +651,7 @@ unsigned char *apply_operation(
     }
 
     // Convert single-channel grayscale to RGBA format
-    unsigned char const *const rgba_result =
+    unsigned char *rgba_result =
       single_to_multichannel(*width, *height, grayscale_sobel);
     free(grayscale_sobel);
     return (unsigned char *)rgba_result;

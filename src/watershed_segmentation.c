@@ -97,7 +97,7 @@ static QueueItem dequeue(Queue *q) {
  * @param num_markers Number of markers in the array.
  * @return Pointer to the segmented image data.
  */
-unsigned char const *const watershed_segmentation(
+unsigned char *watershed_segmentation(
   unsigned int width,
   unsigned int height,
   unsigned char const *const grayscale_data,

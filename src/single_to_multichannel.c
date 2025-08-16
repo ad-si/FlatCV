@@ -21,7 +21,7 @@
  * @param height Height of the image.
  * @param data Pointer to the pixel data.
  */
-unsigned char const *const single_to_multichannel(
+unsigned char *single_to_multichannel(
   unsigned int width,
   unsigned int height,
   unsigned char const *const data

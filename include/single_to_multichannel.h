@@ -2,8 +2,8 @@
 #pragma once
 #endif
 
-unsigned char const * const single_to_multichannel(
+unsigned char *single_to_multichannel(
   unsigned int width,
   unsigned int height,
-  unsigned char const * const data
+  unsigned char const *const data
 );

@@ -31,7 +31,7 @@
  * @param data Pointer to the pixel data.
  * @return Pointer to the grayscale image data.
  */
-unsigned char const *const grayscale(
+unsigned char *grayscale(
   unsigned int width,
   unsigned int height,
   unsigned char const *const data
@@ -75,7 +75,7 @@ unsigned char const *const grayscale(
  * @param data Pointer to the pixel data.
  * @return Pointer to the grayscale image data.
  */
-unsigned char const *const grayscale_stretch(
+unsigned char *grayscale_stretch(
   unsigned int width,
   unsigned int height,
   unsigned char const *const data
@@ -225,7 +225,7 @@ void apply_double_threshold(
  * @param data Pointer to the pixel data.
  * @return Pointer to the monochrome image data.
  */
-unsigned char const *const otsu_threshold_rgba(
+unsigned char *otsu_threshold_rgba(
   unsigned int width,
   unsigned int height,
   bool use_double_threshold,
@@ -289,7 +289,7 @@ unsigned char const *const otsu_threshold_rgba(
     apply_global_threshold(img_length_px, grayscale_img, optimal_threshold);
   }
 
-  unsigned char const *const monochrome_data =
+  unsigned char *monochrome_data =
     single_to_multichannel(width, height, grayscale_img);
 
   free(grayscale_img);
@@ -305,7 +305,7 @@ unsigned char const *const otsu_threshold_rgba(
  * @param data Pointer to the pixel data.
  * @return Pointer to the blurred image data.
  */
-unsigned char const *const apply_gaussian_blur(
+unsigned char *apply_gaussian_blur(
   unsigned int width,
   unsigned int height,
   double radius,
@@ -350,7 +350,7 @@ unsigned char const *const apply_gaussian_blur(
 
       for (int k = -radius; k <= radius; k++) {
         int x_offset = x + k;
-        if (x_offset < 0 || x_offset >= width) {
+        if (x_offset < 0 || (unsigned int)x_offset >= width) {
           continue;
         }
 
@@ -395,7 +395,7 @@ unsigned char const *const apply_gaussian_blur(
 
       for (int k = -radius; k <= radius; k++) {
         int y_offset = y + k;
-        if (y_offset < 0 || y_offset >= height) {
+        if (y_offset < 0 || (unsigned int)y_offset >= height) {
           continue;
         }
 
@@ -440,19 +440,19 @@ unsigned char const *const apply_gaussian_blur(
  * @param data Pointer to the pixel data.
  * @return Pointer to the blurred image data.
  */
-unsigned char const *const bw_smart(
+unsigned char *bw_smart(
   unsigned int width,
   unsigned int height,
   bool use_double_threshold,
   unsigned char const *const data
 ) {
-  unsigned char const *const grayscale_data = grayscale(width, height, data);
+  unsigned char *grayscale_data = grayscale(width, height, data);
 
   // Calculate blur radius dependent on image size
   // (Empirical formula after testing)
   double blurRadius = (sqrt((double)width * (double)height)) * 0.1;
 
-  unsigned char const *const blurred_data =
+  unsigned char *blurred_data =
     apply_gaussian_blur(width, height, blurRadius, grayscale_data);
 
   unsigned int img_length_px = width * height;
@@ -487,7 +487,7 @@ unsigned char const *const bw_smart(
   free((void *)grayscale_data);
   free((void *)blurred_data);
 
-  unsigned char const *const final_data =
+  unsigned char *final_data =
     otsu_threshold_rgba(width, height, use_double_threshold, high_freq_data);
 
   free(high_freq_data);
@@ -507,7 +507,7 @@ unsigned char const *const bw_smart(
  * @param data Pointer to the input pixel data.
  * @return Pointer to the resized image data.
  */
-unsigned char const *const resize(
+unsigned char *resize(
   unsigned int width,
   unsigned int height,
   double resize_x,

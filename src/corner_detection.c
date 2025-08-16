@@ -206,7 +206,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
   markers[0] = (Point2D){.x = out_width / 2.0, .y = out_height / 2.0};
   markers[1] = (Point2D){.x = 0, .y = 0};
 
-  unsigned char const *const segmented_image = watershed_segmentation(
+  unsigned char *segmented_image = watershed_segmentation(
     out_width,
     out_height,
     elevation_map,
@@ -233,7 +233,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 
   // Convert red pixel (marker 1 - foreground) to white
   // and green pixel (marker 2 - background) to black
-  unsigned char const *const segmented_binary = convert_to_binary(
+  unsigned char *segmented_binary = convert_to_binary(
     segmented_image,
     out_width,
     out_height,
@@ -249,7 +249,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 #endif
 
   // 8. Smooth the result
-  unsigned char const *const segmented_closed = binary_closing_disk(
+  unsigned char *segmented_closed = binary_closing_disk(
     segmented_binary,
     out_width,
     out_height,
@@ -267,7 +267,7 @@ Corners detect_corners(const unsigned char *image, int width, int height) {
 #endif
 
   // 9. Find corners in the closed image
-  unsigned char const *const corner_response = foerstner_corner(
+  unsigned char *corner_response = foerstner_corner(
     out_width,
     out_height,
     segmented_closed,

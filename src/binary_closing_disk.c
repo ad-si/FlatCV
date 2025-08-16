@@ -120,7 +120,7 @@ static unsigned char *binary_erosion_disk(
   return result;
 }
 
-unsigned char const *const binary_closing_disk(
+unsigned char *binary_closing_disk(
   unsigned char const *image_data,
   int width,
   int height,

@@ -337,8 +337,7 @@ int test_foerstner_corner() {
   }
 
   double sigma = 1.0;
-  unsigned char const *const result =
-    foerstner_corner(width, height, gray_data, sigma);
+  unsigned char *result = foerstner_corner(width, height, gray_data, sigma);
 
   free(gray_data);
 
@@ -352,18 +351,6 @@ int test_foerstner_corner() {
   // 2. Result should have 2 channels (w and q measures)
   // 3. Values should be in [0, 255] range
   bool test_ok = true;
-
-  for (unsigned int i = 0; i < width * height * 2; i++) {
-    if (result[i] > 255) {
-      printf(
-        "❌ Foerstner corner test failed: value %d out of range at index %d\n",
-        result[i],
-        i
-      );
-      test_ok = false;
-      break;
-    }
-  }
 
   // Test specific corner response (corner should be at position (3,1) or (3,2))
   // The exact values depend on implementation details, so we just check for
@@ -558,7 +545,7 @@ int test_binary_closing_disk() {
   }
 
   // With radius 0, image should be unchanged
-  for (int i = 0; i < width * height; i++) {
+  for (unsigned int i = 0; i < width * height; i++) {
     if (result[i] != data[i]) {
       printf(
         "❌ Binary closing disk test failed: radius 0 should not change image\n"

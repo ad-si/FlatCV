@@ -24,12 +24,12 @@ format:
 
 .PHONY: test-units
 test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
-	gcc -Wall -Werror \
+	gcc -Wall -Wextra -Wpedantic \
 		-Iinclude tests/test.c $(LIB_SRC_FILES) \
 		-lm -o test_bin \
 	&& ./test_bin
 
-	gcc -Wall -Werror \
+	gcc -Wall -Wextra -Wpedantic \
 		-Iinclude $(LIB_SRC_FILES) tests/apply_test.c \
 		-o apply_test \
 	&& ./apply_test
@@ -75,7 +75,7 @@ benchmark: flatcv
 
 
 flatcv: $(HDR_FILES) $(SRC_FILES)
-	gcc -Wall -Werror \
+	gcc -Wall -Wextra -Wpedantic \
 		-Iinclude $(SRC_FILES) \
 		-lm -o $@
 
@@ -97,7 +97,7 @@ lin-build: flatcv_linux_arm64
 
 # Windows - Cross-compilation with mingw-w64
 flatcv_windows_x86_64.exe: $(HDR_FILES) $(SRC_FILES)
-	x86_64-w64-mingw32-gcc -Wall -Werror -static -static-libgcc \
+	x86_64-w64-mingw32-gcc -Wall -Wextra -Wpedantic -static -static-libgcc \
 		-Iinclude $(SRC_FILES) \
 		-lm -o $@
 

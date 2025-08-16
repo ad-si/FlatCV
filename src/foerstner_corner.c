@@ -17,7 +17,7 @@
 /** Implementation of the Foerstner corner measure response image.
  * Expected input is a grayscale image.
  */
-unsigned char const *const foerstner_corner(
+unsigned char *foerstner_corner(
   unsigned int width,
   unsigned int height,
   unsigned char const *const gray_data,
