@@ -41,8 +41,19 @@ test-integration: build tests/cli.md
 	scrut test --work-directory=$$(pwd) tests/cli.md
 
 
+.PHONY: test-amalgamation
+test-amalgamation: flatcv.h flatcv.c tests/test_amalgamation.c
+	# Test that amalgamated files compile and work correctly
+	mkdir -p tmp/amalgamation_test
+	cp flatcv.h flatcv.c tests/test_amalgamation.c tmp/amalgamation_test/
+	cd tmp/amalgamation_test && gcc -Wall -Wextra -Wpedantic \
+		flatcv.c test_amalgamation.c \
+		-lm -o test_amalgamation_bin \
+	&& ./test_amalgamation_bin
+
+
 .PHONY: test
-test: build test-units test-integration
+test: build test-units test-integration test-amalgamation
 
 
 .PHONY: test-extended
@@ -180,4 +191,5 @@ clean:
 		flatcv \
 		flatcv.c \
 		flatcv.h \
-		test_bin
+		test_bin \
+		test_amalgamation_bin

@@ -1,10 +1,10 @@
 #ifndef FLATCV_AMALGAMATION
 #pragma once
+#include "1_types.h"
 #endif
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "1_types.h"
 
 uint8_t *fcv_watershed_segmentation(
   uint32_t width,
