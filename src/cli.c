@@ -107,6 +107,17 @@ void free_pipeline(Pipeline *p) {
   }
 }
 
+int32_t pipeline_has_binarization(const Pipeline *pipeline) {
+  for (int32_t i = 0; i < pipeline->count; i++) {
+    const char *op = pipeline->ops[i].operation;
+    if (strcmp(op, "threshold") == 0 || strcmp(op, "bw_smart") == 0 ||
+        strcmp(op, "bw_smooth") == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 void add_operation(
   Pipeline *p,
   const char *op,
@@ -1042,6 +1053,14 @@ int32_t main(int32_t argc, char *argv[]) {
       stbi_write_png(output_path, width, height, 4, result_data, width * 4);
   }
   else if (ext && (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0)) {
+    if (pipeline_has_binarization(pipeline)) {
+      fprintf(
+        stderr,
+        "WARNING: Saving binarized image as JPEG will result in quality loss "
+        "due to compression artifacts. "
+        "Please use PNG format instead.\n"
+      );
+    }
     write_result =
       stbi_write_jpg(output_path, width, height, 4, result_data, 90);
   }
