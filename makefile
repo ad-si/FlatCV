@@ -130,8 +130,12 @@ install: flatcv
 	sudo cp $< /usr/local/bin
 
 
-flatcv.h: $(HDR_SRC_FILES)
+flatcv.h: $(HDR_SRC_FILES) license.txt
 	@echo '/* FlatCV - Amalgamated public header (auto-generated) */' > $@
+	@echo '/*' >> $@
+	@cat license.txt | sed 's/^/ * /' >> $@
+	@echo ' */' >> $@
+	@echo '' >> $@
 	@echo '#ifndef FLATCV_H' >> $@
 	@echo '#define FLATCV_H' >> $@
 	@echo '#define FLATCV_AMALGAMATION' >> $@
@@ -141,8 +145,12 @@ flatcv.h: $(HDR_SRC_FILES)
 		done
 	@echo '#endif /* FLATCV_H */' >> $@
 
-flatcv.c: flatcv.h $(LIB_SRC_FILES)
+flatcv.c: flatcv.h $(LIB_SRC_FILES) license.txt
 	@echo '/* FlatCV - Amalgamated implementation (auto-generated) */' > $@
+	@echo '/*' >> $@
+	@cat license.txt | sed 's/^/ * /' >> $@
+	@echo ' */' >> $@
+	@echo '' >> $@
 	@echo '#define FLATCV_AMALGAMATION' >> $@
 	@echo '#include "flatcv.h"' >> $@
 	@for src in $(LIB_SRC_FILES); do \
