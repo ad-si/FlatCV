@@ -74,6 +74,15 @@ benchmark: flatcv
 	@./benchmark.sh
 
 
+.PHONY: leaks
+leaks: flatcv
+	leaks --atExit -- \
+		./flatcv \
+			imgs/parrot_hq.jpeg \
+			resize 512x512, grayscale, blur 9, sobel \
+			tmp/leaks_test.png
+
+
 flatcv: $(HDR_FILES) $(SRC_FILES)
 	gcc -Wall -Wextra -Wpedantic \
 		-Iinclude $(SRC_FILES) \

@@ -19,9 +19,9 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             bash
+            clang-tools  # For clang-format
             coreutils
             doxygen
-            clang-tools  # For clang-format
             gcc
             gnumake
             graphicsmagick
