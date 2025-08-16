@@ -104,8 +104,10 @@ int32_t solve_linear_system(double A[8][8], double b[8], double x[8]) {
  * Calculate the perspective transformation matrix
  * from the source and destination corner coordinates.
  */
-Matrix3x3 *
-calculate_perspective_transform(Corners *src_corners, Corners *dst_corners) {
+Matrix3x3 *fcv_calculate_perspective_transform(
+  Corners *src_corners,
+  Corners *dst_corners
+) {
   // Initialize matrices with zeros
   double A[8][8] = {{0}};
   double b[8] = {0};
@@ -256,7 +258,7 @@ calculate_perspective_transform(Corners *src_corners, Corners *dst_corners) {
  * and store the result in the output image.
  * Use bilinear int32_terpolation to calculate final pixel values.
  */
-uint8_t *apply_matrix_3x3(
+uint8_t *fcv_apply_matrix_3x3(
   int32_t in_width,
   int32_t in_height,
   uint8_t *in_data,

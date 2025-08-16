@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-void set_circle_pixel(
+void fcv_set_circle_pixel(
   uint8_t *data,
   uint32_t width,
   uint32_t height,
@@ -16,7 +16,7 @@ void set_circle_pixel(
   uint8_t b
 );
 
-void draw_circle(
+void fcv_draw_circle(
   uint32_t width,
   uint32_t height,
   uint32_t channels,
@@ -27,7 +27,7 @@ void draw_circle(
   uint8_t *data
 );
 
-void draw_disk(
+void fcv_draw_disk(
   uint32_t width,
   uint32_t height,
   uint32_t channels,
@@ -38,7 +38,7 @@ void draw_disk(
   uint8_t *data
 );
 
-void draw_circle_points(
+void fcv_draw_circle_points(
   uint8_t *data,
   uint32_t width,
   uint32_t height,
@@ -52,7 +52,7 @@ void draw_circle_points(
   uint8_t b
 );
 
-void fill_disk_lines(
+void fcv_fill_disk_lines(
   uint8_t *data,
   uint32_t width,
   uint32_t height,

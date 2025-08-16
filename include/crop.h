@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-uint8_t *crop(
+uint8_t *fcv_crop(
   uint32_t width,
   uint32_t height,
   uint32_t channels,

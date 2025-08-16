@@ -9,7 +9,7 @@
 #define G_WEIGHT 150 // 0.587 * 256
 #define B_WEIGHT 30  // 0.114 * 256
 
-uint8_t *rgba_to_grayscale(
+uint8_t *fcv_rgba_to_grayscale(
   uint32_t width,
   uint32_t height,
   uint8_t const * const data

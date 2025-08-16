@@ -22,7 +22,7 @@ int32_t test_otsu_threshold() {
                       0, 0, 0, 255, 2, 2, 2, 255, 9, 9, 9, 255, 8, 8, 8, 255};
 
   uint8_t const *const monochrome_data =
-    otsu_threshold_rgba(width, height, false, data);
+    fcv_otsu_threshold_rgba(width, height, false, data);
 
   uint8_t expected_data[64] = {
     0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -81,7 +81,7 @@ int32_t test_perspective_transform() {
     300 // Bottom-left
   };
 
-  Matrix3x3 *tmat = calculate_perspective_transform(&src, &dst);
+  Matrix3x3 *tmat = fcv_calculate_perspective_transform(&src, &dst);
 
   double eps = 0.001;
   bool test_ok = true;
@@ -156,7 +156,7 @@ int32_t test_perspective_transform_float() {
     574.86 // Bottom-left
   };
 
-  Matrix3x3 *tmat = calculate_perspective_transform(&src, &dst);
+  Matrix3x3 *tmat = fcv_calculate_perspective_transform(&src, &dst);
 
   double eps = 0.001;
   bool test_ok = true;
@@ -208,14 +208,14 @@ int32_t test_perspective_transform_float() {
   }
 }
 
-void free_corner_peaks(CornerPeaks *peaks) {
+void free_fcv_corner_peaks(CornerPeaks *peaks) {
   if (peaks) {
     free(peaks->points);
     free(peaks);
   }
 }
 
-int32_t test_foerstner_corner() {
+int32_t test_fcv_foerstner_corner() {
   // Create a simple test image with a corner pattern (5x5 RGBA)
   uint32_t width = 5;
   uint32_t height = 5;
@@ -329,14 +329,14 @@ int32_t test_foerstner_corner() {
   };
 
   // Convert RGBA to grayscale first
-  uint8_t *gray_data = rgba_to_grayscale(width, height, data);
+  uint8_t *gray_data = fcv_rgba_to_grayscale(width, height, data);
   if (!gray_data) {
     printf("❌ Foerstner corner test failed: grayscale conversion failed\n");
     return 1;
   }
 
   double sigma = 1.0;
-  uint8_t *result = foerstner_corner(width, height, gray_data, sigma);
+  uint8_t *result = fcv_foerstner_corner(width, height, gray_data, sigma);
 
   free(gray_data);
 
@@ -375,7 +375,7 @@ int32_t test_foerstner_corner() {
   }
 }
 
-int32_t test_corner_peaks() {
+int32_t test_fcv_corner_peaks() {
   // Test with simple synthetic corner response data (5x5 image, 2 channels)
   uint32_t width = 5;
   uint32_t height = 5;
@@ -397,7 +397,7 @@ int32_t test_corner_peaks() {
   data[(2 * width + 1) * 2 + 0] = 90;  // Weaker neighbor
 
   // Test 1: Basic functionality
-  CornerPeaks *peaks = corner_peaks(width, height, data, 1, 0.5, 0.3);
+  CornerPeaks *peaks = fcv_corner_peaks(width, height, data, 1, 0.5, 0.3);
 
   if (!peaks) {
     printf("❌ Corner peaks test failed: NULL result\n");
@@ -437,10 +437,11 @@ int32_t test_corner_peaks() {
     }
   }
 
-  free_corner_peaks(peaks);
+  free_fcv_corner_peaks(peaks);
 
   // Test 2: Minimum distance suppression
-  peaks = corner_peaks(width, height, data, 3, 0.5, 0.3); // min_distance = 3
+  peaks =
+    fcv_corner_peaks(width, height, data, 3, 0.5, 0.3); // min_distance = 3
 
   if (!peaks) {
     printf("❌ Corner peaks test failed: NULL result on min_distance test\n");
@@ -458,10 +459,10 @@ int32_t test_corner_peaks() {
     test_ok = false;
   }
 
-  free_corner_peaks(peaks);
+  free_fcv_corner_peaks(peaks);
 
   // Test 3: High threshold (should find no peaks)
-  peaks = corner_peaks(width, height, data, 1, 0.98, 0.98);
+  peaks = fcv_corner_peaks(width, height, data, 1, 0.98, 0.98);
 
   if (!peaks) {
     printf("❌ Corner peaks test failed: NULL result on high threshold test\n");
@@ -477,14 +478,14 @@ int32_t test_corner_peaks() {
     test_ok = false;
   }
 
-  free_corner_peaks(peaks);
+  free_fcv_corner_peaks(peaks);
 
   // Test 4: NULL input
-  peaks = corner_peaks(width, height, NULL, 1, 0.5, 0.3);
+  peaks = fcv_corner_peaks(width, height, NULL, 1, 0.5, 0.3);
   if (peaks != NULL) {
     printf("❌ Corner peaks test failed: should return NULL for NULL input\n");
     test_ok = false;
-    free_corner_peaks(peaks);
+    free_fcv_corner_peaks(peaks);
   }
 
   if (test_ok) {
@@ -497,7 +498,7 @@ int32_t test_corner_peaks() {
   }
 }
 
-int32_t test_binary_closing_disk() {
+int32_t test_fcv_binary_closing_disk() {
   // Test 1: Basic functionality with simple binary image
   uint32_t width = 7;
   uint32_t height = 7;
@@ -509,7 +510,7 @@ int32_t test_binary_closing_disk() {
                       0, 255, 255, 0, 255, 255, 0, 0, 255, 255, 0, 255, 255, 0,
                       0, 0,   0,   0, 0,   0,   0};
 
-  uint8_t const *result = binary_closing_disk(data, width, height, radius);
+  uint8_t const *result = fcv_binary_closing_disk(data, width, height, radius);
 
   if (!result) {
     printf("❌ Binary closing disk test failed: NULL result\n");
@@ -535,7 +536,7 @@ int32_t test_binary_closing_disk() {
   free((void *)result);
 
   // Test 2: Edge case - radius 0 (should return copy of original)
-  result = binary_closing_disk(data, width, height, 0);
+  result = fcv_binary_closing_disk(data, width, height, 0);
   if (!result) {
     printf("❌ Binary closing disk test failed: NULL result for radius 0\n");
     return 1;
@@ -555,7 +556,7 @@ int32_t test_binary_closing_disk() {
   free((void *)result);
 
   // Test 3: NULL input
-  result = binary_closing_disk(NULL, width, height, radius);
+  result = fcv_binary_closing_disk(NULL, width, height, radius);
   if (result != NULL) {
     printf(
       "❌ Binary closing disk test failed: should return NULL for NULL input\n"
@@ -565,7 +566,7 @@ int32_t test_binary_closing_disk() {
   }
 
   // Test 4: Invalid dimensions
-  result = binary_closing_disk(data, 0, height, radius);
+  result = fcv_binary_closing_disk(data, 0, height, radius);
   if (result != NULL) {
     printf(
       "❌ Binary closing disk test failed: should return NULL for width 0\n"
@@ -574,7 +575,7 @@ int32_t test_binary_closing_disk() {
     free((void *)result);
   }
 
-  result = binary_closing_disk(data, width, 0, radius);
+  result = fcv_binary_closing_disk(data, width, 0, radius);
   if (result != NULL) {
     printf(
       "❌ Binary closing disk test failed: should return NULL for height 0\n"
@@ -584,7 +585,7 @@ int32_t test_binary_closing_disk() {
   }
 
   // Test 5: Negative radius
-  result = binary_closing_disk(data, width, height, -1);
+  result = fcv_binary_closing_disk(data, width, height, -1);
   if (result != NULL) {
     printf(
       "❌ Binary closing disk test failed: should return NULL for negative "
@@ -606,8 +607,8 @@ int32_t test_binary_closing_disk() {
 
 int32_t main() {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
-      !test_perspective_transform_float() && !test_foerstner_corner() &&
-      !test_corner_peaks() && !test_binary_closing_disk()) {
+      !test_perspective_transform_float() && !test_fcv_foerstner_corner() &&
+      !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk()) {
     printf("✅ All tests passed\n");
     return 0;
   }

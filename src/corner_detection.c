@@ -107,7 +107,8 @@ void write_debug_img(Image img, const char *filename) {
 /**
  * Detect corners in the input image.
  */
-Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
+Corners
+fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   assert(image != NULL);
   assert(width > 0);
   assert(height > 0);
@@ -124,7 +125,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   };
 
   // 1. Convert to grayscale
-  uint8_t const *grayscale_image = grayscale(width, height, image);
+  uint8_t const *grayscale_image = fcv_grayscale(width, height, image);
   if (!grayscale_image) {
     fprintf(stderr, "Error: Failed to convert image to grayscale\n");
     return default_corners;
@@ -133,7 +134,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   // 2. Resize image to 256x256
   uint32_t out_width = 256;
   uint32_t out_height = 256;
-  uint8_t const *resized_image = resize(
+  uint8_t const *resized_image = fcv_resize(
     width,
     height,
     (double)out_width / width,
@@ -160,7 +161,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 
   // 3. Apply Gaussian blur
   uint8_t const *blurred_image =
-    apply_gaussian_blur(out_width, out_height, 3.0, resized_image);
+    fcv_apply_gaussian_blur(out_width, out_height, 3.0, resized_image);
   // Don't free resized_image here, as it is used for debugging later
   if (!blurred_image) {
     fprintf(stderr, "Error: Failed to apply Gaussian blur\n");
@@ -168,8 +169,8 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   }
 
   // 5. Create elevation map with Sobel edge detection
-  uint8_t *elevation_map =
-    (uint8_t *)sobel_edge_detection(out_width, out_height, 4, blurred_image);
+  uint8_t *elevation_map = (uint8_t *)
+    fcv_sobel_edge_detection(out_width, out_height, 4, blurred_image);
   free((void *)blurred_image);
   if (!elevation_map) {
     fprintf(stderr, "Error: Failed to create elevation map with Sobel\n");
@@ -177,7 +178,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   }
 
   // 6. Flatten elevation map at center to not get trapped in a local minimum
-  draw_disk(
+  fcv_draw_disk(
     out_width,
     out_height,
     1, // Single channel grayscale
@@ -206,7 +207,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   markers[0] = (Point2D){.x = out_width / 2.0, .y = out_height / 2.0};
   markers[1] = (Point2D){.x = 0, .y = 0};
 
-  uint8_t *segmented_image = watershed_segmentation(
+  uint8_t *segmented_image = fcv_watershed_segmentation(
     out_width,
     out_height,
     elevation_map,
@@ -233,7 +234,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 
   // Convert red pixel (marker 1 - foreground) to white
   // and green pixel (marker 2 - background) to black
-  uint8_t *segmented_binary = convert_to_binary(
+  uint8_t *segmented_binary = fcv_convert_to_binary(
     segmented_image,
     out_width,
     out_height,
@@ -249,7 +250,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 #endif
 
   // 8. Smooth the result
-  uint8_t *segmented_closed = binary_closing_disk(
+  uint8_t *segmented_closed = fcv_binary_closing_disk(
     segmented_binary,
     out_width,
     out_height,
@@ -267,7 +268,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 #endif
 
   // 9. Find corners in the closed image
-  uint8_t *corner_response = foerstner_corner(
+  uint8_t *corner_response = fcv_foerstner_corner(
     out_width,
     out_height,
     segmented_closed,
@@ -298,7 +299,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   free(w_channel);
 
   // 10. Find corner peaks using thresholds
-  CornerPeaks *peaks = corner_peaks(
+  CornerPeaks *peaks = fcv_corner_peaks(
     out_width,
     out_height,
     corner_response,
@@ -315,7 +316,7 @@ Corners detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 #ifdef DEBUG_LOGGING
   // Draw corner peaks on the resized image
   for (int32_t i = 0; i < peaks->count; i++) {
-    draw_circle(
+    fcv_draw_circle(
       out_width,
       out_height,
       4,        // RGBA

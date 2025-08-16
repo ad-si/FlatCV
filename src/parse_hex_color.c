@@ -14,7 +14,7 @@
 #endif
 
 // Helper function to parse hex color code to RGB values
-void parse_hex_color(
+void fcv_parse_hex_color(
   const char *hex_color,
   uint8_t *r,
   uint8_t *g,

@@ -21,7 +21,7 @@
  * @param height Height of the image.
  * @param data Pointer to the pixel data.
  */
-uint8_t *single_to_multichannel(
+uint8_t *fcv_single_to_multichannel(
   uint32_t width,
   uint32_t height,
   uint8_t const *const data

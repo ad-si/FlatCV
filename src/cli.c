@@ -637,14 +637,15 @@ uint8_t *apply_operation(
   uint8_t *input_data
 ) {
   if (strcmp(operation, "grayscale") == 0) {
-    return (uint8_t *)grayscale(*width, *height, input_data);
+    return (uint8_t *)fcv_grayscale(*width, *height, input_data);
   }
   else if (strcmp(operation, "blur") == 0) {
     if (!has_param) {
       fprintf(stderr, "Error: blur operation requires radius parameter\n");
       return NULL;
     }
-    return (uint8_t *)apply_gaussian_blur(*width, *height, param, input_data);
+    return (uint8_t *)
+      fcv_apply_gaussian_blur(*width, *height, param, input_data);
   }
   else if (strcmp(operation, "resize") == 0) {
     double resize_x, resize_y;
@@ -695,7 +696,7 @@ uint8_t *apply_operation(
     }
 
     uint32_t out_width, out_height;
-    uint8_t *result = (uint8_t *)resize(
+    uint8_t *result = (uint8_t *)fcv_resize(
       *width,
       *height,
       resize_x,
@@ -713,16 +714,17 @@ uint8_t *apply_operation(
     return result;
   }
   else if (strcmp(operation, "threshold") == 0) {
-    return (uint8_t *)otsu_threshold_rgba(*width, *height, false, input_data);
+    return (uint8_t *)
+      fcv_otsu_threshold_rgba(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smart") == 0) {
-    return (uint8_t *)bw_smart(*width, *height, false, input_data);
+    return (uint8_t *)fcv_bw_smart(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smooth") == 0) {
-    return (uint8_t *)bw_smart(*width, *height, true, input_data);
+    return (uint8_t *)fcv_bw_smart(*width, *height, true, input_data);
   }
   else if (strcmp(operation, "detect_corners") == 0) {
-    Corners corners = detect_corners(input_data, *width, *height);
+    Corners corners = fcv_detect_corners(input_data, *width, *height);
     printf("  Detected corners:\n");
     printf("    Top-left:     (%.2f, %.2f)\n", corners.tl_x, corners.tl_y);
     printf("    Top-right:    (%.2f, %.2f)\n", corners.tr_x, corners.tr_y);
@@ -738,14 +740,14 @@ uint8_t *apply_operation(
   }
   else if (strcmp(operation, "sobel") == 0) {
     uint8_t *grayscale_sobel =
-      sobel_edge_detection(*width, *height, 4, input_data);
+      fcv_sobel_edge_detection(*width, *height, 4, input_data);
     if (!grayscale_sobel) {
       return NULL;
     }
 
     // Convert single-channel grayscale to RGBA format
     uint8_t *rgba_result =
-      single_to_multichannel(*width, *height, grayscale_sobel);
+      fcv_single_to_multichannel(*width, *height, grayscale_sobel);
     free(grayscale_sobel);
     return (uint8_t *)rgba_result;
   }
@@ -772,7 +774,16 @@ uint8_t *apply_operation(
     }
     memcpy(result, input_data, img_length_byte);
 
-    draw_circle(*width, *height, 4, color, radius, center_x, center_y, result);
+    fcv_draw_circle(
+      *width,
+      *height,
+      4,
+      color,
+      radius,
+      center_x,
+      center_y,
+      result
+    );
 
     free(param_copy);
     return result;
@@ -797,7 +808,16 @@ uint8_t *apply_operation(
     }
     memcpy(result, input_data, img_length_byte);
 
-    draw_disk(*width, *height, 4, color, radius, center_x, center_y, result);
+    fcv_draw_disk(
+      *width,
+      *height,
+      4,
+      color,
+      radius,
+      center_x,
+      center_y,
+      result
+    );
 
     free(param_copy);
     return result;
@@ -854,14 +874,15 @@ uint8_t *apply_operation(
     }
 
     // Convert RGBA to single-channel grayscale for watershed segmentation
-    uint8_t *grayscale_data = rgba_to_grayscale(*width, *height, input_data);
+    uint8_t *grayscale_data =
+      fcv_rgba_to_grayscale(*width, *height, input_data);
     if (!grayscale_data) {
       free(markers);
       free(param_copy);
       return NULL;
     }
 
-    uint8_t *result = (uint8_t *)watershed_segmentation(
+    uint8_t *result = (uint8_t *)fcv_watershed_segmentation(
       *width,
       *height,
       grayscale_data,
@@ -911,7 +932,7 @@ uint8_t *apply_operation(
     }
 
     uint8_t *result =
-      crop(*width, *height, 4, input_data, x, y, crop_width, crop_height);
+      fcv_crop(*width, *height, 4, input_data, x, y, crop_width, crop_height);
     if (result) {
       *width = crop_width;
       *height = crop_height;

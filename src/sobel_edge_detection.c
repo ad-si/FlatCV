@@ -28,7 +28,7 @@
  * @param data Point32_ter to the input pixel data.
  * @return Point32_ter to the single-channel grayscale edge-detected image data.
  */
-uint8_t *sobel_edge_detection(
+uint8_t *fcv_sobel_edge_detection(
   uint32_t width,
   uint32_t height,
   uint32_t channels,
@@ -49,7 +49,7 @@ uint8_t *sobel_edge_detection(
   }
   else {
     // Multi-channel input, convert to grayscale
-    grayscale_data = rgba_to_grayscale(width, height, data);
+    grayscale_data = fcv_rgba_to_grayscale(width, height, data);
     if (!grayscale_data) {
       return NULL;
     }

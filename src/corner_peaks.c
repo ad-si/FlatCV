@@ -67,7 +67,7 @@ static double euclidean_distance(Point2D a, Point2D b) {
  * @param roundness_thresh Threshold for roundness measure (q).
  * @return Point32_ter to CornerPeaks structure containing detected peaks.
  */
-CornerPeaks *corner_peaks(
+CornerPeaks *fcv_corner_peaks(
   uint32_t width,
   uint32_t height,
   uint8_t const *data,

@@ -31,7 +31,8 @@
  * @param data Point32_ter to the pixel data.
  * @return Point32_ter to the grayscale image data.
  */
-uint8_t *grayscale(uint32_t width, uint32_t height, uint8_t const *const data) {
+uint8_t *
+fcv_grayscale(uint32_t width, uint32_t height, uint8_t const *const data) {
   uint32_t img_length_byte = width * height * 4;
   uint8_t *grayscale_data = malloc(img_length_byte);
 
@@ -71,8 +72,11 @@ uint8_t *grayscale(uint32_t width, uint32_t height, uint8_t const *const data) {
  * @param data Point32_ter to the pixel data.
  * @return Point32_ter to the grayscale image data.
  */
-uint8_t *
-grayscale_stretch(uint32_t width, uint32_t height, uint8_t const *const data) {
+uint8_t *fcv_grayscale_stretch(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const *const data
+) {
   uint32_t img_length_byte = width * height * 4;
   uint8_t *grayscale_data = malloc(img_length_byte);
 
@@ -168,7 +172,7 @@ grayscale_stretch(uint32_t width, uint32_t height, uint8_t const *const data) {
  * @param threshold Threshold value.
  *
  */
-void apply_global_threshold(
+void fcv_apply_global_threshold(
   uint32_t img_length_px,
   uint8_t *data,
   uint8_t threshold
@@ -218,13 +222,13 @@ void apply_double_threshold(
  * @param data Point32_ter to the pixel data.
  * @return Point32_ter to the monochrome image data.
  */
-uint8_t *otsu_threshold_rgba(
+uint8_t *fcv_otsu_threshold_rgba(
   uint32_t width,
   uint32_t height,
   bool use_double_threshold,
   uint8_t const *const data
 ) {
-  uint8_t *grayscale_img = rgba_to_grayscale(width, height, data);
+  uint8_t *grayscale_img = fcv_rgba_to_grayscale(width, height, data);
   uint32_t img_length_px = width * height;
 
   uint32_t histogram[256] = {0};
@@ -279,11 +283,11 @@ uint8_t *otsu_threshold_rgba(
     );
   }
   else {
-    apply_global_threshold(img_length_px, grayscale_img, optimal_threshold);
+    fcv_apply_global_threshold(img_length_px, grayscale_img, optimal_threshold);
   }
 
   uint8_t *monochrome_data =
-    single_to_multichannel(width, height, grayscale_img);
+    fcv_single_to_multichannel(width, height, grayscale_img);
 
   free(grayscale_img);
 
@@ -298,7 +302,7 @@ uint8_t *otsu_threshold_rgba(
  * @param data Point32_ter to the pixel data.
  * @return Point32_ter to the blurred image data.
  */
-uint8_t *apply_gaussian_blur(
+uint8_t *fcv_apply_gaussian_blur(
   uint32_t width,
   uint32_t height,
   double radius,
@@ -433,20 +437,20 @@ uint8_t *apply_gaussian_blur(
  * @param data Point32_ter to the pixel data.
  * @return Point32_ter to the blurred image data.
  */
-uint8_t *bw_smart(
+uint8_t *fcv_bw_smart(
   uint32_t width,
   uint32_t height,
   bool use_double_threshold,
   uint8_t const *const data
 ) {
-  uint8_t *grayscale_data = grayscale(width, height, data);
+  uint8_t *grayscale_data = fcv_grayscale(width, height, data);
 
   // Calculate blur radius dependent on image size
   // (Empirical formula after testing)
   double blurRadius = (sqrt((double)width * (double)height)) * 0.1;
 
   uint8_t *blurred_data =
-    apply_gaussian_blur(width, height, blurRadius, grayscale_data);
+    fcv_apply_gaussian_blur(width, height, blurRadius, grayscale_data);
 
   uint32_t img_length_px = width * height;
   uint8_t *high_freq_data = malloc(img_length_px * 4);
@@ -481,8 +485,12 @@ uint8_t *bw_smart(
   free((void *)grayscale_data);
   free((void *)blurred_data);
 
-  uint8_t *final_data =
-    otsu_threshold_rgba(width, height, use_double_threshold, high_freq_data);
+  uint8_t *final_data = fcv_otsu_threshold_rgba(
+    width,
+    height,
+    use_double_threshold,
+    high_freq_data
+  );
 
   free(high_freq_data);
 
@@ -501,7 +509,7 @@ uint8_t *bw_smart(
  * @param data Point32_ter to the input pixel data.
  * @return Point32_ter to the resized image data.
  */
-uint8_t *resize(
+uint8_t *fcv_resize(
   uint32_t width,
   uint32_t height,
   double resize_x,

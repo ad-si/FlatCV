@@ -22,8 +22,11 @@
  * @param data Pointer to the pixel data.
  * @return Pointer to the single channel grayscale image data.
  */
-uint8_t *
-rgba_to_grayscale(uint32_t width, uint32_t height, uint8_t const *const data) {
+uint8_t *fcv_rgba_to_grayscale(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const *const data
+) {
   uint32_t img_length_px = width * height;
   uint8_t *grayscale_data = malloc(img_length_px);
 

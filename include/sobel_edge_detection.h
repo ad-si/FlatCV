@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-uint8_t *sobel_edge_detection(
+uint8_t *fcv_sobel_edge_detection(
   uint32_t width,
   uint32_t height,
   uint32_t channels,

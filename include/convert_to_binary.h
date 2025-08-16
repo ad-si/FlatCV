@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-uint8_t *convert_to_binary(
+uint8_t *fcv_convert_to_binary(
   const uint8_t *image_data,
   int32_t width,
   int32_t height,

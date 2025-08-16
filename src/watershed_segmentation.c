@@ -97,7 +97,7 @@ static QueueItem dequeue(Queue *q) {
  * @param num_markers Number of markers in the array.
  * @return Point32_ter to the segmented image data.
  */
-uint8_t *watershed_segmentation(
+uint8_t *fcv_watershed_segmentation(
   uint32_t width,
   uint32_t height,
   uint8_t const *const grayscale_data,

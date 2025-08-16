@@ -17,7 +17,7 @@
 /**
  * Helper function to set a pixel to specified color (for circle drawing)
  */
-void set_circle_pixel(
+void fcv_set_circle_pixel(
   uint8_t *data,
   uint32_t width,
   uint32_t height,
@@ -49,7 +49,7 @@ void set_circle_pixel(
 /**
  * Helper function to draw 8 symmetric point32_ts of a circle
  */
-void draw_circle_point32_ts(
+void fcv_draw_circle_points(
   uint8_t *data,
   uint32_t width,
   uint32_t height,
@@ -62,20 +62,20 @@ void draw_circle_point32_ts(
   uint8_t g,
   uint8_t b
 ) {
-  set_circle_pixel(data, width, height, channels, cx + x, cy + y, r, g, b);
-  set_circle_pixel(data, width, height, channels, cx - x, cy + y, r, g, b);
-  set_circle_pixel(data, width, height, channels, cx + x, cy - y, r, g, b);
-  set_circle_pixel(data, width, height, channels, cx - x, cy - y, r, g, b);
-  set_circle_pixel(data, width, height, channels, cx + y, cy + x, r, g, b);
-  set_circle_pixel(data, width, height, channels, cx - y, cy + x, r, g, b);
-  set_circle_pixel(data, width, height, channels, cx + y, cy - x, r, g, b);
-  set_circle_pixel(data, width, height, channels, cx - y, cy - x, r, g, b);
+  fcv_set_circle_pixel(data, width, height, channels, cx + x, cy + y, r, g, b);
+  fcv_set_circle_pixel(data, width, height, channels, cx - x, cy + y, r, g, b);
+  fcv_set_circle_pixel(data, width, height, channels, cx + x, cy - y, r, g, b);
+  fcv_set_circle_pixel(data, width, height, channels, cx - x, cy - y, r, g, b);
+  fcv_set_circle_pixel(data, width, height, channels, cx + y, cy + x, r, g, b);
+  fcv_set_circle_pixel(data, width, height, channels, cx - y, cy + x, r, g, b);
+  fcv_set_circle_pixel(data, width, height, channels, cx + y, cy - x, r, g, b);
+  fcv_set_circle_pixel(data, width, height, channels, cx - y, cy - x, r, g, b);
 }
 
 /**
  * Helper function to fill horizontal lines for a filled circle (disk)
  */
-void fill_disk_lines(
+void fcv_fill_disk_lines(
   uint8_t *data,
   uint32_t width,
   uint32_t height,
@@ -90,16 +90,16 @@ void fill_disk_lines(
 ) {
   // Fill horizontal lines at y offsets
   for (int32_t i = cx - x; i <= cx + x; i++) {
-    set_circle_pixel(data, width, height, channels, i, cy + y, r, g, b);
-    set_circle_pixel(data, width, height, channels, i, cy - y, r, g, b);
+    fcv_set_circle_pixel(data, width, height, channels, i, cy + y, r, g, b);
+    fcv_set_circle_pixel(data, width, height, channels, i, cy - y, r, g, b);
   }
 
   // Fill horizontal lines at x offsets
   // (avoid duplicating center line when x == y)
   if (x != y) {
     for (int32_t i = cx - y; i <= cx + y; i++) {
-      set_circle_pixel(data, width, height, channels, i, cy + x, r, g, b);
-      set_circle_pixel(data, width, height, channels, i, cy - x, r, g, b);
+      fcv_set_circle_pixel(data, width, height, channels, i, cy + x, r, g, b);
+      fcv_set_circle_pixel(data, width, height, channels, i, cy - x, r, g, b);
     }
   }
 }
@@ -118,7 +118,7 @@ void fill_disk_lines(
  * @param center_y Y coordinate of the circle center.
  * @param data Point32_ter to the pixel data (modified in-place).
  */
-void draw_circle(
+void fcv_draw_circle(
   uint32_t width,
   uint32_t height,
   uint32_t channels,
@@ -134,7 +134,7 @@ void draw_circle(
 
   // Parse color
   uint8_t r, g, b;
-  parse_hex_color(hex_color, &r, &g, &b);
+  fcv_parse_hex_color(hex_color, &r, &g, &b);
 
   int32_t radius_int32_t = (int32_t)radius;
   int32_t cx = (int32_t)center_x;
@@ -146,7 +146,7 @@ void draw_circle(
   int32_t d = 3 - 2 * radius_int32_t;
 
   // Initial point32_ts
-  draw_circle_point32_ts(data, width, height, channels, cx, cy, x, y, r, g, b);
+  fcv_draw_circle_points(data, width, height, channels, cx, cy, x, y, r, g, b);
 
   while (y >= x) {
     x++;
@@ -157,7 +157,7 @@ void draw_circle(
     else {
       d = d + 4 * x + 6;
     }
-    draw_circle_point32_ts(
+    fcv_draw_circle_points(
       data,
       width,
       height,
@@ -187,7 +187,7 @@ void draw_circle(
  * @param center_y Y coordinate of the disk center.
  * @param data Point32_ter to the pixel data (modified in-place).
  */
-void draw_disk(
+void fcv_draw_disk(
   uint32_t width,
   uint32_t height,
   uint32_t channels,
@@ -203,7 +203,7 @@ void draw_disk(
 
   // Parse color
   uint8_t r, g, b;
-  parse_hex_color(hex_color, &r, &g, &b);
+  fcv_parse_hex_color(hex_color, &r, &g, &b);
 
   int32_t radius_int32_t = (int32_t)radius;
   int32_t cx = (int32_t)center_x;
@@ -215,7 +215,7 @@ void draw_disk(
   int32_t d = 3 - 2 * radius_int32_t;
 
   // Initial filled lines
-  fill_disk_lines(data, width, height, channels, cx, cy, x, y, r, g, b);
+  fcv_fill_disk_lines(data, width, height, channels, cx, cy, x, y, r, g, b);
 
   while (y >= x) {
     x++;
@@ -226,6 +226,6 @@ void draw_disk(
     else {
       d = d + 4 * x + 6;
     }
-    fill_disk_lines(data, width, height, channels, cx, cy, x, y, r, g, b);
+    fcv_fill_disk_lines(data, width, height, channels, cx, cy, x, y, r, g, b);
   }
 }

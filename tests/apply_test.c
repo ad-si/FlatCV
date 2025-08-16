@@ -28,7 +28,7 @@ int32_t translate_matrix_test() {
                                0, 0, 0, 0, 2,   2, 2, 255, 3,   3, 3, 255};
 
   // Apply transformation
-  uint8_t *output_data = apply_matrix_3x3( //
+  uint8_t *output_data = fcv_apply_matrix_3x3( //
     width,
     height,
     input_data,
@@ -77,7 +77,7 @@ int32_t flip_matrix_test() {
 
   // Apply transformation
   uint8_t *output_data =
-    apply_matrix_3x3(width, height, input_data, width, height, &tmat);
+    fcv_apply_matrix_3x3(width, height, input_data, width, height, &tmat);
 
   // Compare the output_data with the expected data
   for (int32_t i = 0; i < width * height * 4; i++) {
@@ -120,7 +120,7 @@ int32_t scale_matrix_test() {
                                0, 0, 0, 0,   0, 0, 0,   0,   0, 0, 0,   0};
 
   // Apply transformation
-  uint8_t *output_data = apply_matrix_3x3(
+  uint8_t *output_data = fcv_apply_matrix_3x3(
     in_width,
     in_height,
     input_data,

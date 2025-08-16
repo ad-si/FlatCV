@@ -8,7 +8,7 @@ typedef struct {
   uint32_t count;
 } CornerPeaks;
 
-CornerPeaks *corner_peaks(
+CornerPeaks *fcv_corner_peaks(
   uint32_t width,
   uint32_t height,
   uint8_t const *data,
