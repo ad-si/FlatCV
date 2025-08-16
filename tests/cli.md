@@ -86,7 +86,7 @@ Input | Output
 ![](../imgs/parrot.jpeg) | ![](../imgs/parrot_crop.jpeg)
 
 ```scrut
-$ ./flatcv imgs/parrot.jpeg crop 100 100 200 150 imgs/parrot_crop.jpeg
+$ ./flatcv imgs/parrot.jpeg crop 200x150+100+100 imgs/parrot_crop.jpeg
 Loaded image: 512x384 with 3 channels
 Executing pipeline with 1 operations:
 Applying operation: crop with parameter: 100.00 100.00 200.00 150.00

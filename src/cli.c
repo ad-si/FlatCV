@@ -64,7 +64,7 @@ void print_usage(const char *program_name) {
   printf("  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
          "markers at "
          "specified coordinates\n");
-  printf("  crop <x> <y> <width> <height> - Crop the image\n");
+  printf("  crop <widthxheight+x+y> - Crop the image\n");
   printf("\nPipeline syntax:\n");
   printf("  Operations are applied in sequence\n");
   printf("  Use parentheses for operations with parameters: (blur 3.0)\n");
@@ -178,6 +178,68 @@ char *skip_whitespace(char *str) {
     str++;
   }
   return str;
+}
+
+/**
+ * Parse geometry string (e.g., "50x50+10+20")
+ * Returns 1 on success, 0 on failure
+ */
+int parse_geometry(
+  const char *geometry,
+  unsigned int *width,
+  unsigned int *height,
+  int *x_offset,
+  int *y_offset
+) {
+  if (!geometry || !width || !height || !x_offset || !y_offset) {
+    return 0;
+  }
+
+  // Parse width x height
+  char *end_ptr;
+  unsigned long w = strtoul(geometry, &end_ptr, 10);
+  if (*end_ptr != 'x' || w == 0 || w > UINT_MAX) {
+    return 0;
+  }
+
+  const char *height_start = end_ptr + 1;
+  unsigned long h = strtoul(height_start, &end_ptr, 10);
+  if (h == 0 || h > UINT_MAX) {
+    return 0;
+  }
+
+  *width = (unsigned int)w;
+  *height = (unsigned int)h;
+
+  // Parse offsets (can be + or -)
+  if (*end_ptr == '\0') {
+    // No offsets specified, default to 0,0
+    *x_offset = 0;
+    *y_offset = 0;
+    return 1;
+  }
+
+  // Parse x offset
+  long x = strtol(end_ptr, &end_ptr, 10);
+  if (x < INT_MIN || x > INT_MAX) {
+    return 0;
+  }
+  *x_offset = (int)x;
+
+  // Parse y offset
+  if (*end_ptr == '\0') {
+    // Only x offset specified, y offset defaults to 0
+    *y_offset = 0;
+    return 1;
+  }
+
+  long y = strtol(end_ptr, &end_ptr, 10);
+  if (y < INT_MIN || y > INT_MAX || *end_ptr != '\0') {
+    return 0;
+  }
+  *y_offset = (int)y;
+
+  return 1;
 }
 
 int parse_pipeline(
@@ -463,14 +525,35 @@ int parse_pipeline(
         );
       }
       else if (strcmp(piece, "crop") == 0) {
-        double x, y, w, h;
-        if (sscanf(params_str, "%lf %lf %lf %lf", &x, &y, &w, &h) == 4) {
-          add_operation(pipeline, piece, x, 1, y, 1, w, 1, h, 1, NULL, 0);
+        unsigned int crop_width, crop_height;
+        int x_offset, y_offset;
+        if (parse_geometry(
+              params_str,
+              &crop_width,
+              &crop_height,
+              &x_offset,
+              &y_offset
+            )) {
+          add_operation(
+            pipeline,
+            piece,
+            (double)x_offset,
+            1,
+            (double)y_offset,
+            1,
+            (double)crop_width,
+            1,
+            (double)crop_height,
+            1,
+            NULL,
+            0
+          );
         }
         else {
           fprintf(
             stderr,
-            "Error: crop operation requires x, y, width, height\n"
+            "Error: crop operation requires geometry format (e.g., "
+            "50x50+10+20)\n"
           );
           return 0;
         }
@@ -785,18 +868,44 @@ unsigned char *apply_operation(
   }
   else if (strcmp(operation, "crop") == 0) {
     if (!has_param || !has_param2 || !has_param3 || !has_param4) {
-      fprintf(stderr, "Error: crop operation requires x, y, width, height\n");
+      fprintf(
+        stderr,
+        "Error: crop operation requires geometry format (e.g., 50x50+10+20)\n"
+      );
       return NULL;
     }
-    unsigned int x = (unsigned int)param;
-    unsigned int y = (unsigned int)param2;
-    unsigned int new_width = (unsigned int)param3;
-    unsigned int new_height = (unsigned int)param4;
+    // param and param2 are x_offset and y_offset (can be negative)
+    // param3 and param4 are crop_width and crop_height
+    int x_offset = (int)param;
+    int y_offset = (int)param2;
+    unsigned int crop_width = (unsigned int)param3;
+    unsigned int crop_height = (unsigned int)param4;
+
+    // Clamp negative offsets to 0
+    unsigned int x = (x_offset < 0) ? 0 : (unsigned int)x_offset;
+    unsigned int y = (y_offset < 0) ? 0 : (unsigned int)y_offset;
+
+    // Ensure crop area doesn't exceed image bounds
+    if (x >= (unsigned int)*width || y >= (unsigned int)*height) {
+      fprintf(stderr, "Error: crop offset is outside image bounds\n");
+      return NULL;
+    }
+
+    // Adjust crop dimensions if they would exceed image bounds
+    unsigned int max_width = *width - x;
+    unsigned int max_height = *height - y;
+    if (crop_width > max_width) {
+      crop_width = max_width;
+    }
+    if (crop_height > max_height) {
+      crop_height = max_height;
+    }
+
     unsigned char *result =
-      crop(*width, *height, 4, input_data, x, y, new_width, new_height);
+      crop(*width, *height, 4, input_data, x, y, crop_width, crop_height);
     if (result) {
-      *width = new_width;
-      *height = new_height;
+      *width = crop_width;
+      *height = crop_height;
     }
     return result;
   }

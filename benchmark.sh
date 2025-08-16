@@ -27,9 +27,9 @@ run_benchmark "Resize" \
   'magick convert imgs/parrot_hq.jpeg -resize 256x256! tmp/resize_magick.png'
 
 run_benchmark "Crop" \
-  './flatcv imgs/parrot_hq.jpeg crop 100 100 100 100 tmp/crop_flatcv.png' \
-  'gm convert imgs/parrot_hq.jpeg -crop 100x100+200+200 tmp/crop_gm.png' \
-  'magick convert imgs/parrot_hq.jpeg -crop 100x100+200+200 tmp/crop_magick.png'
+  './flatcv imgs/parrot_hq.jpeg crop 500x500+1200+1200 tmp/crop_flatcv.png' \
+  'gm convert imgs/parrot_hq.jpeg -crop 500x500+1200+1200 tmp/crop_gm.png' \
+  'magick convert imgs/parrot_hq.jpeg -crop 500x500+1200+1200 tmp/crop_magick.png'
 
 run_benchmark "Grayscale" \
   './flatcv imgs/village.jpeg grayscale tmp/gray_flatcv.png' \
