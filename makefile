@@ -70,7 +70,7 @@ test-extended:
 
 
 .PHONY: benchmark
-benchmark: build
+benchmark: flatcv
 	@./benchmark.sh
 
 
@@ -117,8 +117,8 @@ build: flatcv
 
 
 .PHONY: install
-install: build
-	sudo cp ./flatcv /usr/local/bin
+install: flatcv
+	sudo cp $< /usr/local/bin
 
 
 flatcv.h: $(HDR_SRC_FILES)

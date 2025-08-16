@@ -58,16 +58,12 @@ void print_usage(const char *program_name) {
     "  circle <hex_color> <radius> <x>x<y> - Draw a colored circle at position "
     "(x,y)\n"
   );
-  printf(
-    "  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
-    "position "
-    "(x,y)\n"
-  );
-  printf(
-    "  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
-    "markers at "
-    "specified coordinates\n"
-  );
+  printf("  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
+         "position "
+         "(x,y)\n");
+  printf("  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
+         "markers at "
+         "specified coordinates\n");
   printf("  crop <x> <y> <width> <height> - Crop the image\n");
   printf("\nPipeline syntax:\n");
   printf("  Operations are applied in sequence\n");
@@ -551,9 +547,8 @@ unsigned char *apply_operation(
       fprintf(stderr, "Error: blur operation requires radius parameter\n");
       return NULL;
     }
-    return (
-      unsigned char *
-    )apply_gaussian_blur(*width, *height, param, input_data);
+    return (unsigned char *)
+      apply_gaussian_blur(*width, *height, param, input_data);
   }
   else if (strcmp(operation, "resize") == 0) {
     double resize_x, resize_y;
@@ -622,9 +617,8 @@ unsigned char *apply_operation(
     return result;
   }
   else if (strcmp(operation, "threshold") == 0) {
-    return (
-      unsigned char *
-    )otsu_threshold_rgba(*width, *height, false, input_data);
+    return (unsigned char *)
+      otsu_threshold_rgba(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smart") == 0) {
     return (unsigned char *)bw_smart(*width, *height, false, input_data);

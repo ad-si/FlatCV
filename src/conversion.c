@@ -536,44 +536,132 @@ unsigned char const *const resize(
 
   for (unsigned int out_y = 0; out_y < *out_height; out_y++) {
     for (unsigned int out_x = 0; out_x < *out_width; out_x++) {
-      double src_x = out_x / resize_x;
-      double src_y = out_y / resize_y;
+      if (resize_x < 1.0 || resize_y < 1.0) {
+        double src_x = (out_x + 0.5) / resize_x - 0.5;
+        double src_y = (out_y + 0.5) / resize_y - 0.5;
 
-      int x0 = (int)floor(src_x);
-      int y0 = (int)floor(src_y);
-      int x1 = x0 + 1;
-      int y1 = y0 + 1;
+        double filter_size_x = 1.0 / resize_x;
+        double filter_size_y = 1.0 / resize_y;
 
-      if (x0 >= 0 && x0 < width && y0 >= 0 && y0 < height) {
-        int x1c = (x1 < width) ? x1 : x0;
-        int y1c = (y1 < height) ? y1 : y0;
+        double x_start = src_x - filter_size_x * 0.5;
+        double y_start = src_y - filter_size_y * 0.5;
+        double x_end = src_x + filter_size_x * 0.5;
+        double y_end = src_y + filter_size_y * 0.5;
+
+        int ix_start = (int)floor(x_start);
+        int iy_start = (int)floor(y_start);
+        int ix_end = (int)ceil(x_end);
+        int iy_end = (int)ceil(y_end);
+
+        if (ix_start < 0) {
+          ix_start = 0;
+        }
+        if (iy_start < 0) {
+          iy_start = 0;
+        }
+        if (ix_end > (int)width) {
+          ix_end = width;
+        }
+        if (iy_end > (int)height) {
+          iy_end = height;
+        }
+
+        double r_sum = 0.0, g_sum = 0.0, b_sum = 0.0;
+        double total_weight = 0.0;
+
+        for (int sy = iy_start; sy < iy_end; sy++) {
+          for (int sx = ix_start; sx < ix_end; sx++) {
+            double left = sx;
+            double right = sx + 1;
+            double top = sy;
+            double bottom = sy + 1;
+
+            double overlap_left = left > x_start ? left : x_start;
+            double overlap_right = right < x_end ? right : x_end;
+            double overlap_top = top > y_start ? top : y_start;
+            double overlap_bottom = bottom < y_end ? bottom : y_end;
+
+            if (overlap_right > overlap_left && overlap_bottom > overlap_top) {
+              double weight =
+                (overlap_right - overlap_left) * (overlap_bottom - overlap_top);
+              total_weight += weight;
+
+              unsigned int src_idx = (sy * width + sx) * 4;
+              r_sum += data[src_idx] * weight;
+              g_sum += data[src_idx + 1] * weight;
+              b_sum += data[src_idx + 2] * weight;
+            }
+          }
+        }
+
+        if (total_weight > 0.0) {
+          resized_data[(out_y * *out_width + out_x) * 4] =
+            (unsigned char)(r_sum / total_weight + 0.5);
+          resized_data[(out_y * *out_width + out_x) * 4 + 1] =
+            (unsigned char)(g_sum / total_weight + 0.5);
+          resized_data[(out_y * *out_width + out_x) * 4 + 2] =
+            (unsigned char)(b_sum / total_weight + 0.5);
+        }
+        else {
+          resized_data[(out_y * *out_width + out_x) * 4] = 0;
+          resized_data[(out_y * *out_width + out_x) * 4 + 1] = 0;
+          resized_data[(out_y * *out_width + out_x) * 4 + 2] = 0;
+        }
+        resized_data[(out_y * *out_width + out_x) * 4 + 3] = 255;
+      }
+      else {
+        double src_x = (out_x + 0.5) / resize_x - 0.5;
+        double src_y = (out_y + 0.5) / resize_y - 0.5;
+
+        int x0 = (int)floor(src_x);
+        int y0 = (int)floor(src_y);
+        int x1 = x0 + 1;
+        int y1 = y0 + 1;
+
+        if (x0 < 0) {
+          x0 = 0;
+        }
+        if (y0 < 0) {
+          y0 = 0;
+        }
+        if (x1 >= (int)width) {
+          x1 = width - 1;
+        }
+        if (y1 >= (int)height) {
+          y1 = height - 1;
+        }
 
         double dx = src_x - x0;
         double dy = src_y - y0;
 
-        if (x1c == x0) {
-          dx = 0.0;
+        if (dx < 0) {
+          dx = 0;
         }
-        if (y1c == y0) {
-          dy = 0.0;
+        if (dy < 0) {
+          dy = 0;
+        }
+        if (dx > 1) {
+          dx = 1;
+        }
+        if (dy > 1) {
+          dy = 1;
         }
 
-        unsigned char *p00 = (unsigned char *)&data[(y0 * width + x0) * 4];
-        unsigned char *p01 = (unsigned char *)&data[(y0 * width + x1c) * 4];
-        unsigned char *p10 = (unsigned char *)&data[(y1c * width + x0) * 4];
-        unsigned char *p11 = (unsigned char *)&data[(y1c * width + x1c) * 4];
+        for (int c = 0; c < 3; c++) {
+          unsigned char p00 = data[(y0 * width + x0) * 4 + c];
+          unsigned char p01 = data[(y0 * width + x1) * 4 + c];
+          unsigned char p10 = data[(y1 * width + x0) * 4 + c];
+          unsigned char p11 = data[(y1 * width + x1) * 4 + c];
 
-        for (int c = 0; c < 4; c++) {
+          double interpolated = p00 * (1 - dx) * (1 - dy) +
+                                p01 * dx * (1 - dy) + p10 * (1 - dx) * dy +
+                                p11 * dx * dy;
+
           resized_data[(out_y * *out_width + out_x) * 4 + c] =
-            (unsigned char)(p00[c] * (1 - dx) * (1 - dy) +
-                            p01[c] * dx * (1 - dy) + p10[c] * (1 - dx) * dy +
-                            p11[c] * dx * dy);
+            (unsigned char)(interpolated + 0.5);
         }
-      }
-      else {
-        for (int c = 0; c < 4; c++) {
-          resized_data[(out_y * *out_width + out_x) * 4 + c] = 0;
-        }
+
+        resized_data[(out_y * *out_width + out_x) * 4 + 3] = 255;
       }
     }
   }

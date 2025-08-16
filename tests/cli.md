@@ -2,6 +2,11 @@
 
 ## Resize
 
+FlatCV uses area-based sampling for shrinking images
+and bilinear interpolation for enlarging images.
+This ensures a good balance between performance and quality.
+
+
 ### Percentage Resize (Half Size)
 
 Input | Output
