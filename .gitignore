@@ -7,4 +7,6 @@
 /flatcv.c
 /flatcv.h
 /test_bin
+/tests/book
+/tests/cli/imgs
 /tmp

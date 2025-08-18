@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -802,14 +803,14 @@ uint8_t *apply_operation(
     Corners corners = fcv_detect_corners(input_data, *width, *height);
     printf("  {\n");
     printf("    \"corners\": {\n");
-    printf("      \"top_left\": [%.2f, %.2f],\n", corners.tl_x, corners.tl_y);
-    printf("      \"top_right\": [%.2f, %.2f],\n", corners.tr_x, corners.tr_y);
+    printf("      \"top_left\": [%.0f, %.0f],\n", corners.tl_x, corners.tl_y);
+    printf("      \"top_right\": [%.0f, %.0f],\n", corners.tr_x, corners.tr_y);
     printf(
-      "      \"bottom_right\": [%.2f, %.2f],\n",
+      "      \"bottom_right\": [%.0f, %.0f],\n",
       corners.br_x,
       corners.br_y
     );
-    printf("      \"bottom_left\": [%.2f, %.2f]\n", corners.bl_x, corners.bl_y);
+    printf("      \"bottom_left\": [%.0f, %.0f]\n", corners.bl_x, corners.bl_y);
     printf("    }\n");
     printf("  }\n");
 
@@ -821,14 +822,14 @@ uint8_t *apply_operation(
     return result;
   }
   else if (strcmp(operation, "draw_corners") == 0) {
-    Corners corners = fcv_detect_corners(input_data, *width, *height);
+    Corners cs = fcv_detect_corners(input_data, *width, *height);
     printf("  Detected corners:\n");
-    printf("    Top-left:     (%.2f, %.2f)\n", corners.tl_x, corners.tl_y);
-    printf("    Top-right:    (%.2f, %.2f)\n", corners.tr_x, corners.tr_y);
-    printf("    Bottom-right: (%.2f, %.2f)\n", corners.br_x, corners.br_y);
-    printf("    Bottom-left:  (%.2f, %.2f)\n", corners.bl_x, corners.bl_y);
+    printf("    Top-left:     (%.0f, %.0f)\n", cs.tl_x, cs.tl_y);
+    printf("    Top-right:    (%.0f, %.0f)\n", cs.tr_x, cs.tr_y);
+    printf("    Bottom-right: (%.0f, %.0f)\n", cs.br_x, cs.br_y);
+    printf("    Bottom-left:  (%.0f, %.0f)\n", cs.bl_x, cs.bl_y);
 
-    // Create a copy of the input data and draw circles at detected corners
+    // Create a copy of the input data and draw disks at detected corners
     uint32_t img_length_byte = (*width) * (*height) * 4;
     uint8_t *result = malloc(img_length_byte);
     if (!result) {
@@ -836,47 +837,13 @@ uint8_t *apply_operation(
     }
     memcpy(result, input_data, img_length_byte);
 
-    // Draw circles at each corner (using red color and radius of 5)
-    fcv_draw_circle(
-      *width,
-      *height,
-      4,
-      "FF0000",
-      5,
-      corners.tl_x,
-      corners.tl_y,
-      result
-    );
-    fcv_draw_circle(
-      *width,
-      *height,
-      4,
-      "FF0000",
-      5,
-      corners.tr_x,
-      corners.tr_y,
-      result
-    );
-    fcv_draw_circle(
-      *width,
-      *height,
-      4,
-      "FF0000",
-      5,
-      corners.br_x,
-      corners.br_y,
-      result
-    );
-    fcv_draw_circle(
-      *width,
-      *height,
-      4,
-      "FF0000",
-      5,
-      corners.bl_x,
-      corners.bl_y,
-      result
-    );
+    // Draw disks using red color and `radius`
+    const double radius = fmin(*width, *height) * 0.02;
+    const char *red = "FF0000";
+    fcv_draw_disk(*width, *height, 4, red, radius, cs.tl_x, cs.tl_y, result);
+    fcv_draw_disk(*width, *height, 4, red, radius, cs.tr_x, cs.tr_y, result);
+    fcv_draw_disk(*width, *height, 4, red, radius, cs.br_x, cs.br_y, result);
+    fcv_draw_disk(*width, *height, 4, red, radius, cs.bl_x, cs.bl_y, result);
 
     return result;
   }

@@ -27,6 +27,8 @@
             graphicsmagick
             hyperfine
             imagemagick
+            mdbook
+            rsync
           ];
           shellHook = ''
             cargo install --locked scrut@0.4.1

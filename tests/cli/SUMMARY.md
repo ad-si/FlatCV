@@ -1,0 +1,16 @@
+# Summary
+
+- [Introduction](introduction.md)
+- [Usage](usage.md)
+  - [Flip](flip.md)
+  - [Crop](crop.md)
+  - [Resize](resize.md)
+  - [Blur](blur.md)
+  - [Draw](draw.md)
+  - [Grayscale](grayscale.md)
+  - [Binarize](binarize.md)
+  - [Corner-Detection](corner-detection.md)
+  - [Segmentation](segmentation.md)
+  - [Document-Extraction](document-extraction.md)
+- [Benchmark](benchmark.md)
+- [FAQ](faq.md)

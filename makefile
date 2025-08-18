@@ -35,10 +35,12 @@ test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 	&& ./apply_test
 
 
+CLI_TEST_FILES := $(wildcard tests/cli/*.md)
+
+# Integration tests for CLI
 .PHONY: test-integration
-test-integration: build tests/cli.md
-	# Integration tests for CLI
-	scrut test --work-directory=$$(pwd) tests/cli.md
+test-integration: build $(CLI_TEST_FILES)
+	scrut test --work-directory=$$(pwd) $(CLI_TEST_FILES)
 
 
 .PHONY: test-amalgamation
@@ -174,9 +176,24 @@ flatcv.c: flatcv.h $(LIB_SRC_FILES) license.txt
 combine: flatcv.h flatcv.c
 
 
-.PHONY: docs
-docs:
+.PHONY: docs-lib/build
+docs-lib/build:
 	doxygen ./doxyfile
+
+
+IMAGES := $(wildcard imgs/*)
+
+# Images must be duplicated so that the file paths are correct
+tests/cli/imgs: $(IMAGES)
+	rsync -a imgs/ tests/cli/imgs/
+
+.PHONY: docs/serve
+docs/serve: tests/cli/imgs
+	mdbook serve ./tests
+
+.PHONY: docs/build
+docs/build: tests/cli/imgs
+	mdbook build ./tests
 
 
 .PHONY: release

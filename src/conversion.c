@@ -434,6 +434,7 @@ uint8_t *fcv_apply_gaussian_blur(
  *
  * @param width Width of the image.
  * @param height Height of the image.
+ * @param use_double_threshold Whether to use double thresholding.
  * @param data Pointer to the pixel data.
  * @return Pointer to the blurred image data.
  */

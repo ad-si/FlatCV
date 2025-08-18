@@ -1,0 +1,9 @@
+[book]
+title = "FlatCV"
+language = "en"
+authors = ["Adrian Sieber"]
+src = "cli"
+
+[output.html]
+git-repository-url = "https://github.com/ad-si/FlatCV"
+edit-url-template = "https://github.com/ad-si/FlatCV/edit/main/tests/{path}"
