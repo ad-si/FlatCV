@@ -40,7 +40,7 @@
  * 9. Use Foerstner corner detector (Harris detector corners are shifted
  * inwards)
  * 10. TODO: Sort corners
- * 11. TODO: Select 4 corners with the largest angle while maint32_taining their
+ * 11. TODO: Select 4 corners with the largest angle while maintaining their
  * order
  * 12. Normalize corners based on scale ratio
  */

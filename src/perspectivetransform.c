@@ -15,7 +15,7 @@
 // #define DEBUG_LOGGING
 
 #ifdef DEBUG_LOGGING
-#define log(msg) print32_tf("DEBUG: %s\n", msg)
+#define log(msg) printf("DEBUG: %s\n", msg)
 #else
 #define log(msg) // No operation
 #endif
@@ -122,8 +122,8 @@ Matrix3x3 *fcv_calculate_perspective_transform(
   }
 
 #ifdef DEBUG_LOGGING
-  print32_tf("[C] Calculating perspective transform:\n");
-  print32_tf(
+  printf("[C] Calculating perspective transform:\n");
+  printf(
     "src_corners:\ntl(%f, %f)\ntr(%f, %f)\nbr(%f, %f)\nbl(%f, %f)\n\n",
     src_corners->tl_x,
     src_corners->tl_y,
@@ -134,7 +134,7 @@ Matrix3x3 *fcv_calculate_perspective_transform(
     src_corners->bl_x,
     src_corners->bl_y
   );
-  print32_tf(
+  printf(
     "dst_corners:\ntl(%f, %f)\ntr(%f, %f)\nbr(%f, %f)\nbl(%f, %f)\n\n",
     dst_corners->tl_x,
     dst_corners->tl_y,
@@ -233,10 +233,10 @@ Matrix3x3 *fcv_calculate_perspective_transform(
   *result = (Matrix3x3){x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], 1.0};
 
 #ifdef DEBUG_LOGGING
-  print32_tf("Result matrix:\n");
-  print32_tf("%f, %f, %f\n", result->m00, result->m01, result->m02);
-  print32_tf("%f, %f, %f\n", result->m10, result->m11, result->m12);
-  print32_tf("%f, %f, %f\n", result->m20, result->m21, result->m22);
+  printf("Result matrix:\n");
+  printf("%f, %f, %f\n", result->m00, result->m01, result->m02);
+  printf("%f, %f, %f\n", result->m10, result->m11, result->m12);
+  printf("%f, %f, %f\n", result->m20, result->m21, result->m22);
 #endif
 
   // Final validation of the result matrix
@@ -256,7 +256,7 @@ Matrix3x3 *fcv_calculate_perspective_transform(
 /**
  * Apply the transformation matrix to the input image
  * and store the result in the output image.
- * Use bilinear int32_terpolation to calculate final pixel values.
+ * Use bilinear interpolation to calculate final pixel values.
  */
 uint8_t *fcv_apply_matrix_3x3(
   int32_t in_width,
@@ -267,12 +267,12 @@ uint8_t *fcv_apply_matrix_3x3(
   Matrix3x3 *tmat
 ) {
 #ifdef DEBUG_LOGGING
-  print32_tf("Input data:\n");
+  printf("Input data:\n");
   for (int32_t i = 0; i < in_width; i++) {
     for (int32_t j = 0; j < in_height; j++) {
-      print32_tf("%d ", in_data[(i * in_width + j) * 4]);
+      printf("%d ", in_data[(i * in_width + j) * 4]);
     }
-    print32_tf("\n");
+    printf("\n");
   }
 #endif
 
@@ -301,7 +301,7 @@ uint8_t *fcv_apply_matrix_3x3(
       double srcX = (tmat->m00 * out_x + tmat->m01 * out_y + tmat->m02) / w;
       double srcY = (tmat->m10 * out_x + tmat->m11 * out_y + tmat->m12) / w;
 
-      // Convert source coordinates to int32_tegers
+      // Convert source coordinates to integers
       int32_t x0 = (int32_t)floor(srcX);
       int32_t y0 = (int32_t)floor(srcY);
       int32_t x1 = x0 + 1;
@@ -311,7 +311,7 @@ uint8_t *fcv_apply_matrix_3x3(
       if (x0 >= 0 && x0 < in_width && y0 >= 0 && y0 < in_height) {
 
         // Clamp the neighbor coordinates so that a (degenerated)
-        // bilinear int32_terpolation can be applied at the image borders.
+        // bilinear interpolation can be applied at the image borders.
         int32_t x1c = (x1 < in_width) ? x1 : x0;
         int32_t y1c = (y1 < in_height) ? y1 : y0;
 
@@ -341,12 +341,12 @@ uint8_t *fcv_apply_matrix_3x3(
   }
 
 #ifdef DEBUG_LOGGING
-  print32_tf("Output data:\n");
+  printf("Output data:\n");
   for (int32_t i = 0; i < out_width; i++) {
     for (int32_t j = 0; j < out_height; j++) {
-      print32_tf("%d ", out_data[(i * out_width + j) * 4]);
+      printf("%d ", out_data[(i * out_width + j) * 4]);
     }
-    print32_tf("\n");
+    printf("\n");
   }
 #endif
 

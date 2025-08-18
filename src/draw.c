@@ -47,7 +47,7 @@ void fcv_set_circle_pixel(
 }
 
 /**
- * Helper function to draw 8 symmetric point32_ts of a circle
+ * Helper function to draw 8 symmetric points of a circle
  */
 void fcv_draw_circle_points(
   uint8_t *data,
@@ -145,7 +145,7 @@ void fcv_draw_circle(
   int32_t y = radius_int32_t;
   int32_t d = 3 - 2 * radius_int32_t;
 
-  // Initial point32_ts
+  // Initial points
   fcv_draw_circle_points(data, width, height, channels, cx, cy, x, y, r, g, b);
 
   while (y >= x) {

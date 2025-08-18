@@ -192,7 +192,7 @@ void add_operation(
   p->count++;
 }
 
-/* Remove leading and trailing white-space, returns point32_ter to first
+/* Remove leading and trailing white-space, returns pointer to first
    non-blank char (string is modified in place). */
 static char *trim_whitespace(char *s) {
   while (*s && isspace((uint8_t)*s)) {
@@ -330,7 +330,7 @@ int32_t parse_pipeline(
       continue;
     }
 
-    /* split int32_to operation name and (optional) parameters */
+    /* split into operation name and (optional) parameters */
     char *space = strchr(piece, ' ');
     if (space) {
       *space = '\0';
@@ -1202,7 +1202,7 @@ uint8_t *execute_pipeline(
       return NULL;
     }
 
-    // Free the previous int32_termediate result (but not the original input)
+    // Free the previous intermediate result (but not the original input)
     if (temp_data && temp_data != input_data) {
       free(temp_data);
     }

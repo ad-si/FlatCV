@@ -140,7 +140,7 @@ uint8_t *fcv_binary_closing_disk(
   // Step 2: Erosion of the dilated image
   uint8_t *result = binary_erosion_disk(dilated, width, height, radius);
 
-  // Free int32_termediate result
+  // Free intermediate result
   free(dilated);
 
   return result;

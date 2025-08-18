@@ -85,9 +85,9 @@ static QueueItem dequeue(Queue *q) {
  * using (x, y) coordinate markers with elevation-based flooding
  *
  * Implements the watershed transform for image segmentation by treating the
- * grayscale image as an elevation map. Water floods from the marker point32_ts,
+ * grayscale image as an elevation map. Water floods from the marker points,
  * and watershed lines form where different regions would meet. Lower
- * int32_tensity values represent valleys where water accumulates, and higher
+ * intensity values represent valleys where water accumulates, and higher
  * values represent hills/ridges.
  *
  * @param width Width of the image.

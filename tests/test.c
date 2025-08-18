@@ -346,7 +346,7 @@ int32_t test_fcv_foerstner_corner() {
   }
 
   // Basic sanity checks:
-  // 1. Function should return valid point32_ter
+  // 1. Function should return valid pointer
   // 2. Result should have 2 channels (w and q measures)
   // 3. Values should be in [0, 255] range
   bool test_ok = true;

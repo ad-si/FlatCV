@@ -498,7 +498,7 @@ uint8_t *fcv_bw_smart(
 }
 
 /**
- * Resize an image by given resize factors using bilinear int32_terpolation.
+ * Resize an image by given resize factors using bilinear interpolation.
  *
  * @param width Width of the input image.
  * @param height Height of the input image.
@@ -655,12 +655,12 @@ uint8_t *fcv_resize(
           uint8_t p10 = data[(y1 * width + x0) * 4 + c];
           uint8_t p11 = data[(y1 * width + x1) * 4 + c];
 
-          double int32_terpolated = p00 * (1 - dx) * (1 - dy) +
+          double interpolated = p00 * (1 - dx) * (1 - dy) +
                                     p01 * dx * (1 - dy) + p10 * (1 - dx) * dy +
                                     p11 * dx * dy;
 
           resized_data[(out_y * *out_width + out_x) * 4 + c] =
-            (uint8_t)(int32_terpolated + 0.5);
+            (uint8_t)(interpolated + 0.5);
         }
 
         resized_data[(out_y * *out_width + out_x) * 4 + 3] = 255;
