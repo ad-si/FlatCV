@@ -14,6 +14,7 @@
 #include "crop.h"
 #include "draw.h"
 #include "extract_document.h"
+#include "flip.h"
 #include "foerstner_corner.h"
 #include "perspectivetransform.h"
 #include "rgba_to_grayscale.h"
@@ -82,6 +83,8 @@ void print32_t_usage(const char *program_name) {
     "  extract_document_to <output_width>x<output_height> - Extract document "
     "to specific dimensions\n"
   );
+  printf("  flip_x          - Flip image horizontally (mirror along vertical axis)\n");
+  printf("  flip_y          - Flip image vertically (mirror along horizontal axis)\n");
   printf("\nPipeline syntax:\n");
   printf("  Operations are applied in sequence\n");
   printf("  Use parentheses for operations with parameters: (blur 3.0)\n");
@@ -1122,6 +1125,12 @@ uint8_t *apply_operation(
     }
 
     return result;
+  }
+  else if (strcmp(operation, "flip_x") == 0) {
+    return (uint8_t *)fcv_flip_x(*width, *height, input_data);
+  }
+  else if (strcmp(operation, "flip_y") == 0) {
+    return (uint8_t *)fcv_flip_y(*width, *height, input_data);
   }
   else {
     fprintf(stderr, "Error: Unknown operation '%s'\n", operation);
