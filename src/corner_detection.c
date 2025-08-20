@@ -16,12 +16,16 @@
 #include "parse_hex_color.h"
 #include "perspectivetransform.h"
 #include "sobel_edge_detection.h"
+#include "sort_corners.h"
 #include "watershed_segmentation.h"
+
+#ifdef DEBUG_LOGGING
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+#endif
 #else
 #include "flatcv.h"
 #endif
-
-// #define DEBUG_LOGGING
 
 /** Count number of distinct colors in RGBA image
  * 1. Convert to grayscale
@@ -39,7 +43,7 @@
  *     1. TODO: Remove border
  * 9. Use Foerstner corner detector (Harris detector corners are shifted
  * inwards)
- * 10. TODO: Sort corners
+ * 10. Sort corners
  * 11. TODO: Select 4 corners with the largest angle while maintaining their
  * order
  * 12. Normalize corners based on scale ratio
@@ -315,7 +319,7 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 
 #ifdef DEBUG_LOGGING
   // Draw corner peaks on the resized image
-  for (int32_t i = 0; i < peaks->count; i++) {
+  for (uint32_t i = 0; i < peaks->count; i++) {
     fcv_draw_circle(
       out_width,
       out_height,
@@ -334,21 +338,18 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 #endif
   free((void *)resized_image);
 
-  // Scale corners back to original image dimensions
-  double scale_x = (double)width / out_width;
-  double scale_y = (double)height / out_height;
-
-  Corners corners = {
-    .tl_x = peaks->points[0].x * scale_x,
-    .tl_y = peaks->points[0].y * scale_y,
-    .tr_x = peaks->points[1].x * scale_x,
-    .tr_y = peaks->points[1].y * scale_y,
-    .br_x = peaks->points[2].x * scale_x,
-    .br_y = peaks->points[2].y * scale_y,
-    .bl_x = peaks->points[3].x * scale_x,
-    .bl_y = peaks->points[3].y * scale_y
-  };
+  Point2D *sorted_result = malloc(peaks->count * sizeof(Point2D));
+  Corners sorted_corners = sort_corners(
+    width,
+    height,
+    out_width,
+    out_height,
+    peaks->points,
+    peaks->count,
+    sorted_result
+  );
+  free(sorted_result);
 
   free(peaks);
-  return corners;
+  return sorted_corners;
 }

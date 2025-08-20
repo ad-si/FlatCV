@@ -8,7 +8,11 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+// Already included in corner_detection.c when debugging
+#ifndef DEBUG_LOGGING
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+#endif
 #include "stb_image_write.h"
 
 #include "conversion.h"
