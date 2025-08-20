@@ -1,8 +1,6 @@
 # FlatCV
 
-Simple image processing and computer vision library in pure C.
-
-"Simple" means:
+Image processing and computer vision library in pure C.
 
 - Color images are a flat array of 8-bit per channel RGBA row-major top-to-bottom
 - Grayscale images are a flat array of 8-bit GRAY row-major top-to-bottom
@@ -34,7 +32,7 @@ The CLI supports edit pipelines which sequentially apply all transformations.
 flatcv <input> <comma-separated-edit-pipeline> <output>
 ```
 
-As commas are not special characters in shells,
+As commas aren't special characters in shells,
 you can write the edit pipeline without quotes.
 Both variants yield the same result:
 
@@ -46,7 +44,7 @@ flatcv i.jpg grayscale, blur 9 o.jpg
 
 #### Examples
 
-Check out the [full documentation](./tests/cli.md)
+Check out the [documentation website](flatcv.ad-si.com)
 for more examples and usage instructions.
 
 Command | Input | Output
@@ -77,27 +75,6 @@ free(half_size);
 ```
 
 
-## FAQ
+## [FAQ](https://flatcv.ad-si.com/faq.html)
 
-### Why is this written in C?
-
-- **Most portable language** \
-    Almost every other language has support to integrate C code
-    in one way or another.
-    Especially since it's available a single file
-    that can be vendored into your project.
-
-- **Lot of existing code** \
-    C and C++ are the most widely used languages for image processing.
-    So there is a lot of existing code that can be reused and adapted.
-
-- **Great for AI powered development** \
-    As there is so much training data available,
-    LLMs are especially good at writing C code.
-
-
-### Will you rewrite this in another language?
-
-I am open to rewrite this in [Rust](https://www.rust-lang.org)
-or [Zig](https://ziglang.org) in the future,
-once the advantages of C become less relevant.
+## [Benchmark](https://flatcv.ad-si.com/benchmark.html)
