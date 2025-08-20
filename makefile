@@ -55,7 +55,7 @@ test-amalgamation: flatcv.h flatcv.c tests/test_amalgamation.c
 
 
 .PHONY: test
-test: build test-units test-integration test-amalgamation
+test: flatcv test-units test-integration test-amalgamation
 
 
 .PHONY: test-extended
@@ -80,6 +80,23 @@ test-extended:
 		-fsanitize=undefined,address \
 		-fno-omit-frame-pointer \
 		-Iinclude src/*.c tests/*.c
+
+
+.PHONY: analyze
+analyze:
+	clang --analyze -Iinclude $(SRC_FILES)
+
+
+flatcv_debug: $(HDR_FILES) $(SRC_FILES)
+	clang -g -Wall -Wextra -Wpedantic \
+		-Iinclude $(SRC_FILES) \
+		-DDEBUG_LOGGING \
+		-lm -o $@
+
+
+.PHONY: debug
+debug: flatcv_debug
+	lldb ./$<
 
 
 .PHONY: benchmark
