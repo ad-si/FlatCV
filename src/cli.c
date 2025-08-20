@@ -25,6 +25,7 @@
 #include "rgba_to_grayscale.h"
 #include "single_to_multichannel.h"
 #include "sobel_edge_detection.h"
+#include "trim.h"
 #include "watershed_segmentation.h"
 
 typedef struct {
@@ -61,35 +62,33 @@ void print32_t_usage(const char *program_name) {
     "  bw_smooth       - Smooth (anti-aliased) black and white conversion\n"
   );
   printf("  detect_corners  - Detect corners and output as JSON\n");
-  printf(
-    "  draw_corners    - Detect corners and draw circles at each corner\n"
+  printf("  draw_corners    - Detect corners and draw circles at each corner\n"
   );
   printf("  sobel           - Apply Sobel edge detection\n");
   printf(
     "  circle <hex_color> <radius> <x>x<y> - Draw a colored circle at position "
     "(x,y)\n"
   );
-  printf(
-    "  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
-    "position "
-    "(x,y)\n"
-  );
-  printf(
-    "  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
-    "markers at "
-    "specified coordinates\n"
-  );
+  printf("  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
+         "position "
+         "(x,y)\n");
+  printf("  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
+         "markers at "
+         "specified coordinates\n");
   printf("  crop <widthxheight+x+y> - Crop the image\n");
-  printf(
-    "  extract_document - Extract document using corner detection and "
-    "perspective transform (auto-size)\n"
-  );
+  printf("  extract_document - Extract document using corner detection and "
+         "perspective transform (auto-size)\n");
   printf(
     "  extract_document_to <output_width>x<output_height> - Extract document "
     "to specific dimensions\n"
   );
-  printf("  flip_x          - Flip image horizontally (mirror along vertical axis)\n");
-  printf("  flip_y          - Flip image vertically (mirror along horizontal axis)\n");
+  printf(
+    "  flip_x          - Flip image horizontally (mirror along vertical axis)\n"
+  );
+  printf(
+    "  flip_y          - Flip image vertically (mirror along horizontal axis)\n"
+  );
+  printf("  trim            - Remove border pixels with same color\n");
   printf("\nPipeline syntax:\n");
   printf("  Operations are applied in sequence\n");
   printf("  Use parentheses for operations with parameters: (blur 3.0)\n");
@@ -121,7 +120,7 @@ void print32_t_usage(const char *program_name) {
   );
 }
 
-Pipeline *create_pipeline() {
+Pipeline *create_pipeline(void) {
   Pipeline *p = malloc(sizeof(Pipeline));
   p->capacity = 8;
   p->count = 0;
@@ -456,6 +455,7 @@ int32_t parse_pipeline(
                 "'200x150')\n"
               );
               free(pos_copy);
+              free(combined);
               return 0;
             }
           }
@@ -464,6 +464,7 @@ int32_t parse_pipeline(
               stderr,
               "Error: circle operation requires: hex_color radius xXy\n"
             );
+            free(combined);
             return 0;
           }
         }
@@ -472,6 +473,7 @@ int32_t parse_pipeline(
             stderr,
             "Error: circle operation requires: hex_color radius xXy\n"
           );
+          free(combined);
           return 0;
         }
       }
@@ -529,6 +531,7 @@ int32_t parse_pipeline(
                 "'200x150')\n"
               );
               free(pos_copy);
+              free(combined);
               return 0;
             }
           }
@@ -537,6 +540,7 @@ int32_t parse_pipeline(
               stderr,
               "Error: disk operation requires: hex_color radius xXy\n"
             );
+            free(combined);
             return 0;
           }
         }
@@ -545,6 +549,7 @@ int32_t parse_pipeline(
             stderr,
             "Error: disk operation requires: hex_color radius xXy\n"
           );
+          free(combined);
           return 0;
         }
       }
@@ -596,6 +601,7 @@ int32_t parse_pipeline(
             "Error: crop operation requires geometry format (e.g., "
             "50x50+10+20)\n"
           );
+          free(combined);
           return 0;
         }
       }
@@ -630,6 +636,7 @@ int32_t parse_pipeline(
               "Error: extract_document_to requires positive dimensions\n"
             );
             free(params_copy);
+            free(combined);
             return 0;
           }
           free(params_copy);
@@ -641,6 +648,7 @@ int32_t parse_pipeline(
             "'widthxheight' (e.g., 800x600)\n"
           );
           free(params_copy);
+          free(combined);
           return 0;
         }
       }
@@ -1100,6 +1108,9 @@ uint8_t *apply_operation(
   }
   else if (strcmp(operation, "flip_y") == 0) {
     return (uint8_t *)fcv_flip_y(*width, *height, input_data);
+  }
+  else if (strcmp(operation, "trim") == 0) {
+    return (uint8_t *)fcv_trim(width, height, 4, input_data);
   }
   else {
     fprintf(stderr, "Error: Unknown operation '%s'\n", operation);

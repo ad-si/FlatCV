@@ -12,5 +12,6 @@
   - [Corner-Detection](corner-detection.md)
   - [Segmentation](segmentation.md)
   - [Document-Extraction](document-extraction.md)
+  - [Trim](trim.md)
 - [Benchmark](benchmark.md)
 - [FAQ](faq.md)

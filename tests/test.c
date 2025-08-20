@@ -12,6 +12,110 @@
 #include "foerstner_corner.h"
 #include "perspectivetransform.h"
 #include "rgba_to_grayscale.h"
+#include "trim.h"
+
+/**
+ * Utility function to create binary images from arrays of 0s and 1s.
+ *
+ * @param pattern Array of 0s and 1s representing the binary pattern
+ * @param width Width of the image
+ * @param height Height of the image
+ * @return Pointer to newly allocated uint8_t array with binary data (0 or 255)
+ *
+ * Example usage:
+ *   int pattern[9] = {
+ *     1, 0, 1,
+ *     0, 1, 0,
+ *     1, 0, 1
+ *   };
+ *   uint8_t *image = create_binary_image(pattern, 3, 3);
+ *   // Creates a 3x3 checkerboard pattern with 255 for 1s and 0 for 0s
+ */
+uint8_t *
+create_binary_image(const int *pattern, uint32_t width, uint32_t height) {
+  if (!pattern || width == 0 || height == 0) {
+    return NULL;
+  }
+
+  uint8_t *data = malloc(width * height);
+  if (!data) {
+    return NULL;
+  }
+
+  for (uint32_t i = 0; i < width * height; i++) {
+    data[i] = pattern[i] ? 255 : 0;
+  }
+
+  return data;
+}
+
+/**
+ * Utility function to create RGBA images from character patterns.
+ *
+ * @param pattern Array of characters representing different colors
+ * @param width Width of the image
+ * @param height Height of the image
+ * @param color_map Array of RGBA colors (4 bytes per color) indexed by
+ * character
+ * @return Pointer to newly allocated uint8_t array with RGBA data
+ *
+ * Example usage:
+ *   char pattern[9] = {
+ *     '0', '0', '0',
+ *     '0', 'R', '0',
+ *     '0', '0', '0'
+ *   };
+ *   uint8_t colors[] = {
+ *     ['0'] = {0, 0, 0, 255},  // Black
+ *     ['R'] = {255, 0, 0, 255} // Red
+ *   };
+ *   uint8_t *image = create_rgba_pattern_image(pattern, 3, 3, colors);
+ */
+uint8_t *create_rgba_pattern_image(
+  const char *pattern,
+  uint32_t width,
+  uint32_t height
+) {
+  if (!pattern || width == 0 || height == 0) {
+    return NULL;
+  }
+
+  // Color map
+  uint8_t color_map[256][4] = {0}; // Initialize all to black
+  // 0 = Black
+  color_map['0'][0] = color_map['0'][1] = color_map['0'][2] = 0;
+  color_map['0'][3] = 255;
+  // 1 = White
+  color_map['1'][0] = color_map['1'][1] = color_map['1'][2] =
+    color_map['1'][3] = 255;
+  // R = Red
+  color_map['R'][0] = 255;
+  color_map['R'][1] = color_map['R'][2] = 0;
+  color_map['R'][3] = 255;
+  // G = Green
+  color_map['G'][0] = 0;
+  color_map['G'][1] = 255;
+  color_map['G'][2] = 0;
+  color_map['G'][3] = 255;
+  // B = Blue
+  color_map['B'][0] = color_map['B'][1] = 0;
+  color_map['B'][2] = color_map['B'][3] = 255;
+
+  uint8_t *data = malloc(width * height * 4);
+  if (!data) {
+    return NULL;
+  }
+
+  for (uint32_t i = 0; i < width * height; i++) {
+    unsigned char c = (unsigned char)pattern[i];
+    data[i * 4 + 0] = color_map[c][0]; // R
+    data[i * 4 + 1] = color_map[c][1]; // G
+    data[i * 4 + 2] = color_map[c][2]; // B
+    data[i * 4 + 3] = color_map[c][3]; // A
+  }
+
+  return data;
+}
 
 int32_t test_otsu_threshold() {
   uint32_t width = 4;
@@ -504,16 +608,22 @@ int32_t test_fcv_binary_closing_disk() {
   uint32_t height = 7;
   int32_t radius = 1;
 
-  // Create test binary image with a small gap
-  uint8_t data[49] = {0, 0,   0,   0, 0,   0,   0, 0, 255, 255, 0, 255, 255, 0,
-                      0, 255, 255, 0, 255, 255, 0, 0, 0,   0,   0, 0,   0,   0,
-                      0, 255, 255, 0, 255, 255, 0, 0, 255, 255, 0, 255, 255, 0,
-                      0, 0,   0,   0, 0,   0,   0};
+  // Create test binary image with a small gap using 0/1 pattern
+  int pattern[49] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1,
+                     0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1,
+                     0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
+
+  uint8_t *data = create_binary_image(pattern, width, height);
+  if (!data) {
+    printf("❌ Binary closing disk test failed: could not create test data\n");
+    return 1;
+  }
 
   uint8_t const *result = fcv_binary_closing_disk(data, width, height, radius);
 
   if (!result) {
     printf("❌ Binary closing disk test failed: NULL result\n");
+    free(data);
     return 1;
   }
 
@@ -539,6 +649,7 @@ int32_t test_fcv_binary_closing_disk() {
   result = fcv_binary_closing_disk(data, width, height, 0);
   if (!result) {
     printf("❌ Binary closing disk test failed: NULL result for radius 0\n");
+    free(data);
     return 1;
   }
 
@@ -595,6 +706,9 @@ int32_t test_fcv_binary_closing_disk() {
     free((void *)result);
   }
 
+  // Clean up the test data
+  free(data);
+
   if (test_ok) {
     printf("✅ Binary closing disk test passed\n");
     return 0;
@@ -605,10 +719,167 @@ int32_t test_fcv_binary_closing_disk() {
   }
 }
 
+int32_t test_fcv_trim() {
+  bool test_ok = true;
+
+  // Test 1: Image with uniform border that can be trimmed
+  {
+    int32_t width = 5;
+    int32_t height = 5;
+
+    // Create 5x5 RGBA image with black border and mixed center using pattern
+    char pattern[25] = {
+      '0', '0', '0', '0', '0', // Row 0: all black border
+      '0', '1', 'R', '1', '0', // Row 1: black border, mixed center
+      '0', 'G', '1', 'G', '0', // Row 2: black border, mixed center
+      '0', '1', 'B', '1', '0', // Row 3: black border, mixed center
+      '0', '0', '0', '0', '0'  // Row 4: all black border
+    };
+
+    uint8_t *data = create_rgba_pattern_image(pattern, width, height);
+    if (!data) {
+      printf("❌ Trim test failed: could not create test data\n");
+      test_ok = false;
+      goto next_test;
+    }
+
+    int32_t result_width = width;
+    int32_t result_height = height;
+
+    uint8_t *result = fcv_trim(&result_width, &result_height, 4, data);
+
+    if (!result) {
+      printf("❌ Trim test failed: NULL result for uniform border\n");
+      test_ok = false;
+    }
+    else {
+      // Should trim to 3x3 (removes 1-pixel black border from all sides)
+      if (result_width != 3 || result_height != 3) {
+        printf(
+          "❌ Trim test failed: expected 3x3, got %dx%d\n",
+          result_width,
+          result_height
+        );
+        test_ok = false;
+      }
+
+      // Check that the trimmed result has the expected mixed center content
+      if (result_width == 3 && result_height == 3) {
+        // Expected 3x3 center: W R W / G W G / W B W
+        uint8_t expected[36] = {
+          255, 255, 255, 255, 255, 0,
+          0,   255, 255, 255, 255, 255, // Row 1: W R W
+          0,   255, 0,   255, 255, 255,
+          255, 255, 0,   255, 0,   255, // Row 2: G W G
+          255, 255, 255, 255, 0,   0,
+          255, 255, 255, 255, 255, 255 // Row 3: W B W
+        };
+
+        bool content_correct = true;
+        for (int32_t i = 0; i < 36; i++) {
+          if (result[i] != expected[i]) {
+            content_correct = false;
+            break;
+          }
+        }
+        if (!content_correct) {
+          printf("❌ Trim test failed: trimmed content doesn't match expected\n"
+          );
+          test_ok = false;
+        }
+      }
+
+      free(result);
+    }
+
+    free(data);
+  }
+
+next_test:
+
+  // Test 2: Image with no uniform border (should return copy)
+  {
+    int32_t width = 3;
+    int32_t height = 3;
+
+    // Create 3x3 RGBA image with mixed colors, no uniform border
+    uint8_t data[36] = {255, 0,   0,   255, 0,   255, 0,   255, 0,
+                        0,   255, 255, 0,   255, 255, 255, 128, 128,
+                        128, 255, 255, 255, 0,   255, 255, 0,   255,
+                        255, 0,   128, 255, 255, 128, 0,   128, 255};
+
+    int32_t result_width = width;
+    int32_t result_height = height;
+
+    uint8_t *result = fcv_trim(&result_width, &result_height, 4, data);
+
+    if (!result) {
+      printf("❌ Trim test failed: NULL result for mixed colors\n");
+      test_ok = false;
+    }
+    else {
+      // Dimensions should be unchanged
+      if (result_width != width || result_height != height) {
+        printf("❌ Trim test failed: dimensions changed when they shouldn't\n");
+        test_ok = false;
+      }
+
+      // Data should be identical to input
+      for (int32_t i = 0; i < width * height * 4; i++) {
+        if (result[i] != data[i]) {
+          printf(
+            "❌ Trim test failed: data changed when no trimming should occur\n"
+          );
+          test_ok = false;
+          break;
+        }
+      }
+
+      free(result);
+    }
+  }
+
+  // Test 3: NULL input
+  {
+    int32_t width = 5;
+    int32_t height = 5;
+    uint8_t *result = fcv_trim(&width, &height, 4, NULL);
+    if (result != NULL) {
+      printf("❌ Trim test failed: should return NULL for NULL input\n");
+      test_ok = false;
+      free(result);
+    }
+  }
+
+  // Test 4: Invalid dimensions
+  {
+    uint8_t data[16] =
+      {0, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255};
+    int32_t width = 0;
+    int32_t height = 2;
+    uint8_t *result = fcv_trim(&width, &height, 4, data);
+    if (result != NULL) {
+      printf("❌ Trim test failed: should return NULL for width 0\n");
+      test_ok = false;
+      free(result);
+    }
+  }
+
+  if (test_ok) {
+    printf("✅ Trim test passed\n");
+    return 0;
+  }
+  else {
+    printf("❌ Trim test failed\n");
+    return 1;
+  }
+}
+
 int32_t main() {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
       !test_perspective_transform_float() && !test_fcv_foerstner_corner() &&
-      !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk()) {
+      !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk() &&
+      !test_fcv_trim()) {
     printf("✅ All tests passed\n");
     return 0;
   }

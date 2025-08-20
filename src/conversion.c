@@ -354,6 +354,11 @@ uint8_t *fcv_apply_gaussian_blur(
         uint32_t img_index = y * width + x_offset;
         uint32_t img_rgba_index = img_index * 4;
 
+        // Bounds check for array access
+        if (img_rgba_index + 2 >= img_length_px * 4) {
+          continue;
+        }
+
         float weight = kernel[k + (int32_t)radius];
         weight_sum += weight;
 
