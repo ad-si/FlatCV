@@ -16,11 +16,8 @@
  * @param data Pointer to the pixel data.
  * @return Pointer to the flipped image data.
  */
-uint8_t *fcv_flip_x(
-  uint32_t width,
-  uint32_t height,
-  uint8_t const *const data
-) {
+uint8_t *
+fcv_flip_x(uint32_t width, uint32_t height, uint8_t const *const data) {
   uint32_t img_length_byte = width * height * 4;
   uint8_t *flipped_data = malloc(img_length_byte);
 
@@ -51,11 +48,8 @@ uint8_t *fcv_flip_x(
  * @param data Pointer to the pixel data.
  * @return Pointer to the flipped image data.
  */
-uint8_t *fcv_flip_y(
-  uint32_t width,
-  uint32_t height,
-  uint8_t const *const data
-) {
+uint8_t *
+fcv_flip_y(uint32_t width, uint32_t height, uint8_t const *const data) {
   uint32_t img_length_byte = width * height * 4;
   uint8_t *flipped_data = malloc(img_length_byte);
 

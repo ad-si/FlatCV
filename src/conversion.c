@@ -657,8 +657,8 @@ uint8_t *fcv_resize(
           uint8_t p11 = data[(y1 * width + x1) * 4 + c];
 
           double interpolated = p00 * (1 - dx) * (1 - dy) +
-                                    p01 * dx * (1 - dy) + p10 * (1 - dx) * dy +
-                                    p11 * dx * dy;
+                                p01 * dx * (1 - dy) + p10 * (1 - dx) * dy +
+                                p11 * dx * dy;
 
           resized_data[(out_y * *out_width + out_x) * 4 + c] =
             (uint8_t)(interpolated + 0.5);
