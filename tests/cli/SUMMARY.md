@@ -15,4 +15,5 @@
   - [Document-Extraction](document-extraction.md)
 - [Benchmark](benchmark.md)
 - [FAQ](faq.md)
+- [Changelog](changelog.md)
 - [Playground](playground/index.html)
