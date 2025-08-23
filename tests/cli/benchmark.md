@@ -1,5 +1,8 @@
 ## Benchmark
 
+Use the [benchmark script](https://github.com/ad-si/FlatCV/blob/main/benchmark.sh)
+to run the benchmark yourself.
+
 ```txt
 ===== ▶️ Resize =====
 
