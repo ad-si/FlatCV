@@ -83,10 +83,4 @@ unsigned char const * half_size = resize(
 free(half_size);
 ```
 
-
-## [FAQ](https://flatcv.ad-si.com/faq.html)
-
-## [Benchmark](https://flatcv.ad-si.com/benchmark.html)
-
-
 [docs]: https://flatcv.ad-si.com

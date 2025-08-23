@@ -26,7 +26,9 @@
         <div class="image-box">
           <h3>Original Image</h3>
           <canvas id="originalCanvas"></canvas>
-          <button id="loadImageBtn">Load Image<div class="spinner" id="loadSpinner"></div></button>
+          <button id="loadImageBtn">
+            Load New Image<div class="spinner" id="loadSpinner"></div>
+          </button>
         </div>
         <div class="image-box">
           <h3>Processed Image</h3>
@@ -36,13 +38,21 @@
 
       <div class="controls">
         <input type="file" id="fileInput" accept="image/*">
-        <button class="filter-btn" id="grayscaleBtn" disabled>Grayscale<div class="spinner" id="grayscaleSpinner"></div>
+        <button class="filter-btn" id="grayscaleBtn" disabled>
+          Grayscale
+          <div class="spinner" id="grayscaleSpinner"></div>
         </button>
-        <button class="filter-btn" id="blurBtn" disabled>Blur<div class="spinner" id="blurSpinner"></div></button>
-        <button class="filter-btn" id="sobelBtn" disabled>Edge Detection<div class="spinner" id="sobelSpinner"></div>
+        <button class="filter-btn" id="blurBtn" disabled>
+          Blur
+          <div class="spinner" id="blurSpinner"></div>
         </button>
-        <button class="filter-btn" id="binaryBtn" disabled>Binary Threshold<div class="spinner" id="binarySpinner">
-          </div>
+        <button class="filter-btn" id="sobelBtn" disabled>
+          Edge Detection
+          <div class="spinner" id="sobelSpinner"></div>
+        </button>
+        <button class="filter-btn" id="binaryBtn" disabled>
+          Binary Threshold
+          <div class="spinner" id="binarySpinner"></div>
         </button>
       </div>
     </main>
