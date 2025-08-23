@@ -3,10 +3,11 @@
 /apply_test
 /docs
 /flatcv
-/flatcv_*
 /flatcv.c
 /flatcv.h
+/flatcv_*
 /test_bin
 /tests/book
 /tests/cli/imgs
+/tests/documents
 /tmp

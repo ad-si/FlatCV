@@ -22,6 +22,7 @@
             clang-tools  # For clang-format
             coreutils
             doxygen
+            emscripten
             gcc
             gnumake
             graphicsmagick

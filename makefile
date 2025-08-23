@@ -155,6 +155,23 @@ win-test: flatcv_windows_x86_64.exe
 build: flatcv
 
 
+# WebAssembly build with Emscripten
+flatcv.wasm: $(HDR_FILES) $(LIB_SRC_FILES)
+	emcc -Wall -Wextra -Wpedantic \
+		-Iinclude $(LIB_SRC_FILES) \
+		-lm \
+		-s WASM=1 \
+		-s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPU8"]' \
+		-s EXPORTED_FUNCTIONS='["_malloc","_free","_fcv_grayscale","_fcv_apply_gaussian_blur","_fcv_sobel_edge_detection","_fcv_otsu_threshold_rgba"]' \
+		-s ALLOW_MEMORY_GROWTH=1 \
+		-s MODULARIZE=1 \
+		-s EXPORT_NAME='FlatCV' \
+		-o playground/flatcv.js
+
+.PHONY: wasm-build
+wasm-build: flatcv.wasm
+
+
 .PHONY: install
 install: flatcv
 	sudo cp $< /usr/local/bin
@@ -225,5 +242,9 @@ clean:
 		flatcv \
 		flatcv.c \
 		flatcv.h \
+		flatcv.js \
+		flatcv.wasm \
+		playground/flatcv.js \
+		playground/flatcv.wasm \
 		test_bin \
 		test_amalgamation_bin
