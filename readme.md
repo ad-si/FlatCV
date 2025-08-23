@@ -2,21 +2,31 @@
 
 Image processing and computer vision library in pure C.
 
-- Color images are a flat array of 8-bit per channel RGBA row-major top-to-bottom
-- Grayscale images are a flat array of 8-bit GRAY row-major top-to-bottom
-- All operations are done on the raw sRGB pixel values
-- Minimal usage of macros and preprocessor
-- Available as an amalgamation where all code is combined into one file.
-    (Each [release](https://github.com/ad-si/FlatCV/releases)
-    includes a `flatcv.h` and `flatcv.c` file.)
-- No fusing of image transformations
-- No multithreading \
-    You're more likely to process one file per core
-    than one file over multiple cores anyways.
-    Yet, it's still often faster than GraphicsMagick with multiple threads.
-    (Check out the [benchmark](https://flatcv.ad-si.com/benchmark.html).)
-- No GPU acceleration
-- Only uses functions from the C standard library.
+<table>
+  <tr>
+    <td><img src=imgs/elevation_2_basins_receipt.png width=500></td>
+    <td><img src=imgs/receipt_corners.png width=500/></td>
+    <td><img src=imgs/elevation_2_basins_receipt_watershed.png width=500></td>
+  </tr>
+</table>
+
+
+## Features
+
+[Flip](https://flatcv.ad-si.com/flip.html),
+[Crop](https://flatcv.ad-si.com/crop.html),
+[Trim](https://flatcv.ad-si.com/trim.html),
+[Resize](https://flatcv.ad-si.com/resize.html),
+[Blur](https://flatcv.ad-si.com/blur.html),
+[Draw](https://flatcv.ad-si.com/draw.html),
+[Grayscale](https://flatcv.ad-si.com/grayscale.html),
+[Binarize](https://flatcv.ad-si.com/binarize.html) \
+[Corner-Detection](https://flatcv.ad-si.com/corner-detection.html),
+[Segmentation](https://flatcv.ad-si.com/segmentation.html),
+[Document-Extraction](https://flatcv.ad-si.com/document-extraction.html)
+
+Check out the [official documentation][docs]
+for more details on each feature.
 
 
 ## Usage
@@ -44,7 +54,7 @@ flatcv i.jpg grayscale, blur 9 o.jpg
 
 #### Examples
 
-Check out the [documentation website](flatcv.ad-si.com)
+Check out the [official documentation website][docs]
 for more examples and usage instructions.
 
 Command | Input | Output
@@ -60,17 +70,16 @@ Command | Input | Output
 ```c
 #include "flatcv.h"
 
-// Resize an image to half size
+// Resize an image to 50%
 unsigned char const * half_size = resize(
-    input_width, input_height,
-    0.5, 0.5,
-    &out_width, &out_height,
-    input_data
+  input_width, input_height,
+  0.5, 0.5,
+  &out_width, &out_height,
+  input_data
 );
 
 // Do something with the resized image
 
-// Free the allocated memory
 free(half_size);
 ```
 
@@ -78,3 +87,6 @@ free(half_size);
 ## [FAQ](https://flatcv.ad-si.com/faq.html)
 
 ## [Benchmark](https://flatcv.ad-si.com/benchmark.html)
+
+
+[docs]: https://flatcv.ad-si.com

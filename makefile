@@ -166,7 +166,7 @@ flatcv.wasm: $(HDR_FILES) $(LIB_SRC_FILES)
 		-s ALLOW_MEMORY_GROWTH=1 \
 		-s MODULARIZE=1 \
 		-s EXPORT_NAME='FlatCV' \
-		-o playground/flatcv.js
+		-o tests/cli/playground/flatcv.js
 
 .PHONY: wasm-build
 wasm-build: flatcv.wasm
@@ -244,7 +244,7 @@ clean:
 		flatcv.h \
 		flatcv.js \
 		flatcv.wasm \
-		playground/flatcv.js \
-		playground/flatcv.wasm \
+		tests/cli/playground/flatcv.js \
+		tests/cli/playground/flatcv.wasm \
 		test_bin \
 		test_amalgamation_bin
