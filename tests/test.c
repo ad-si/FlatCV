@@ -10,6 +10,7 @@
 #include "conversion.h"
 #include "corner_peaks.h"
 #include "foerstner_corner.h"
+#include "histogram.h"
 #include "perspectivetransform.h"
 #include "rgba_to_grayscale.h"
 #include "trim.h"
@@ -875,11 +876,167 @@ next_test:
   }
 }
 
+int32_t test_fcv_histogram() {
+  bool test_ok = true;
+
+  // Test 1: Basic functionality with RGB image
+  {
+    uint32_t width = 2;
+    uint32_t height = 2;
+
+    // Create simple RGBA test data with known values
+    uint8_t data[16] = {
+      255,
+      0,
+      0,
+      255, // Red pixel
+      0,
+      255,
+      0,
+      255, // Green pixel
+      0,
+      0,
+      255,
+      255, // Blue pixel
+      128,
+      128,
+      128,
+      255 // Gray pixel
+    };
+
+    uint32_t hist_width, hist_height;
+    uint8_t *result =
+      fcv_generate_histogram(width, height, 4, data, &hist_width, &hist_height);
+
+    if (!result) {
+      printf("❌ Histogram test failed: NULL result for RGB image\n");
+      test_ok = false;
+    }
+    else {
+      // Check output dimensions
+      if (hist_width != 256 ||
+          hist_height != 200) { // 256 width, 200 height (no margins)
+        printf(
+          "❌ Histogram test failed: incorrect output dimensions %dx%d\n",
+          hist_width,
+          hist_height
+        );
+        test_ok = false;
+      }
+
+      // Verify histogram image is created (should have non-zero values)
+      bool has_content = false;
+      for (uint32_t i = 0; i < hist_width * hist_height * 4; i += 4) {
+        if (result[i] > 0 || result[i + 1] > 0 || result[i + 2] > 0) {
+          has_content = true;
+          break;
+        }
+      }
+
+      if (!has_content) {
+        printf("❌ Histogram test failed: histogram image appears empty\n");
+        test_ok = false;
+      }
+
+      free(result);
+    }
+  }
+
+  // Test 2: Grayscale image (all RGB channels equal)
+  {
+    uint32_t width = 2;
+    uint32_t height = 2;
+
+    // Create grayscale RGBA test data (all RGB channels equal)
+    uint8_t data[16] = {
+      0,
+      0,
+      0,
+      255, // Black pixel
+      64,
+      64,
+      64,
+      255, // Dark gray pixel
+      128,
+      128,
+      128,
+      255, // Medium gray pixel
+      255,
+      255,
+      255,
+      255 // White pixel
+    };
+
+    uint32_t hist_width, hist_height;
+    uint8_t *result =
+      fcv_generate_histogram(width, height, 4, data, &hist_width, &hist_height);
+
+    if (!result) {
+      printf("❌ Histogram test failed: NULL result for grayscale image\n");
+      test_ok = false;
+    }
+    else {
+      // For grayscale, histogram should be white bars on black background
+      bool has_white_content = false;
+      for (uint32_t i = 0; i < hist_width * hist_height * 4; i += 4) {
+        if (result[i] == 255 && result[i + 1] == 255 && result[i + 2] == 255) {
+          has_white_content = true;
+          break;
+        }
+      }
+
+      if (!has_white_content) {
+        printf(
+          "❌ Histogram test failed: grayscale histogram should have white "
+          "bars\n"
+        );
+        test_ok = false;
+      }
+
+      free(result);
+    }
+  }
+
+  // Test 3: NULL input
+  {
+    uint32_t hist_width, hist_height;
+    uint8_t *result =
+      fcv_generate_histogram(10, 10, 4, NULL, &hist_width, &hist_height);
+    if (result != NULL) {
+      printf("❌ Histogram test failed: should return NULL for NULL input\n");
+      test_ok = false;
+      free(result);
+    }
+  }
+
+  // Test 4: NULL output parameters
+  {
+    uint8_t data[16] =
+      {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 128, 128, 128, 255};
+    uint8_t *result = fcv_generate_histogram(2, 2, 4, data, NULL, NULL);
+    if (result != NULL) {
+      printf("❌ Histogram test failed: should return NULL for NULL output "
+             "parameters\n");
+      test_ok = false;
+      free(result);
+    }
+  }
+
+  if (test_ok) {
+    printf("✅ Histogram test passed\n");
+    return 0;
+  }
+  else {
+    printf("❌ Histogram test failed\n");
+    return 1;
+  }
+}
+
 int32_t main() {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
       !test_perspective_transform_float() && !test_fcv_foerstner_corner() &&
       !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk() &&
-      !test_fcv_trim()) {
+      !test_fcv_trim() && !test_fcv_histogram()) {
     printf("✅ All tests passed\n");
     return 0;
   }

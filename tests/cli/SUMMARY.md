@@ -10,6 +10,7 @@
   - [Draw](draw.md)
   - [Grayscale](grayscale.md)
   - [Binarize](binarize.md)
+  - [Histogram](histogram.md)
   - [Corner-Detection](corner-detection.md)
   - [Segmentation](segmentation.md)
   - [Document-Extraction](document-extraction.md)

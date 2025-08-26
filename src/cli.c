@@ -21,6 +21,7 @@
 #include "extract_document.h"
 #include "flip.h"
 #include "foerstner_corner.h"
+#include "histogram.h"
 #include "perspectivetransform.h"
 #include "rgba_to_grayscale.h"
 #include "single_to_multichannel.h"
@@ -89,6 +90,7 @@ void print32_t_usage(const char *program_name) {
     "  flip_y          - Flip image vertically (mirror along horizontal axis)\n"
   );
   printf("  trim            - Remove border pixels with same color\n");
+  printf("  histogram       - Generate brightness histogram visualization\n");
   printf("\nPipeline syntax:\n");
   printf("  Operations are applied in sequence\n");
   printf("  Use parentheses for operations with parameters: (blur 3.0)\n");
@@ -1111,6 +1113,22 @@ uint8_t *apply_operation(
   }
   else if (strcmp(operation, "trim") == 0) {
     return (uint8_t *)fcv_trim(width, height, 4, input_data);
+  }
+  else if (strcmp(operation, "histogram") == 0) {
+    uint32_t hist_width, hist_height;
+    uint8_t *result = fcv_generate_histogram(
+      *width,
+      *height,
+      4,
+      input_data,
+      &hist_width,
+      &hist_height
+    );
+    if (result) {
+      *width = hist_width;
+      *height = hist_height;
+    }
+    return result;
   }
   else {
     fprintf(stderr, "Error: Unknown operation '%s'\n", operation);
