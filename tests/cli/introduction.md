@@ -15,7 +15,8 @@ Check out the sidebar on the left for all available features.
 
 ### Characteristics
 
-- Color images are a flat array of 8-bit per channel RGBA row-major top-to-bottom
+- Color images are a flat array of
+    8-bit per channel RGBA row-major top-to-bottom
 - Grayscale images are a flat array of 8-bit GRAY row-major top-to-bottom
 - All operations are done on the raw sRGB pixel values
 - Available as an amalgamation where all code is combined into one file. \
@@ -25,7 +26,8 @@ Check out the sidebar on the left for all available features.
   - Only uses functions from the C standard library.
   - Minimal usage of macros and preprocessor
   - No multithreading \
-      Yet, it's still often faster than GraphicsMagick with multiple threads.
+      Yet, it's still plenty fast and, for many operations,
+        faster than ImageMagick.
       (See [benchmark](#benchmark) below.)
       For batch processing, make sure to process one file per core.
   - No GPU acceleration

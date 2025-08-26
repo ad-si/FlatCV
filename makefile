@@ -231,7 +231,7 @@ docs/build: tests/cli/imgs
 
 
 .PHONY: release
-release: build combine mac-build lin-build win-build
+release: build combine mac-build lin-build win-build wasm-build
 	@echo "1. Add binaries to GitHub release: https://github.com/ad-si/FlatCV/releases"
 
 

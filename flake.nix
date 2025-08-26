@@ -30,6 +30,7 @@
             imagemagick
             mdbook
             rsync
+            vips
           ];
           shellHook = ''
             cargo install --locked scrut@0.4.1
