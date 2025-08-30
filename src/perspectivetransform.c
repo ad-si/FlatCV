@@ -266,16 +266,6 @@ uint8_t *fcv_apply_matrix_3x3(
   int32_t out_height,
   Matrix3x3 *tmat
 ) {
-#ifdef DEBUG_LOGGING
-  printf("Input data:\n");
-  for (int32_t i = 0; i < in_width; i++) {
-    for (int32_t j = 0; j < in_height; j++) {
-      printf("%d ", in_data[(i * in_width + j) * 4]);
-    }
-    printf("\n");
-  }
-#endif
-
   // Patch flip matrix if needed
   if (fabs(tmat->m00 + 1.0) < 1e-9 && fabs(tmat->m11 + 1.0) < 1e-9 &&
       tmat->m02 == 0.0 && tmat->m12 == 0.0) {
@@ -339,16 +329,6 @@ uint8_t *fcv_apply_matrix_3x3(
       }
     }
   }
-
-#ifdef DEBUG_LOGGING
-  printf("Output data:\n");
-  for (int32_t i = 0; i < out_width; i++) {
-    for (int32_t j = 0; j < out_height; j++) {
-      printf("%d ", out_data[(i * out_width + j) * 4]);
-    }
-    printf("\n");
-  }
-#endif
 
   return out_data;
 }

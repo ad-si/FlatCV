@@ -229,3 +229,82 @@ void fcv_draw_disk(
     fcv_fill_disk_lines(data, width, height, channels, cx, cy, x, y, r, g, b);
   }
 }
+
+/**
+ * Add a colored border around an image.
+ * Returns a new image with the border added.
+ *
+ * @param width Width of the input image.
+ * @param height Height of the input image.
+ * @param channels Number of channels in the image (1, 3, or 4).
+ * @param hex_color Hex color code for the border (e.g., "FF0000" for red).
+ * @param border_width Width of the border in pixels.
+ * @param input_data Pointer to the input pixel data.
+ * @param output_width Pointer to store the output image width.
+ * @param output_height Pointer to store the output image height.
+ * @return Pointer to the new image data with border, or NULL on failure.
+ */
+uint8_t *fcv_add_border(
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  const char *hex_color,
+  uint32_t border_width,
+  uint8_t *input_data,
+  uint32_t *output_width,
+  uint32_t *output_height
+) {
+  if (!input_data || !output_width || !output_height || border_width == 0) {
+    return NULL;
+  }
+
+  // Parse border color
+  uint8_t r, g, b;
+  fcv_parse_hex_color(hex_color, &r, &g, &b);
+
+  // Calculate output dimensions
+  *output_width = width + 2 * border_width;
+  *output_height = height + 2 * border_width;
+
+  // Allocate memory for output image
+  size_t output_size = *output_width * *output_height * channels;
+  uint8_t *output_data = malloc(output_size);
+  if (!output_data) {
+    return NULL;
+  }
+
+  // Fill the entire output image with border color
+  for (uint32_t y = 0; y < *output_height; y++) {
+    for (uint32_t x = 0; x < *output_width; x++) {
+      uint32_t pixel_index = (y * *output_width + x) * channels;
+
+      if (channels == 1) {
+        // Grayscale: use luminance formula
+        output_data[pixel_index] = (uint8_t)(0.299 * r + 0.587 * g + 0.114 * b);
+      }
+      else if (channels >= 3) {
+        output_data[pixel_index] = r;     // R
+        output_data[pixel_index + 1] = g; // G
+        output_data[pixel_index + 2] = b; // B
+        if (channels == 4) {
+          output_data[pixel_index + 3] = 255; // A
+        }
+      }
+    }
+  }
+
+  // Copy the original image into the center
+  for (uint32_t y = 0; y < height; y++) {
+    for (uint32_t x = 0; x < width; x++) {
+      uint32_t src_index = (y * width + x) * channels;
+      uint32_t dst_index =
+        ((y + border_width) * *output_width + (x + border_width)) * channels;
+
+      for (uint32_t c = 0; c < channels; c++) {
+        output_data[dst_index + c] = input_data[src_index + c];
+      }
+    }
+  }
+
+  return output_data;
+}

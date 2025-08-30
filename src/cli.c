@@ -91,6 +91,9 @@ void print32_t_usage(const char *program_name) {
   );
   printf("  trim            - Remove border pixels with same color\n");
   printf("  histogram       - Generate brightness histogram visualization\n");
+  printf(
+    "  border <hex_color> <border_width> - Add colored border around image\n"
+  );
   printf("\nPipeline syntax:\n");
   printf("  Operations are applied in sequence\n");
   printf("  Use parentheses for operations with parameters: (blur 3.0)\n");
@@ -120,6 +123,7 @@ void print32_t_usage(const char *program_name) {
     "  %s input.jpg \"extract_document_to 800x600\" output.jpg\n",
     program_name
   );
+  printf("  %s input.jpg \"border FF0000 10\" output.jpg\n", program_name);
 }
 
 Pipeline *create_pipeline(void) {
@@ -658,6 +662,45 @@ int32_t parse_pipeline(
         // Auto-size version - no parameters needed
         add_operation(pipeline, piece, 0.0, 0, 0.0, 0, 0.0, 0, 0.0, 0, NULL, 0);
       }
+      else if (strcmp(piece, "border") == 0) {
+        /* Border operation requires: hex_color border_width */
+        char *space2 = strchr(params_str, ' ');
+        if (space2) {
+          *space2 = '\0';
+          char *color = trim_whitespace(params_str);
+          double border_width = atof(trim_whitespace(space2 + 1));
+
+          if (border_width > 0) {
+            add_operation(
+              pipeline,
+              piece,
+              border_width,
+              1,
+              0.0,
+              0,
+              0.0,
+              0,
+              0.0,
+              0,
+              color,
+              1
+            );
+          }
+          else {
+            fprintf(stderr, "Error: border width must be positive\n");
+            free(combined);
+            return 0;
+          }
+        }
+        else {
+          fprintf(
+            stderr,
+            "Error: border operation requires: hex_color border_width\n"
+          );
+          free(combined);
+          return 0;
+        }
+      }
       else {
         /* Regular numeric parameter parsing for other operations */
         char *space2 = strchr(params_str, ' ');
@@ -1128,6 +1171,36 @@ uint8_t *apply_operation(
       *width = hist_width;
       *height = hist_height;
     }
+    return result;
+  }
+  else if (strcmp(operation, "border") == 0) {
+    if (!has_string_param || !has_param) {
+      fprintf(
+        stderr,
+        "Error: border operation requires: hex_color border_width\n"
+      );
+      return NULL;
+    }
+
+    uint32_t border_width = (uint32_t)param;
+    uint32_t output_width, output_height;
+
+    uint8_t *result = fcv_add_border(
+      *width,
+      *height,
+      4,
+      param_str,
+      border_width,
+      input_data,
+      &output_width,
+      &output_height
+    );
+
+    if (result) {
+      *width = output_width;
+      *height = output_height;
+    }
+
     return result;
   }
   else {

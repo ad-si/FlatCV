@@ -9,6 +9,7 @@
 #include "binary_closing_disk.h"
 #include "conversion.h"
 #include "corner_peaks.h"
+#include "draw.h"
 #include "foerstner_corner.h"
 #include "histogram.h"
 #include "perspectivetransform.h"
@@ -1032,11 +1033,126 @@ int32_t test_fcv_histogram() {
   }
 }
 
+int32_t test_fcv_add_border() {
+  printf("Testing fcv_add_border...\n");
+
+  // Create a simple 2x2 RGBA test image (blue pixels)
+  uint8_t input_data[] = {
+    0,
+    0,
+    255,
+    255, // Blue pixel (top-left)
+    0,
+    0,
+    255,
+    255, // Blue pixel (top-right)
+    0,
+    0,
+    255,
+    255, // Blue pixel (bottom-left)
+    0,
+    0,
+    255,
+    255 // Blue pixel (bottom-right)
+  };
+
+  uint32_t input_width = 2;
+  uint32_t input_height = 2;
+  uint32_t output_width, output_height;
+
+  // Test 1: Add red border with width 1
+  uint8_t *result = fcv_add_border(
+    input_width,
+    input_height,
+    4,
+    "FF0000",
+    1,
+    input_data,
+    &output_width,
+    &output_height
+  );
+
+  if (!result) {
+    printf("❌ Border test failed: function returned NULL\n");
+    return 1;
+  }
+
+  // Check output dimensions
+  if (output_width != 4 || output_height != 4) {
+    printf(
+      "❌ Border test failed: expected 4x4, got %dx%d\n",
+      output_width,
+      output_height
+    );
+    free(result);
+    return 1;
+  }
+
+  // Check corner pixels (should be red border)
+  uint8_t *top_left = &result[0];
+  if (top_left[0] != 255 || top_left[1] != 0 || top_left[2] != 0 ||
+      top_left[3] != 255) {
+    printf("❌ Border test failed: top-left pixel is not red\n");
+    free(result);
+    return 1;
+  }
+
+  // Check center pixels (should be original blue)
+  uint8_t *center = &result[((1 * output_width) + 1) * 4]; // Position (1,1)
+  if (center[0] != 0 || center[1] != 0 || center[2] != 255 ||
+      center[3] != 255) {
+    printf("❌ Border test failed: center pixel is not blue\n");
+    free(result);
+    return 1;
+  }
+
+  free(result);
+
+  // Test 2: Border width 0 (should fail)
+  result = fcv_add_border(
+    input_width,
+    input_height,
+    4,
+    "FF0000",
+    0,
+    input_data,
+    &output_width,
+    &output_height
+  );
+
+  if (result != NULL) {
+    printf("❌ Border test failed: width 0 should return NULL\n");
+    free(result);
+    return 1;
+  }
+
+  // Test 3: NULL input (should fail)
+  result = fcv_add_border(
+    input_width,
+    input_height,
+    4,
+    "FF0000",
+    1,
+    NULL,
+    &output_width,
+    &output_height
+  );
+
+  if (result != NULL) {
+    printf("❌ Border test failed: NULL input should return NULL\n");
+    free(result);
+    return 1;
+  }
+
+  printf("✅ Border test passed\n");
+  return 0;
+}
+
 int32_t main() {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
       !test_perspective_transform_float() && !test_fcv_foerstner_corner() &&
       !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk() &&
-      !test_fcv_trim() && !test_fcv_histogram()) {
+      !test_fcv_trim() && !test_fcv_histogram() && !test_fcv_add_border()) {
     printf("✅ All tests passed\n");
     return 0;
   }

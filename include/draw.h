@@ -65,3 +65,14 @@ void fcv_fill_disk_lines(
   uint8_t g,
   uint8_t b
 );
+
+uint8_t *fcv_add_border(
+  uint32_t width,
+  uint32_t height,
+  uint32_t channels,
+  const char *hex_color,
+  uint32_t border_width,
+  uint8_t *input_data,
+  uint32_t *output_width,
+  uint32_t *output_height
+);
