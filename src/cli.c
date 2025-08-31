@@ -1229,23 +1229,23 @@ uint8_t *execute_pipeline(
 
   for (int32_t i = 0; i < pipeline->count; i++) {
     PipelineOp *op = &pipeline->ops[i];
-    printf("Applying operation: %s", op->operation);
+    fprintf(stderr, "Applying operation: %s", op->operation);
     if (op->has_string_param) {
-      printf(" with parameter: %s", op->param_str);
+      fprintf(stderr, " with parameter: %s", op->param_str);
     }
     else if (op->has_param) {
-      printf(" with parameter: %.2f", op->param);
+      fprintf(stderr, " with parameter: %.2f", op->param);
       if (op->has_param2) {
-        printf(" %.2f", op->param2);
+        fprintf(stderr, " %.2f", op->param2);
         if (op->has_param3) {
-          printf(" %.2f", op->param3);
+          fprintf(stderr, " %.2f", op->param3);
         }
         if (op->has_param4) {
-          printf(" %.2f", op->param4);
+          fprintf(stderr, " %.2f", op->param4);
         }
       }
     }
-    printf("\n");
+    fprintf(stderr, "\n");
 
     clock_t start_time = clock();
     uint8_t *result = apply_operation(
@@ -1268,7 +1268,7 @@ uint8_t *execute_pipeline(
 
     double elapsed_time_ms =
       ((double)(end_time - start_time)) / CLOCKS_PER_SEC * 1000.0;
-    printf(
+    fprintf(stderr,
       "  → Completed in %.1f ms (output: %dx%d)\n",
       elapsed_time_ms,
       *width,
@@ -1338,8 +1338,8 @@ int32_t main(int32_t argc, char *argv[]) {
     return 1;
   }
 
-  printf("Loaded image: %dx%d with %d channels\n", width, height, channels);
-  printf("Executing pipeline with %d operations:\n", pipeline->count);
+  fprintf(stderr, "Loaded image: %dx%d with %d channels\n", width, height, channels);
+  fprintf(stderr, "Executing pipeline with %d operations:\n", pipeline->count);
 
   uint8_t *result_data =
     execute_pipeline(&width, &height, pipeline, image_data);
@@ -1352,7 +1352,7 @@ int32_t main(int32_t argc, char *argv[]) {
   }
 
   if (!is_detect_corners_only) {
-    printf("Final output dimensions: %dx%d\n", width, height);
+    fprintf(stderr, "Final output dimensions: %dx%d\n", width, height);
 
     int32_t write_result;
     const char *ext = strrchr(output_path, '.');
@@ -1387,7 +1387,7 @@ int32_t main(int32_t argc, char *argv[]) {
       return 1;
     }
 
-    printf("Successfully saved processed image to '%s'\n", output_path);
+    fprintf(stderr, "Successfully saved processed image to '%s'\n", output_path);
   }
 
   stbi_image_free(image_data);

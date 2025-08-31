@@ -122,8 +122,8 @@ Matrix3x3 *fcv_calculate_perspective_transform(
   }
 
 #ifdef DEBUG_LOGGING
-  printf("[C] Calculating perspective transform:\n");
-  printf(
+  fprintf(stderr, "[C] Calculating perspective transform:\n");
+  fprintf(stderr,
     "src_corners:\ntl(%f, %f)\ntr(%f, %f)\nbr(%f, %f)\nbl(%f, %f)\n\n",
     src_corners->tl_x,
     src_corners->tl_y,
@@ -134,7 +134,7 @@ Matrix3x3 *fcv_calculate_perspective_transform(
     src_corners->bl_x,
     src_corners->bl_y
   );
-  printf(
+  fprintf(stderr,
     "dst_corners:\ntl(%f, %f)\ntr(%f, %f)\nbr(%f, %f)\nbl(%f, %f)\n\n",
     dst_corners->tl_x,
     dst_corners->tl_y,
@@ -233,10 +233,10 @@ Matrix3x3 *fcv_calculate_perspective_transform(
   *result = (Matrix3x3){x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], 1.0};
 
 #ifdef DEBUG_LOGGING
-  printf("Result matrix:\n");
-  printf("%f, %f, %f\n", result->m00, result->m01, result->m02);
-  printf("%f, %f, %f\n", result->m10, result->m11, result->m12);
-  printf("%f, %f, %f\n", result->m20, result->m21, result->m22);
+  fprintf(stderr, "Result matrix:\n");
+  fprintf(stderr, "%f, %f, %f\n", result->m00, result->m01, result->m02);
+  fprintf(stderr, "%f, %f, %f\n", result->m10, result->m11, result->m12);
+  fprintf(stderr, "%f, %f, %f\n", result->m20, result->m21, result->m22);
 #endif
 
   // Final validation of the result matrix

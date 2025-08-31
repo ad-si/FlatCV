@@ -476,15 +476,15 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 
 #ifdef DEBUG_LOGGING
   // Print peaks for debugging
-  printf("Peaks:\n");
-  printf("%.0f,%.0f\n", sorted_corners.tl_x, sorted_corners.tl_y);
-  printf("%.0f,%.0f\n", sorted_corners.tr_x, sorted_corners.tr_y);
-  printf("%.0f,%.0f\n", sorted_corners.br_x, sorted_corners.br_y);
-  printf("%.0f,%.0f\n", sorted_corners.bl_x, sorted_corners.bl_y);
+  fprintf(stderr, "Peaks:\n");
+  fprintf(stderr, "%.0f,%.0f\n", sorted_corners.tl_x, sorted_corners.tl_y);
+  fprintf(stderr, "%.0f,%.0f\n", sorted_corners.tr_x, sorted_corners.tr_y);
+  fprintf(stderr, "%.0f,%.0f\n", sorted_corners.br_x, sorted_corners.br_y);
+  fprintf(stderr, "%.0f,%.0f\n", sorted_corners.bl_x, sorted_corners.bl_y);
   // Draw corner peaks on the grayscale and resized image
   for (uint32_t i = 0; i < peaks->count; i++) {
     // Print peak coordinates for debugging
-    printf(
+    fprintf(stderr,
       "Peak %u: (%.1f, %.1f)\n",
       i,
       peaks->points[i].x,
