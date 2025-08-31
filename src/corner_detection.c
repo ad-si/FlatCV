@@ -605,3 +605,17 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   free(peaks);
   return sorted_corners;
 }
+
+/**
+ * Wrapper function that allocates corners on heap for FFI.
+ */
+Corners *
+fcv_detect_corners_ptr(const uint8_t *image, int32_t width, int32_t height) {
+  Corners corners = fcv_detect_corners(image, width, height);
+  Corners *result = malloc(sizeof(Corners));
+  if (result == NULL) {
+    return NULL;
+  }
+  *result = corners;
+  return result;
+}

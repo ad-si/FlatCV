@@ -18,3 +18,4 @@ uint8_t *fcv_apply_matrix_3x3(
 );
 
 Corners fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height);
+Corners* fcv_detect_corners_ptr(const uint8_t *image, int32_t width, int32_t height);
