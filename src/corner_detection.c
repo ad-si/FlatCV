@@ -399,9 +399,9 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   // Scale corners back to original image dimensions
   double scale_x = (double)width / out_width;
   double scale_y = (double)height / out_height;
-  
+
   Corners sorted_corners;
-  
+
   if (peaks->count > 4) {
     // Calculate angles for each corner using cross product method
     double *angles = malloc(peaks->count * sizeof(double));
@@ -410,40 +410,45 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
       double angle_abs;
     } AngleIndex;
     AngleIndex *angle_indices = malloc(peaks->count * sizeof(AngleIndex));
-    
+
     for (uint32_t i = 0; i < peaks->count; i++) {
       // Get the three consecutive points for angle calculation
       Point2D prev = sorted_result[(i - 1 + peaks->count) % peaks->count];
       Point2D curr = sorted_result[i];
       Point2D next = sorted_result[(i + 1) % peaks->count];
-      
+
       // Calculate vectors from current point
       double a_x = prev.x - curr.x;
       double a_y = prev.y - curr.y;
       double b_x = next.x - curr.x;
       double b_y = next.y - curr.y;
-      
+
       // Calculate lengths of vectors
       double a_len = sqrt(a_x * a_x + a_y * a_y);
       double b_len = sqrt(b_x * b_x + b_y * b_y);
-      
+
       if (a_len == 0 || b_len == 0) {
         angles[i] = 0;
-      } else {
+      }
+      else {
         // Calculate cross product (z-component in 2D)
         double cross_product = (a_x * b_y - a_y * b_x) / (a_len * b_len);
         // Clamp to [-1, 1] to avoid numerical errors
-        if (cross_product > 1.0) cross_product = 1.0;
-        if (cross_product < -1.0) cross_product = -1.0;
-        
+        if (cross_product > 1.0) {
+          cross_product = 1.0;
+        }
+        if (cross_product < -1.0) {
+          cross_product = -1.0;
+        }
+
         // Calculate angle in degrees
         angles[i] = asin(cross_product) * 180.0 / M_PI;
       }
-      
+
       angle_indices[i].index = i;
       angle_indices[i].angle_abs = fabs(angles[i]);
     }
-    
+
     // Sort indices by descending angle magnitude
     for (uint32_t i = 0; i < peaks->count - 1; i++) {
       for (uint32_t j = 0; j < peaks->count - 1 - i; j++) {
@@ -454,13 +459,13 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
         }
       }
     }
-    
+
     // Take top 4 indices and sort them to maintain original clockwise order
     uint32_t top_4_indices[4];
     for (uint32_t i = 0; i < 4; i++) {
       top_4_indices[i] = angle_indices[i].index;
     }
-    
+
     // Sort the top 4 indices to maintain original clockwise order
     for (uint32_t i = 0; i < 3; i++) {
       for (uint32_t j = 0; j < 3 - i; j++) {
@@ -471,36 +476,37 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
         }
       }
     }
-    
-    // Create final corners struct directly from selected corners in clockwise order
-    // The first sorted corner becomes top-left, and we maintain clockwise sequence
-    sorted_corners = (Corners){
-      .tl_x = sorted_result[top_4_indices[0]].x * scale_x,
-      .tl_y = sorted_result[top_4_indices[0]].y * scale_y,
-      .tr_x = sorted_result[top_4_indices[1]].x * scale_x,
-      .tr_y = sorted_result[top_4_indices[1]].y * scale_y,
-      .br_x = sorted_result[top_4_indices[2]].x * scale_x,
-      .br_y = sorted_result[top_4_indices[2]].y * scale_y,
-      .bl_x = sorted_result[top_4_indices[3]].x * scale_x,
-      .bl_y = sorted_result[top_4_indices[3]].y * scale_y
-    };
-    
+
+    // Create final corners struct directly from selected corners in clockwise
+    // order The first sorted corner becomes top-left, and we maintain clockwise
+    // sequence
+    sorted_corners =
+      (Corners){.tl_x = sorted_result[top_4_indices[0]].x * scale_x,
+                .tl_y = sorted_result[top_4_indices[0]].y * scale_y,
+                .tr_x = sorted_result[top_4_indices[1]].x * scale_x,
+                .tr_y = sorted_result[top_4_indices[1]].y * scale_y,
+                .br_x = sorted_result[top_4_indices[2]].x * scale_x,
+                .br_y = sorted_result[top_4_indices[2]].y * scale_y,
+                .bl_x = sorted_result[top_4_indices[3]].x * scale_x,
+                .bl_y = sorted_result[top_4_indices[3]].y * scale_y};
+
     free(angles);
     free(angle_indices);
-  } else {
-    // Use all available corners if we have 4 or fewer, already in clockwise order
-    sorted_corners = (Corners){
-      .tl_x = sorted_result[0].x * scale_x,
-      .tl_y = sorted_result[0].y * scale_y,
-      .tr_x = sorted_result[1 % peaks->count].x * scale_x,
-      .tr_y = sorted_result[1 % peaks->count].y * scale_y,
-      .br_x = sorted_result[2 % peaks->count].x * scale_x,
-      .br_y = sorted_result[2 % peaks->count].y * scale_y,
-      .bl_x = sorted_result[3 % peaks->count].x * scale_x,
-      .bl_y = sorted_result[3 % peaks->count].y * scale_y
-    };
   }
-  
+  else {
+    // Use all available corners if we have 4 or fewer, already in clockwise
+    // order
+    sorted_corners =
+      (Corners){.tl_x = sorted_result[0].x * scale_x,
+                .tl_y = sorted_result[0].y * scale_y,
+                .tr_x = sorted_result[1 % peaks->count].x * scale_x,
+                .tr_y = sorted_result[1 % peaks->count].y * scale_y,
+                .br_x = sorted_result[2 % peaks->count].x * scale_x,
+                .br_y = sorted_result[2 % peaks->count].y * scale_y,
+                .bl_x = sorted_result[3 % peaks->count].x * scale_x,
+                .bl_y = sorted_result[3 % peaks->count].y * scale_y};
+  }
+
   free(sorted_result);
 
 #ifdef DEBUG_LOGGING
@@ -513,7 +519,8 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   // Draw corner peaks on the grayscale and resized image
   for (uint32_t i = 0; i < peaks->count; i++) {
     // Print peak coordinates for debugging
-    fprintf(stderr,
+    fprintf(
+      stderr,
       "Peak %u: (%.1f, %.1f)\n",
       i,
       peaks->points[i].x,

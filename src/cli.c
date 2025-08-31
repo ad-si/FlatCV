@@ -1268,7 +1268,8 @@ uint8_t *execute_pipeline(
 
     double elapsed_time_ms =
       ((double)(end_time - start_time)) / CLOCKS_PER_SEC * 1000.0;
-    fprintf(stderr,
+    fprintf(
+      stderr,
       "  → Completed in %.1f ms (output: %dx%d)\n",
       elapsed_time_ms,
       *width,
@@ -1338,7 +1339,13 @@ int32_t main(int32_t argc, char *argv[]) {
     return 1;
   }
 
-  fprintf(stderr, "Loaded image: %dx%d with %d channels\n", width, height, channels);
+  fprintf(
+    stderr,
+    "Loaded image: %dx%d with %d channels\n",
+    width,
+    height,
+    channels
+  );
   fprintf(stderr, "Executing pipeline with %d operations:\n", pipeline->count);
 
   uint8_t *result_data =
@@ -1387,7 +1394,11 @@ int32_t main(int32_t argc, char *argv[]) {
       return 1;
     }
 
-    fprintf(stderr, "Successfully saved processed image to '%s'\n", output_path);
+    fprintf(
+      stderr,
+      "Successfully saved processed image to '%s'\n",
+      output_path
+    );
   }
 
   stbi_image_free(image_data);

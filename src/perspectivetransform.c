@@ -123,7 +123,8 @@ Matrix3x3 *fcv_calculate_perspective_transform(
 
 #ifdef DEBUG_LOGGING
   fprintf(stderr, "[C] Calculating perspective transform:\n");
-  fprintf(stderr,
+  fprintf(
+    stderr,
     "src_corners:\ntl(%f, %f)\ntr(%f, %f)\nbr(%f, %f)\nbl(%f, %f)\n\n",
     src_corners->tl_x,
     src_corners->tl_y,
@@ -134,7 +135,8 @@ Matrix3x3 *fcv_calculate_perspective_transform(
     src_corners->bl_x,
     src_corners->bl_y
   );
-  fprintf(stderr,
+  fprintf(
+    stderr,
     "dst_corners:\ntl(%f, %f)\ntr(%f, %f)\nbr(%f, %f)\nbl(%f, %f)\n\n",
     dst_corners->tl_x,
     dst_corners->tl_y,
