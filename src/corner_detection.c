@@ -523,7 +523,7 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
       out_width,
       out_height,
       4,        // GRAY as RGBA (each value is the same)
-      "FF0000", // Red color for corners
+      "FFFF00", // Yellow color for corners
       2,        // Radius
       peaks->points[i].x,
       peaks->points[i].y,
@@ -531,17 +531,18 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     );
   }
 
-  // Draw sorted corners with different colors to distinguish from peaks
-  // Reuse the scale variables from above (note: inverted for drawing on resized image)
+  // Draw sorted corners with different colors to distinguish from peaks.
+  // Reuse the scale variables from above.
+  // (Inverted for drawing on resized image.)
   double draw_scale_x = (double)out_width / width;
   double draw_scale_y = (double)out_height / height;
 
-  // Draw top-left corner in blue
+  // Draw top-left corner in red
   fcv_draw_circle(
     out_width,
     out_height,
     4,
-    "0000FF", // Blue color for top-left
+    "FF0000", // Red color for top-left
     3,        // Slightly larger radius to distinguish from peaks
     sorted_corners.tl_x * draw_scale_x,
     sorted_corners.tl_y * draw_scale_y,
@@ -560,12 +561,12 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     (uint8_t *)resized_image
   );
 
-  // Draw bottom-right corner in yellow
+  // Draw bottom-right corner in blue
   fcv_draw_circle(
     out_width,
     out_height,
     4,
-    "FFFF00", // Yellow color for bottom-right
+    "0000FF", // Blue color for bottom-right
     3,
     sorted_corners.br_x * draw_scale_x,
     sorted_corners.br_y * draw_scale_y,
