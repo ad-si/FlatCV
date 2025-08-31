@@ -341,14 +341,43 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   free(w_channel);
 
   // 10. Find corner peaks using thresholds
-  CornerPeaks *peaks = fcv_corner_peaks(
-    out_width,
-    out_height,
-    corner_response,
-    16,  // Minimum distance between peaks
-    0.5, // accuracy_thresh
-    0.3  // roundness_thresh
-  );
+  // Gradually decrease thresholds until it finds at least 4 corners
+  CornerPeaks *peaks = NULL;
+  double accuracy_thresh = 0.5;
+  double roundness_thresh = 0.3;
+  const double thresh_decrement = 0.05;
+  const double min_thresh = 0.01;
+
+  do {
+    if (peaks) {
+      free(peaks->points);
+      free(peaks);
+    }
+
+    peaks = fcv_corner_peaks(
+      out_width,
+      out_height,
+      corner_response,
+      16, // Minimum distance between peaks
+      accuracy_thresh,
+      roundness_thresh
+    );
+
+    if (!peaks || peaks->count < 4) {
+      accuracy_thresh -= thresh_decrement;
+      roundness_thresh -= thresh_decrement;
+
+      // Prevent thresholds from going negative
+      if (accuracy_thresh < min_thresh) {
+        accuracy_thresh = min_thresh;
+      }
+      if (roundness_thresh < min_thresh) {
+        roundness_thresh = min_thresh;
+      }
+    }
+
+  } while (peaks && peaks->count < 4 &&
+           (accuracy_thresh > min_thresh || roundness_thresh > min_thresh));
   free((void *)corner_response);
   if (!peaks) {
     fprintf(stderr, "Error: Failed to find corner peaks\n");
