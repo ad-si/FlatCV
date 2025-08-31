@@ -1,0 +1,8 @@
+{
+  "corners": {
+    "top_left": [340, 140],
+    "top_right": [664, 140],
+    "bottom_right": [692, 888],
+    "bottom_left": [348, 900]
+  }
+}
