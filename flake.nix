@@ -30,6 +30,7 @@
             imagemagick
             mdbook
             rsync
+            uv
             vips
           ];
           shellHook = ''

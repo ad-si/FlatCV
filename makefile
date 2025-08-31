@@ -40,7 +40,7 @@ CLI_TEST_FILES := $(wildcard tests/cli/*.md)
 # Integration tests for CLI
 .PHONY: test-integration
 test-integration: build $(CLI_TEST_FILES)
-	scrut test --work-directory=$$(pwd) $(CLI_TEST_FILES)
+	scrut test --combine-output --work-directory=$$(pwd) $(CLI_TEST_FILES)
 
 
 .PHONY: test-amalgamation
@@ -54,8 +54,14 @@ test-amalgamation: flatcv.h flatcv.c tests/test_amalgamation.c
 	&& ./test_amalgamation_bin
 
 
+.PHONY: test-corner-detection
+test-corner-detection: flatcv tests/test_corner_detection.py
+	# Test corner detection accuracy against ground truth
+	./tests/test_corner_detection.py
+
+
 .PHONY: test
-test: flatcv test-units test-integration test-amalgamation
+test: flatcv test-units test-integration test-amalgamation test-corner-detection
 
 
 .PHONY: test-extended

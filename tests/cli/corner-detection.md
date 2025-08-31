@@ -7,6 +7,7 @@ $ ./flatcv imgs/receipt.jpeg detect_corners
 Loaded image: 1024x1024 with 3 channels
 Executing pipeline with 1 operations:
 Applying operation: detect_corners
+  → Completed in \d+.\d+ ms \(output: 1024x1024\) (regex)
   {
     "corners": {
       "top_left": [332, 68],
@@ -15,7 +16,6 @@ Applying operation: detect_corners
       "bottom_left": [352, 960]
     }
   }
-  → Completed in \d+.\d+ ms \(output: 1024x1024\) (regex)
 ```
 
 
@@ -30,12 +30,12 @@ $ ./flatcv imgs/receipt.jpeg draw_corners imgs/receipt_corners.png
 Loaded image: 1024x1024 with 3 channels
 Executing pipeline with 1 operations:
 Applying operation: draw_corners
+  → Completed in \d+.\d+ ms \(output: 1024x1024\) (regex)
+Final output dimensions: 1024x1024
+Successfully saved processed image to 'imgs/receipt_corners.png'
   Detected corners:
     Top-left:     (332, 68)
     Top-right:    (692, 76)
     Bottom-right: (720, 956)
     Bottom-left:  (352, 960)
-  → Completed in \d+.\d+ ms \(output: 1024x1024\) (regex)
-Final output dimensions: 1024x1024
-Successfully saved processed image to 'imgs/receipt_corners.png'
 ```
