@@ -14,6 +14,7 @@
 #include "histogram.h"
 #include "perspectivetransform.h"
 #include "rgba_to_grayscale.h"
+#include "sort_corners.h"
 #include "trim.h"
 
 /**
@@ -327,111 +328,112 @@ int32_t test_fcv_foerstner_corner() {
   uint32_t height = 5;
 
   // Create a simple corner pattern: white square on black background
-  uint8_t data[100] = {// Row 0: all black
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       // Row 1: black, then white corner
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       // Row 2: black, then white corner
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       255,
-                       // Row 3: all black
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       // Row 4: all black
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255,
-                       0,
-                       0,
-                       0,
-                       255
+  uint8_t data[100] = {
+    // Row 0: all black
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    // Row 1: black, then white corner
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    // Row 2: black, then white corner
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    // Row 3: all black
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    // Row 4: all black
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    255
   };
 
   // Convert RGBA to grayscale first
@@ -785,7 +787,8 @@ int32_t test_fcv_trim() {
           }
         }
         if (!content_correct) {
-          printf("❌ Trim test failed: trimmed content doesn't match expected\n"
+          printf(
+            "❌ Trim test failed: trimmed content doesn't match expected\n"
           );
           test_ok = false;
         }
@@ -1016,8 +1019,10 @@ int32_t test_fcv_histogram() {
       {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 128, 128, 128, 255};
     uint8_t *result = fcv_generate_histogram(2, 2, 4, data, NULL, NULL);
     if (result != NULL) {
-      printf("❌ Histogram test failed: should return NULL for NULL output "
-             "parameters\n");
+      printf(
+        "❌ Histogram test failed: should return NULL for NULL output "
+        "parameters\n"
+      );
       test_ok = false;
       free(result);
     }
@@ -1148,11 +1153,365 @@ int32_t test_fcv_add_border() {
   return 0;
 }
 
+int32_t test_sort_corners() {
+  bool test_ok = true;
+
+  // Test 1: Basic corner sorting with known coordinates
+  {
+    Point2D corners[4] = {
+      {720, 956}, // bottom-right
+      {332, 68},  // top-left
+      {692, 76},  // top-right
+      {352, 960}  // bottom-left
+    };
+
+    Point2D result[4];
+
+    // Test with scaling (1024x1024 -> 1024x1024, no scaling)
+    Corners sorted = sort_corners(1024, 1024, 1024, 1024, corners, 4, result);
+
+    // Check the sorted corners are in the correct order: tl, tr, br, bl
+    if (fabs(sorted.tl_x - 332) > 0.1 || fabs(sorted.tl_y - 68) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: top-left incorrect (%.1f,%.1f)\n",
+        sorted.tl_x,
+        sorted.tl_y
+      );
+      test_ok = false;
+    }
+    if (fabs(sorted.tr_x - 692) > 0.1 || fabs(sorted.tr_y - 76) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: top-right incorrect (%.1f,%.1f)\n",
+        sorted.tr_x,
+        sorted.tr_y
+      );
+      test_ok = false;
+    }
+    if (fabs(sorted.br_x - 720) > 0.1 || fabs(sorted.br_y - 956) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: bottom-right incorrect (%.1f,%.1f)\n",
+        sorted.br_x,
+        sorted.br_y
+      );
+      test_ok = false;
+    }
+    if (fabs(sorted.bl_x - 352) > 0.1 || fabs(sorted.bl_y - 960) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: bottom-left incorrect (%.1f,%.1f)\n",
+        sorted.bl_x,
+        sorted.bl_y
+      );
+      test_ok = false;
+    }
+
+    // Check the result array is also correctly sorted
+    if (result[0].x != 332 || result[0].y != 68) {
+      printf("❌ Sort corners test failed: result[0] top-left incorrect\n");
+      test_ok = false;
+    }
+    if (result[1].x != 692 || result[1].y != 76) {
+      printf("❌ Sort corners test failed: result[1] top-right incorrect\n");
+      test_ok = false;
+    }
+    if (result[2].x != 720 || result[2].y != 956) {
+      printf("❌ Sort corners test failed: result[2] bottom-right incorrect\n");
+      test_ok = false;
+    }
+    if (result[3].x != 352 || result[3].y != 960) {
+      printf("❌ Sort corners test failed: result[3] bottom-left incorrect\n");
+      test_ok = false;
+    }
+  }
+
+  // Test 2: Scaling test
+  {
+    Point2D corners[4] = {
+      {360, 478}, // bottom-right (scaled from 720, 956)
+      {166, 34},  // top-left (scaled from 332, 68)
+      {346, 38},  // top-right (scaled from 692, 76)
+      {176, 480}  // bottom-left (scaled from 352, 960)
+    };
+
+    Point2D result[4];
+
+    // Test with 2x upscaling (512x512 -> 1024x1024)
+    Corners sorted = sort_corners(1024, 1024, 512, 512, corners, 4, result);
+
+    // Check the scaling is applied correctly (should be doubled)
+    if (fabs(sorted.tl_x - 332) > 1.0 || fabs(sorted.tl_y - 68) > 1.0) {
+      printf(
+        "❌ Sort corners scaling test failed: top-left incorrect (%.1f,%.1f)\n",
+        sorted.tl_x,
+        sorted.tl_y
+      );
+      test_ok = false;
+    }
+    if (fabs(sorted.tr_x - 692) > 1.0 || fabs(sorted.tr_y - 76) > 1.0) {
+      printf(
+        "❌ Sort corners scaling test failed: top-right incorrect "
+        "(%.1f,%.1f)\n",
+        sorted.tr_x,
+        sorted.tr_y
+      );
+      test_ok = false;
+    }
+  }
+
+  // Test 3: Three corners case - parallelogram assumption
+  {
+    // Test missing bottom-right corner (provide tl, tr, bl)
+    Point2D corners[3] = {
+      {100, 100}, // top-left
+      {200, 100}, // top-right
+      {100, 200}  // bottom-left
+    };
+    Point2D result[4];
+
+    Corners sorted = sort_corners(1024, 1024, 1024, 1024, corners, 3, result);
+
+    // Expected bottom-right should be (200, 200) to complete the parallelogram
+    if (fabs(sorted.tl_x - 100) > 0.1 || fabs(sorted.tl_y - 100) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: 3 corners case - top-left incorrect "
+        "(%.1f,%.1f)\n",
+        sorted.tl_x,
+        sorted.tl_y
+      );
+      test_ok = false;
+    }
+    if (fabs(sorted.tr_x - 200) > 0.1 || fabs(sorted.tr_y - 100) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: 3 corners case - top-right incorrect "
+        "(%.1f,%.1f)\n",
+        sorted.tr_x,
+        sorted.tr_y
+      );
+      test_ok = false;
+    }
+    if (fabs(sorted.bl_x - 100) > 0.1 || fabs(sorted.bl_y - 200) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: 3 corners case - bottom-left incorrect "
+        "(%.1f,%.1f)\n",
+        sorted.bl_x,
+        sorted.bl_y
+      );
+      test_ok = false;
+    }
+    if (fabs(sorted.br_x - 200) > 0.1 || fabs(sorted.br_y - 200) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: 3 corners case - bottom-right incorrect "
+        "(%.1f,%.1f)\n",
+        sorted.br_x,
+        sorted.br_y
+      );
+      test_ok = false;
+    }
+  }
+
+  // Test 4: Three corners case - missing top-left
+  {
+    Point2D corners[3] = {
+      {200, 100}, // top-right
+      {200, 200}, // bottom-right
+      {100, 200}  // bottom-left
+    };
+    Point2D result[4];
+
+    Corners sorted = sort_corners(1024, 1024, 1024, 1024, corners, 3, result);
+
+    // Expected top-left should be (100, 100) to complete the parallelogram
+    if (fabs(sorted.tl_x - 100) > 0.1 || fabs(sorted.tl_y - 100) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: 3 corners missing TL - top-left "
+        "incorrect (%.1f,%.1f)\n",
+        sorted.tl_x,
+        sorted.tl_y
+      );
+      test_ok = false;
+    }
+  }
+
+  // Test 5: Edge cases - insufficient corners (less than 3)
+  {
+    Point2D corners[2] = {{100, 100}, {200, 200}};
+    Point2D result[4];
+
+    Corners sorted = sort_corners(1024, 1024, 1024, 1024, corners, 2, result);
+
+    // Should return all zeros
+    if (sorted.tl_x != 0 || sorted.tl_y != 0 || sorted.tr_x != 0 ||
+        sorted.tr_y != 0 || sorted.br_x != 0 || sorted.br_y != 0 ||
+        sorted.bl_x != 0 || sorted.bl_y != 0) {
+      printf(
+        "❌ Sort corners test failed: insufficient corners should return "
+        "zeros\n"
+      );
+      test_ok = false;
+    }
+  }
+
+  // Test 6: More than 4 corners (should use only first 4)
+  {
+    Point2D corners[6] = {
+      {720, 956}, // bottom-right
+      {332, 68},  // top-left
+      {692, 76},  // top-right
+      {352, 960}, // bottom-left
+      {400, 400}, // extra corner 1
+      {500, 500}  // extra corner 2
+    };
+
+    Point2D result[4];
+
+    Corners sorted = sort_corners(1024, 1024, 1024, 1024, corners, 6, result);
+
+    // Should still sort correctly using first 4
+    if (fabs(sorted.tl_x - 332) > 0.1 || fabs(sorted.tl_y - 68) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: extra corners case - top-left incorrect\n"
+      );
+      test_ok = false;
+    }
+    if (fabs(sorted.tr_x - 692) > 0.1 || fabs(sorted.tr_y - 76) > 0.1) {
+      printf(
+        "❌ Sort corners test failed: extra corners case - top-right "
+        "incorrect\n"
+      );
+      test_ok = false;
+    }
+  }
+
+  // Test 7: Perfect square corners (simple geometric case)
+  {
+    Point2D corners[4] = {
+      {100, 100}, // top-left
+      {200, 100}, // top-right
+      {200, 200}, // bottom-right
+      {100, 200}  // bottom-left
+    };
+
+    Point2D result[4];
+
+    Corners sorted = sort_corners(1024, 1024, 1024, 1024, corners, 4, result);
+
+    // Verify perfect square is sorted correctly
+    if (sorted.tl_x != 100 || sorted.tl_y != 100) {
+      printf(
+        "❌ Sort corners test failed: square case - top-left incorrect "
+        "(%.1f,%.1f)\n",
+        sorted.tl_x,
+        sorted.tl_y
+      );
+      test_ok = false;
+    }
+    if (sorted.tr_x != 200 || sorted.tr_y != 100) {
+      printf(
+        "❌ Sort corners test failed: square case - top-right incorrect "
+        "(%.1f,%.1f)\n",
+        sorted.tr_x,
+        sorted.tr_y
+      );
+      test_ok = false;
+    }
+    if (sorted.br_x != 200 || sorted.br_y != 200) {
+      printf(
+        "❌ Sort corners test failed: square case - bottom-right incorrect "
+        "(%.1f,%.1f)\n",
+        sorted.br_x,
+        sorted.br_y
+      );
+      test_ok = false;
+    }
+    if (sorted.bl_x != 100 || sorted.bl_y != 200) {
+      printf(
+        "❌ Sort corners test failed: square case - bottom-left incorrect "
+        "(%.1f,%.1f)\n",
+        sorted.bl_x,
+        sorted.bl_y
+      );
+      test_ok = false;
+    }
+  }
+
+  // Test 8: More than 4 corners (pentagon case)
+  {
+    Point2D corners[5] = {
+      {150, 50},  // top
+      {250, 100}, // top-right
+      {200, 200}, // bottom-right
+      {100, 200}, // bottom-left
+      {50, 100}   // left
+    };
+
+    Point2D result[5];
+
+    // Note: The Corners struct still only handles first 4 corners
+    // but the result array should contain all 5 sorted clockwise
+    Corners sorted = sort_corners(1024, 1024, 1024, 1024, corners, 5, result);
+
+    // Just verify the function doesn't crash and produces reasonable output
+    // Top-left should still be one of the leftmost/topmost corners
+    if (sorted.tl_x < 40 || sorted.tl_x > 160) {
+      printf(
+        "❌ Sort corners test failed: 5 corners case - unreasonable top-left "
+        "x=%.1f\n",
+        sorted.tl_x
+      );
+      test_ok = false;
+    }
+    if (sorted.tl_y < 40 || sorted.tl_y > 120) {
+      printf(
+        "❌ Sort corners test failed: 5 corners case - unreasonable top-left "
+        "y=%.1f\n",
+        sorted.tl_y
+      );
+      test_ok = false;
+    }
+  }
+
+  // Test 9: Six corners (hexagon case)
+  {
+    Point2D corners[6] = {
+      {150, 50},  // top
+      {200, 75},  // top-right
+      {225, 150}, // right
+      {175, 200}, // bottom-right
+      {125, 200}, // bottom-left
+      {75, 125}   // left
+    };
+
+    Point2D result[6];
+
+    // Test with 6 corners
+    Corners sorted = sort_corners(1024, 1024, 1024, 1024, corners, 6, result);
+
+    // Verify function doesn't crash and produces reasonable output
+    if (sorted.tl_x < 70 || sorted.tl_x > 160) {
+      printf(
+        "❌ Sort corners test failed: 6 corners case - unreasonable top-left "
+        "x=%.1f\n",
+        sorted.tl_x
+      );
+      test_ok = false;
+    }
+  }
+
+  if (test_ok) {
+    printf("✅ Sort corners test passed\n");
+    return 0;
+  }
+  else {
+    printf("❌ Sort corners test failed\n");
+    return 1;
+  }
+}
+
 int32_t main() {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
       !test_perspective_transform_float() && !test_fcv_foerstner_corner() &&
       !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk() &&
-      !test_fcv_trim() && !test_fcv_histogram() && !test_fcv_add_border()) {
+      !test_fcv_trim() && !test_fcv_histogram() && !test_fcv_add_border() &&
+      !test_sort_corners()) {
     printf("✅ All tests passed\n");
     return 0;
   }

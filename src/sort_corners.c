@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -17,7 +18,17 @@ typedef struct {
 PolarPoint cartesian_to_polar(Point2D cart) {
   PolarPoint polar;
   polar.r = sqrt(cart.x * cart.x + cart.y * cart.y);
-  polar.theta = atan2(cart.y, cart.x);
+  double theta = atan2(cart.y, cart.x);
+
+  // Normalize theta: Convert to degrees and apply normalization
+  double theta_deg = theta * 180.0 / M_PI;
+  if (theta_deg < 0) {
+    polar.theta = -theta_deg;
+  }
+  else {
+    polar.theta = -(theta_deg - 360.0);
+  }
+
   return polar;
 }
 
@@ -63,43 +74,252 @@ Corners sort_corners(
   uint32_t num_corners,
   Point2D *result
 ) {
-  // Simple geometric approach to identify corners
-  // Assume we have exactly 4 corners for a document
-  if (num_corners != 4) {
-    // Fallback: just use the first 4 corners if more are provided
-    num_corners = 4;
+  if (num_corners < 3) {
+    // Not enough corners, return zeros
+    Corners empty_corners = {0, 0, 0, 0, 0, 0, 0, 0};
+    return empty_corners;
   }
 
-  // Find corner positions based on coordinate sums and differences
-  Point2D top_left = corners[0];
-  Point2D top_right = corners[0];
-  Point2D bottom_left = corners[0];
-  Point2D bottom_right = corners[0];
+  // Allocate memory for working corners (max of num_corners or 4 for 3-corner
+  // case)
+  uint32_t max_corners = (num_corners >= 4) ? num_corners : 4;
+  Point2D *working_corners = malloc(max_corners * sizeof(Point2D));
+  if (!working_corners) {
+    Corners empty_corners = {0, 0, 0, 0, 0, 0, 0, 0};
+    return empty_corners;
+  }
 
-  for (uint32_t i = 0; i < num_corners; i++) {
-    // Top-left: minimum sum (x + y)
-    if (corners[i].x + corners[i].y < top_left.x + top_left.y) {
-      top_left = corners[i];
+  uint32_t corners_to_process;
+
+  if (num_corners == 3) {
+    // Copy the 3 corners we have
+    working_corners[0] = corners[0];
+    working_corners[1] = corners[1];
+    working_corners[2] = corners[2];
+
+    // Calculate the fourth corner to complete a parallelogram
+    // For 3 corners A, B, C, we need to determine which corner is missing
+    // and calculate it using vector addition
+
+    // First, sort the 3 corners by position to understand the layout
+    Point2D sorted[3] = {corners[0], corners[1], corners[2]};
+
+    // Find bounding box of the 3 corners
+    double min_x = sorted[0].x, max_x = sorted[0].x;
+    double min_y = sorted[0].y, max_y = sorted[0].y;
+    for (int i = 1; i < 3; i++) {
+      if (sorted[i].x < min_x) {
+        min_x = sorted[i].x;
+      }
+      if (sorted[i].x > max_x) {
+        max_x = sorted[i].x;
+      }
+      if (sorted[i].y < min_y) {
+        min_y = sorted[i].y;
+      }
+      if (sorted[i].y > max_y) {
+        max_y = sorted[i].y;
+      }
     }
-    // Top-right: minimum difference (y - x)
-    if (corners[i].y - corners[i].x < top_right.y - top_right.x) {
-      top_right = corners[i];
+
+    // Determine which corner is missing by finding which position in the
+    // rectangle is empty
+    bool has_tl = false, has_tr = false, has_bl = false, has_br = false;
+    for (int i = 0; i < 3; i++) {
+      double x = sorted[i].x;
+      double y = sorted[i].y;
+
+      // Use small tolerance for floating point comparison
+      double tolerance = 1.0;
+
+      if (fabs(x - min_x) < tolerance && fabs(y - min_y) < tolerance) {
+        has_tl = true;
+      }
+      else if (fabs(x - max_x) < tolerance && fabs(y - min_y) < tolerance) {
+        has_tr = true;
+      }
+      else if (fabs(x - min_x) < tolerance && fabs(y - max_y) < tolerance) {
+        has_bl = true;
+      }
+      else if (fabs(x - max_x) < tolerance && fabs(y - max_y) < tolerance) {
+        has_br = true;
+      }
     }
-    // Bottom-left: maximum difference (y - x)
-    if (corners[i].y - corners[i].x > bottom_left.y - bottom_left.x) {
-      bottom_left = corners[i];
+
+    // Calculate the missing corner
+    Point2D missing_corner;
+    if (!has_tl) {
+      missing_corner.x = min_x;
+      missing_corner.y = min_y;
     }
-    // Bottom-right: maximum sum (x + y)
-    if (corners[i].x + corners[i].y > bottom_right.x + bottom_right.y) {
-      bottom_right = corners[i];
+    else if (!has_tr) {
+      missing_corner.x = max_x;
+      missing_corner.y = min_y;
+    }
+    else if (!has_bl) {
+      missing_corner.x = min_x;
+      missing_corner.y = max_y;
+    }
+    else if (!has_br) {
+      missing_corner.x = max_x;
+      missing_corner.y = max_y;
+    }
+    else {
+      // Fallback: use parallelogram completion
+      // For a parallelogram ABCD where we have A, B, C and need D:
+      // D = A + C - B (assuming B and D are diagonal)
+      // Try all combinations and pick the best one
+      Point2D candidates[3];
+      candidates[0].x = corners[0].x + corners[1].x - corners[2].x;
+      candidates[0].y = corners[0].y + corners[1].y - corners[2].y;
+      candidates[1].x = corners[0].x + corners[2].x - corners[1].x;
+      candidates[1].y = corners[0].y + corners[2].y - corners[1].y;
+      candidates[2].x = corners[1].x + corners[2].x - corners[0].x;
+      candidates[2].y = corners[1].y + corners[2].y - corners[0].y;
+
+      // Choose the candidate that gives the most reasonable result
+      missing_corner = candidates[2]; // Default to the last one
+      double best_score = -1;
+
+      for (int i = 0; i < 3; i++) {
+        double score = 0;
+        if (candidates[i].x >= 0) {
+          score += 1;
+        }
+        if (candidates[i].y >= 0) {
+          score += 1;
+        }
+
+        // Check if it's not a duplicate
+        bool is_duplicate = false;
+        for (int j = 0; j < 3; j++) {
+          if (fabs(candidates[i].x - corners[j].x) < 0.1 &&
+              fabs(candidates[i].y - corners[j].y) < 0.1) {
+            is_duplicate = true;
+            break;
+          }
+        }
+        if (!is_duplicate) {
+          score += 5;
+        }
+
+        if (score > best_score) {
+          best_score = score;
+          missing_corner = candidates[i];
+        }
+      }
+    }
+
+    working_corners[3] = missing_corner;
+    corners_to_process = 4;
+  }
+  else {
+    // Copy all existing corners
+    for (uint32_t i = 0; i < num_corners; i++) {
+      working_corners[i] = corners[i];
+    }
+    corners_to_process = num_corners;
+  }
+
+  // Clockwise corner sorting starting from top-left corner
+  // Works with any number of corners >= 3
+
+  // Step 1: Find the center point (centroid)
+  double center_x = 0.0, center_y = 0.0;
+  for (uint32_t i = 0; i < corners_to_process; i++) {
+    center_x += working_corners[i].x;
+    center_y += working_corners[i].y;
+  }
+  center_x /= corners_to_process;
+  center_y /= corners_to_process;
+
+  // Step 2: Find the top-left corner (minimum x+y sum)
+  uint32_t top_left_idx = 0;
+  double min_sum = working_corners[0].x + working_corners[0].y;
+  for (uint32_t i = 1; i < corners_to_process; i++) {
+    double sum = working_corners[i].x + working_corners[i].y;
+    if (sum < min_sum) {
+      min_sum = sum;
+      top_left_idx = i;
     }
   }
 
-  // Store results in order: top-left, top-right, bottom-right, bottom-left
-  result[0] = top_left;
-  result[1] = top_right;
-  result[2] = bottom_right;
-  result[3] = bottom_left;
+  // Step 3: Create array with indices and calculate angles relative to center
+  typedef struct {
+    uint32_t index;
+    double angle;
+    double distance;
+  } CornerInfo;
+
+  CornerInfo *corner_info = malloc(corners_to_process * sizeof(CornerInfo));
+  if (!corner_info) {
+    free(working_corners);
+    Corners empty_corners = {0, 0, 0, 0, 0, 0, 0, 0};
+    return empty_corners;
+  }
+
+  for (uint32_t i = 0; i < corners_to_process; i++) {
+    corner_info[i].index = i;
+    corner_info[i].distance = sqrt(
+      (working_corners[i].x - center_x) * (working_corners[i].x - center_x) +
+      (working_corners[i].y - center_y) * (working_corners[i].y - center_y)
+    );
+
+    // Calculate angle from center to corner
+    double dx = working_corners[i].x - center_x;
+    double dy = working_corners[i].y - center_y;
+    corner_info[i].angle = atan2(dy, dx);
+
+    // Normalize angle to [0, 2π) range
+    if (corner_info[i].angle < 0) {
+      corner_info[i].angle += 2.0 * M_PI;
+    }
+  }
+
+  // Step 4: Calculate reference angle from center to top-left corner
+  double top_left_angle = corner_info[top_left_idx].angle;
+
+  // Step 5: Adjust all angles relative to top-left corner and sort clockwise
+  for (uint32_t i = 0; i < corners_to_process; i++) {
+    // Adjust angle relative to top-left corner
+    corner_info[i].angle = corner_info[i].angle - top_left_angle;
+
+    // Normalize to [0, 2π) range
+    while (corner_info[i].angle < 0) {
+      corner_info[i].angle += 2.0 * M_PI;
+    }
+    while (corner_info[i].angle >= 2.0 * M_PI) {
+      corner_info[i].angle -= 2.0 * M_PI;
+    }
+  }
+
+  // Step 6: Sort corners by angle (clockwise from top-left)
+  for (uint32_t i = 0; i < corners_to_process - 1; i++) {
+    for (uint32_t j = 0; j < corners_to_process - 1 - i; j++) {
+      bool should_swap = false;
+
+      if (corner_info[j].angle > corner_info[j + 1].angle) {
+        should_swap = true;
+      }
+      else if (fabs(corner_info[j].angle - corner_info[j + 1].angle) < 1e-6) {
+        // If angles are very close, sort by distance from center (closer first)
+        if (corner_info[j].distance > corner_info[j + 1].distance) {
+          should_swap = true;
+        }
+      }
+
+      if (should_swap) {
+        CornerInfo temp = corner_info[j];
+        corner_info[j] = corner_info[j + 1];
+        corner_info[j + 1] = temp;
+      }
+    }
+  }
+
+  // Step 7: Copy sorted corners to result
+  for (uint32_t i = 0; i < corners_to_process; i++) {
+    result[i] = working_corners[corner_info[i].index];
+  }
 
   // Scale corners back to original image dimensions
   double scale_x = (double)width / out_width;
@@ -116,6 +336,10 @@ Corners sort_corners(
     .bl_x = result[3].x * scale_x,
     .bl_y = result[3].y * scale_y
   };
+
+  // Clean up allocated memory
+  free(corner_info);
+  free(working_corners);
 
   return sorted_corners_result;
 }

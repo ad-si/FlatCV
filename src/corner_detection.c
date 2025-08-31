@@ -34,19 +34,17 @@
  * 4. Create elevation map with Sobel
  * 5. Flatten elevation map at center seed to avoid being trapped in a local
  * minimum
- * 6. `watershed(image=elevation_map, markers=markers)`
+ * 6. Add black border to flood from all directions at once
+ * 7. `watershed(image=elevation_map, markers=markers)`
  *     Set center as marker for foreground basin and border for background basin
- * 7. Check region count equals 2
- * 8. Smooth result
- *     1. TODO: Add border to avoid connection with image boundaries
- *     1. Perform binary closing
- *     1. TODO: Remove border
- * 9. Use Foerstner corner detector (Harris detector corners are shifted
- * inwards)
- * 10. Sort corners
- * 11. TODO: Select 4 corners with the largest angle while maintaining their
+ * 8. Check region count equals 2
+ * 9. Smooth result with binary closing
+ * 10. Use Foerstner corner detector
+ *     (Harris detector corners are shifted inwards)
+ * 11. Sort corners
+ * 12. TODO: Select 4 corners with the largest angle while maintaining their
  * order
- * 12. Normalize corners based on scale ratio
+ * 13. Normalize corners based on scale ratio
  */
 int32_t count_colors(const uint8_t *image, int32_t width, int32_t height) {
   assert(image != NULL);
@@ -160,19 +158,21 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     .channels = 4,
     .data = resized_image
   };
-  write_debug_img(out_img, "temp_2_resized_image.png");
+  write_debug_img(out_img, "temp_1_resized_image.png");
 #endif
 
   // 3. Apply Gaussian blur
   uint8_t const *blurred_image =
     fcv_apply_gaussian_blur(out_width, out_height, 3.0, resized_image);
-  // Don't free resized_image here, as it is used for debugging later
+#ifndef DEBUG_LOGGING
+  free((void *)resized_image);
+#endif
   if (!blurred_image) {
     fprintf(stderr, "Error: Failed to apply Gaussian blur\n");
     exit(EXIT_FAILURE);
   }
 
-  // 5. Create elevation map with Sobel edge detection
+  // 4. Create elevation map with Sobel edge detection
   uint8_t *elevation_map = (uint8_t *)
     fcv_sobel_edge_detection(out_width, out_height, 4, blurred_image);
   free((void *)blurred_image);
@@ -181,7 +181,7 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     exit(EXIT_FAILURE);
   }
 
-  // 6. Flatten elevation map at center to not get trapped in a local minimum
+  // 5. Flatten elevation map at center to not get trapped in a local minimum
   fcv_draw_disk(
     out_width,
     out_height,
@@ -193,10 +193,31 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     elevation_map
   );
 
+  // 6. Add black border to flood from all directions at once
+  uint32_t bordered_width, bordered_height;
+  uint8_t *bordered_elevation_map = fcv_add_border(
+    out_width,
+    out_height,
+    1,        // Single channel grayscale
+    "000000", // Black border
+    1,        // Border width of 1 pixel
+    elevation_map,
+    &bordered_width,
+    &bordered_height
+  );
+
+  free(elevation_map);
+  if (!bordered_elevation_map) {
+    fprintf(stderr, "Error: Failed to add black border to elevation map\n");
+    exit(EXIT_FAILURE);
+  }
+
 #ifdef DEBUG_LOGGING
-  out_img.data = elevation_map;
+  out_img.data = bordered_elevation_map;
   out_img.channels = 1; // Grayscale
-  write_debug_img(out_img, "temp_6_elevation_map.png");
+  out_img.width = bordered_width;
+  out_img.height = bordered_height;
+  write_debug_img(out_img, "temp_2_elevation_map.png");
 #endif
 
   // 7. Perform watershed segmentation
@@ -204,31 +225,49 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   Point2D *markers = malloc(num_markers * sizeof(Point2D));
   if (!markers) {
     fprintf(stderr, "Error: Failed to allocate memory for markers\n");
-    free((void *)elevation_map);
+    free((void *)bordered_elevation_map);
     exit(EXIT_FAILURE);
   }
   // Set center as foreground marker and upper left corner as background marker
-  markers[0] = (Point2D){.x = out_width / 2.0, .y = out_height / 2.0};
+  // Adjust for the added border (border width = 1)
+  markers[0] = (Point2D){.x = bordered_width / 2.0, .y = bordered_height / 2.0};
   markers[1] = (Point2D){.x = 0, .y = 0};
 
-  uint8_t *segmented_image = fcv_watershed_segmentation(
-    out_width,
-    out_height,
-    elevation_map,
+  uint8_t *segmented_image_wide = fcv_watershed_segmentation(
+    bordered_width,
+    bordered_height,
+    bordered_elevation_map,
     markers,
     num_markers,
     false // No boundaries
   );
-  free((void *)elevation_map);
+  free((void *)bordered_elevation_map);
   free((void *)markers);
 
+  // Remove 1 pixel border from segmented image
+  uint8_t *segmented_image = malloc(out_width * out_height * 4);
+  if (!segmented_image) {
+    fprintf(stderr, "Error: Failed to allocate memory for segmented image\n");
+    free((void *)segmented_image_wide);
+    exit(EXIT_FAILURE);
+  }
+  for (uint32_t y = 1; y < bordered_height - 1; y++) {
+    memcpy(
+      &segmented_image[(y - 1) * out_width * 4],
+      &segmented_image_wide[(y * bordered_width + 1) * 4],
+      out_width * 4
+    );
+  }
+
 #ifdef DEBUG_LOGGING
-  out_img.data = segmented_image;
+  out_img.width = out_width;
+  out_img.height = out_height;
   out_img.channels = 4;
-  write_debug_img(out_img, "temp_7_watershed.png");
+  out_img.data = segmented_image;
+  write_debug_img(out_img, "temp_3_watershed.png");
 #endif
 
-  // Check if the image has exactly 2 regions (foreground and background)
+  // 8. Check if the image has exactly 2 regions (foreground and background)
   int32_t region_count = count_colors(segmented_image, out_width, out_height);
   if (region_count != 2) {
     fprintf(stderr, "Error: Expected 2 regions, found %d\n", region_count);
@@ -250,10 +289,10 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 #ifdef DEBUG_LOGGING
   out_img.data = segmented_binary;
   out_img.channels = 1;
-  write_debug_img(out_img, "temp_7_watershed_binary.png");
+  write_debug_img(out_img, "temp_4_watershed_binary.png");
 #endif
 
-  // 8. Smooth the result
+  // 9. Smooth the result
   uint8_t *segmented_closed = fcv_binary_closing_disk(
     segmented_binary,
     out_width,
@@ -268,10 +307,10 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 
 #ifdef DEBUG_LOGGING
   out_img.data = segmented_closed;
-  write_debug_img(out_img, "temp_8_segmented_closed.png");
+  write_debug_img(out_img, "temp_5_segmented_closed.png");
 #endif
 
-  // 9. Find corners in the closed image
+  // 10. Find corners in the closed image
   uint8_t *corner_response = fcv_foerstner_corner(
     out_width,
     out_height,
@@ -298,7 +337,7 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
 
 #ifdef DEBUG_LOGGING
   out_img.data = w_channel;
-  write_debug_img(out_img, "temp_9_corner_response.png");
+  write_debug_img(out_img, "temp_6_corner_response.png");
 #endif
   free(w_channel);
 
@@ -317,27 +356,6 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     exit(EXIT_FAILURE);
   }
 
-#ifdef DEBUG_LOGGING
-  // Draw corner peaks on the resized image
-  for (uint32_t i = 0; i < peaks->count; i++) {
-    fcv_draw_circle(
-      out_width,
-      out_height,
-      4,        // RGBA
-      "FF0000", // Red color for corners
-      2,        // Radius
-      peaks->points[i].x,
-      peaks->points[i].y,
-      (uint8_t *)resized_image
-    );
-  }
-
-  out_img.data = resized_image;
-  out_img.channels = 4;
-  write_debug_img(out_img, "temp_10_corners.png");
-#endif
-  free((void *)resized_image);
-
   Point2D *sorted_result = malloc(peaks->count * sizeof(Point2D));
   Corners sorted_corners = sort_corners(
     width,
@@ -349,6 +367,97 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     sorted_result
   );
   free(sorted_result);
+
+#ifdef DEBUG_LOGGING
+  // Print peaks for debugging
+  printf("Peaks:\n");
+  printf("%.0f,%.0f\n", sorted_corners.tl_x, sorted_corners.tl_y);
+  printf("%.0f,%.0f\n", sorted_corners.tr_x, sorted_corners.tr_y);
+  printf("%.0f,%.0f\n", sorted_corners.br_x, sorted_corners.br_y);
+  printf("%.0f,%.0f\n", sorted_corners.bl_x, sorted_corners.bl_y);
+  // Draw corner peaks on the grayscale and resized image
+  for (uint32_t i = 0; i < peaks->count; i++) {
+    // Print peak coordinates for debugging
+    printf(
+      "Peak %u: (%.1f, %.1f)\n",
+      i,
+      peaks->points[i].x,
+      peaks->points[i].y
+    );
+    fcv_draw_circle(
+      out_width,
+      out_height,
+      4,        // GRAY as RGBA (each value is the same)
+      "FF0000", // Red color for corners
+      2,        // Radius
+      peaks->points[i].x,
+      peaks->points[i].y,
+      (uint8_t *)resized_image
+    );
+  }
+
+  // Draw sorted corners with different colors to distinguish from peaks
+  // Scale the sorted corners back to the resized image dimensions for drawing
+  double scale_x = (double)out_width / width;
+  double scale_y = (double)out_height / height;
+
+  // Draw top-left corner in blue
+  fcv_draw_circle(
+    out_width,
+    out_height,
+    4,
+    "0000FF", // Blue color for top-left
+    3,        // Slightly larger radius to distinguish from peaks
+    sorted_corners.tl_x * scale_x,
+    sorted_corners.tl_y * scale_y,
+    (uint8_t *)resized_image
+  );
+
+  // Draw top-right corner in green
+  fcv_draw_circle(
+    out_width,
+    out_height,
+    4,
+    "00FF00", // Green color for top-right
+    3,
+    sorted_corners.tr_x * scale_x,
+    sorted_corners.tr_y * scale_y,
+    (uint8_t *)resized_image
+  );
+
+  // Draw bottom-right corner in yellow
+  fcv_draw_circle(
+    out_width,
+    out_height,
+    4,
+    "FFFF00", // Yellow color for bottom-right
+    3,
+    sorted_corners.br_x * scale_x,
+    sorted_corners.br_y * scale_y,
+    (uint8_t *)resized_image
+  );
+
+  // Draw bottom-left corner in magenta
+  fcv_draw_circle(
+    out_width,
+    out_height,
+    4,
+    "FF00FF", // Magenta color for bottom-left
+    3,
+    sorted_corners.bl_x * scale_x,
+    sorted_corners.bl_y * scale_y,
+    (uint8_t *)resized_image
+  );
+
+  Image corners_img = {
+    .width = out_width,
+    .height = out_height,
+    .channels = 4,
+    .data = resized_image
+  };
+  write_debug_img(corners_img, "temp_7_corners.png");
+  free((void *)resized_image);
+#endif
 
   free(peaks);
   return sorted_corners;
