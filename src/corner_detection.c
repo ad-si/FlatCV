@@ -42,8 +42,7 @@
  * 10. Use Foerstner corner detector
  *     (Harris detector corners are shifted inwards)
  * 11. Sort corners
- * 12. TODO: Select 4 corners with the largest angle while maintaining their
- * order
+ * 12. Select 4 corners with the largest angle while maintaining their order
  * 13. Normalize corners based on scale ratio
  */
 int32_t count_colors(const uint8_t *image, int32_t width, int32_t height) {
@@ -356,8 +355,9 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     exit(EXIT_FAILURE);
   }
 
+  // First, sort all corners to get them in clockwise order
   Point2D *sorted_result = malloc(peaks->count * sizeof(Point2D));
-  Corners sorted_corners = sort_corners(
+  sort_corners(
     width,
     height,
     out_width,
@@ -366,6 +366,112 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     peaks->count,
     sorted_result
   );
+
+  // Scale corners back to original image dimensions
+  double scale_x = (double)width / out_width;
+  double scale_y = (double)height / out_height;
+  
+  Corners sorted_corners;
+  
+  if (peaks->count > 4) {
+    // Calculate angles for each corner using cross product method
+    double *angles = malloc(peaks->count * sizeof(double));
+    typedef struct {
+      uint32_t index;
+      double angle_abs;
+    } AngleIndex;
+    AngleIndex *angle_indices = malloc(peaks->count * sizeof(AngleIndex));
+    
+    for (uint32_t i = 0; i < peaks->count; i++) {
+      // Get the three consecutive points for angle calculation
+      Point2D prev = sorted_result[(i - 1 + peaks->count) % peaks->count];
+      Point2D curr = sorted_result[i];
+      Point2D next = sorted_result[(i + 1) % peaks->count];
+      
+      // Calculate vectors from current point
+      double a_x = prev.x - curr.x;
+      double a_y = prev.y - curr.y;
+      double b_x = next.x - curr.x;
+      double b_y = next.y - curr.y;
+      
+      // Calculate lengths of vectors
+      double a_len = sqrt(a_x * a_x + a_y * a_y);
+      double b_len = sqrt(b_x * b_x + b_y * b_y);
+      
+      if (a_len == 0 || b_len == 0) {
+        angles[i] = 0;
+      } else {
+        // Calculate cross product (z-component in 2D)
+        double cross_product = (a_x * b_y - a_y * b_x) / (a_len * b_len);
+        // Clamp to [-1, 1] to avoid numerical errors
+        if (cross_product > 1.0) cross_product = 1.0;
+        if (cross_product < -1.0) cross_product = -1.0;
+        
+        // Calculate angle in degrees
+        angles[i] = asin(cross_product) * 180.0 / M_PI;
+      }
+      
+      angle_indices[i].index = i;
+      angle_indices[i].angle_abs = fabs(angles[i]);
+    }
+    
+    // Sort indices by descending angle magnitude
+    for (uint32_t i = 0; i < peaks->count - 1; i++) {
+      for (uint32_t j = 0; j < peaks->count - 1 - i; j++) {
+        if (angle_indices[j].angle_abs < angle_indices[j + 1].angle_abs) {
+          AngleIndex temp = angle_indices[j];
+          angle_indices[j] = angle_indices[j + 1];
+          angle_indices[j + 1] = temp;
+        }
+      }
+    }
+    
+    // Take top 4 indices and sort them to maintain original clockwise order
+    uint32_t top_4_indices[4];
+    for (uint32_t i = 0; i < 4; i++) {
+      top_4_indices[i] = angle_indices[i].index;
+    }
+    
+    // Sort the top 4 indices to maintain original clockwise order
+    for (uint32_t i = 0; i < 3; i++) {
+      for (uint32_t j = 0; j < 3 - i; j++) {
+        if (top_4_indices[j] > top_4_indices[j + 1]) {
+          uint32_t temp = top_4_indices[j];
+          top_4_indices[j] = top_4_indices[j + 1];
+          top_4_indices[j + 1] = temp;
+        }
+      }
+    }
+    
+    // Create final corners struct directly from selected corners in clockwise order
+    // The first sorted corner becomes top-left, and we maintain clockwise sequence
+    sorted_corners = (Corners){
+      .tl_x = sorted_result[top_4_indices[0]].x * scale_x,
+      .tl_y = sorted_result[top_4_indices[0]].y * scale_y,
+      .tr_x = sorted_result[top_4_indices[1]].x * scale_x,
+      .tr_y = sorted_result[top_4_indices[1]].y * scale_y,
+      .br_x = sorted_result[top_4_indices[2]].x * scale_x,
+      .br_y = sorted_result[top_4_indices[2]].y * scale_y,
+      .bl_x = sorted_result[top_4_indices[3]].x * scale_x,
+      .bl_y = sorted_result[top_4_indices[3]].y * scale_y
+    };
+    
+    free(angles);
+    free(angle_indices);
+  } else {
+    // Use all available corners if we have 4 or fewer, already in clockwise order
+    sorted_corners = (Corners){
+      .tl_x = sorted_result[0].x * scale_x,
+      .tl_y = sorted_result[0].y * scale_y,
+      .tr_x = sorted_result[1 % peaks->count].x * scale_x,
+      .tr_y = sorted_result[1 % peaks->count].y * scale_y,
+      .br_x = sorted_result[2 % peaks->count].x * scale_x,
+      .br_y = sorted_result[2 % peaks->count].y * scale_y,
+      .bl_x = sorted_result[3 % peaks->count].x * scale_x,
+      .bl_y = sorted_result[3 % peaks->count].y * scale_y
+    };
+  }
+  
   free(sorted_result);
 
 #ifdef DEBUG_LOGGING
@@ -397,9 +503,9 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   }
 
   // Draw sorted corners with different colors to distinguish from peaks
-  // Scale the sorted corners back to the resized image dimensions for drawing
-  double scale_x = (double)out_width / width;
-  double scale_y = (double)out_height / height;
+  // Reuse the scale variables from above (note: inverted for drawing on resized image)
+  double draw_scale_x = (double)out_width / width;
+  double draw_scale_y = (double)out_height / height;
 
   // Draw top-left corner in blue
   fcv_draw_circle(
@@ -408,8 +514,8 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     4,
     "0000FF", // Blue color for top-left
     3,        // Slightly larger radius to distinguish from peaks
-    sorted_corners.tl_x * scale_x,
-    sorted_corners.tl_y * scale_y,
+    sorted_corners.tl_x * draw_scale_x,
+    sorted_corners.tl_y * draw_scale_y,
     (uint8_t *)resized_image
   );
 
@@ -420,8 +526,8 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     4,
     "00FF00", // Green color for top-right
     3,
-    sorted_corners.tr_x * scale_x,
-    sorted_corners.tr_y * scale_y,
+    sorted_corners.tr_x * draw_scale_x,
+    sorted_corners.tr_y * draw_scale_y,
     (uint8_t *)resized_image
   );
 
@@ -432,8 +538,8 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     4,
     "FFFF00", // Yellow color for bottom-right
     3,
-    sorted_corners.br_x * scale_x,
-    sorted_corners.br_y * scale_y,
+    sorted_corners.br_x * draw_scale_x,
+    sorted_corners.br_y * draw_scale_y,
     (uint8_t *)resized_image
   );
 
@@ -444,8 +550,8 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
     4,
     "FF00FF", // Magenta color for bottom-left
     3,
-    sorted_corners.bl_x * scale_x,
-    sorted_corners.bl_y * scale_y,
+    sorted_corners.bl_x * draw_scale_x,
+    sorted_corners.bl_y * draw_scale_y,
     (uint8_t *)resized_image
   );
 
