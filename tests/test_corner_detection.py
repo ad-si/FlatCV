@@ -117,8 +117,8 @@ def main():
     print(f"Test directory {test_dir} not found")
     return 1
 
-  # Find all image files with corresponding JSON files
-  image_files = list(test_dir.glob("*.jpeg"))
+  # Find all image files with corresponding JSON files recursively
+  image_files = list(test_dir.glob("**/*.jpeg"))
 
   if not image_files:
     print("No test images found")
@@ -126,52 +126,70 @@ def main():
 
   total_overlap = 0.0
   total_tests = 0
+  
+  # Group images by category
+  categories = {}
+  for image_file in image_files:
+    category = image_file.parent.name
+    if category not in categories:
+      categories[category] = []
+    categories[category].append(image_file)
 
   print(f"Running corner detection tests on {len(image_files)} images...")
   print()
 
-  for image_file in sorted(image_files):
-    json_file = image_file.with_suffix('.json')
+  # Process each category separately
+  for category in sorted(categories.keys()):
+    print(f"🏷️  {category.upper().replace('_', ' ')}")
+    category_overlap = 0.0
+    category_tests = 0
+    
+    for image_file in sorted(categories[category]):
+      json_file = image_file.with_suffix('.json')
 
-    if not json_file.exists():
-      print(f"⚠️  Skipping {image_file.name} - no ground truth file")
-      continue
+      if not json_file.exists():
+        print(f"⚠️  Skipping {image_file.name} - no ground truth file")
+        continue
 
-    # Load ground truth
-    try:
-      with open(json_file, 'r') as f:
-        ground_truth = json.load(f)
-    except json.JSONDecodeError as e:
-      print(f"❌ Error reading {json_file.name}: {e}")
-      continue
+      # Load ground truth
+      try:
+        with open(json_file, 'r') as f:
+          ground_truth = json.load(f)
+      except json.JSONDecodeError as e:
+        print(f"❌ Error reading {json_file.name}: {e}")
+        continue
 
-    # Run corner detection
-    detected = run_corner_detection(str(image_file))
-    if detected is None:
-      print(f"❌ {image_file.name}: Corner detection failed (0.0% overlap)")
+      # Run corner detection
+      detected = run_corner_detection(str(image_file))
+      if detected is None:
+        print(f"❌ {image_file.name}: Corner detection failed (0.0% overlap)")
+        category_tests += 1
+        total_tests += 1
+        continue
+
+      # Calculate overlap percentage
+      overlap = calculate_overlap_percentage(
+        detected.get('corners', {}),
+        ground_truth.get('corners', {})
+      )
+
+      category_overlap += overlap
+      category_tests += 1
       total_tests += 1
-      continue
+      total_overlap += overlap
 
-    # Calculate overlap percentage
-    overlap = calculate_overlap_percentage(
-      detected.get('corners', {}),
-      ground_truth.get('corners', {})
-    )
+      print(f"📊 {image_file.name}: {overlap:.1f}% overlap")
+    
+    # Print category summary
+    if category_tests > 0:
+      category_avg = category_overlap / category_tests
+      print(f"   📈 {category.replace('_', ' ').title()}: {category_avg:.1f}% average (n={category_tests})")
+    print()
 
-    total_tests += 1
-    total_overlap += overlap
-
-    print(f"📊 {image_file.name}: {overlap:.1f}% overlap")
-
-  # Calculate and display results
+  # Calculate and display overall results
   if total_tests > 0:
     average_overlap = total_overlap / total_tests
-    print()
-    print(
-      f"Average quadrilateral overlap across {total_tests
-        } images: {average_overlap:.1f}%"
-    )
-
+    print(f"🎯 Overall average quadrilateral overlap across {total_tests} images: {average_overlap:.1f}%")
     return 0
   else:
     print("No tests were run")
