@@ -55,13 +55,13 @@ test-amalgamation: flatcv.h flatcv.c tests/test_amalgamation.c
 
 
 .PHONY: test-corner-detection
-test-corner-detection: flatcv tests/test_corner_detection.py
+test-corner-detection: flatcv_mac_arm64 tests/test_corner_detection.py
 	# Test corner detection accuracy against ground truth
 	./tests/test_corner_detection.py
 
 
 .PHONY: test
-test: flatcv test-units test-integration test-amalgamation test-corner-detection
+test: flatcv_mac_arm64 test-units test-integration test-amalgamation test-corner-detection
 
 
 .PHONY: test-extended
@@ -93,7 +93,11 @@ analyze:
 	clang --analyze -Iinclude $(SRC_FILES)
 
 
-flatcv_debug: $(HDR_FILES) $(SRC_FILES)
+flatcv_mac_arm64_debug: $(HDR_FILES) $(SRC_FILES)
+	@if [ "$$(uname)" != "Darwin" ] || [ "$$(uname -m)" != "arm64" ]; then \
+		echo "Error: This target can only be built on Apple Silicon"; \
+		exit 1; \
+	fi
 	clang -g -Wall -Wextra -Wpedantic \
 		-Iinclude $(SRC_FILES) \
 		-DDEBUG_LOGGING \
@@ -101,17 +105,17 @@ flatcv_debug: $(HDR_FILES) $(SRC_FILES)
 
 
 .PHONY: debug
-debug: flatcv_debug
+debug: flatcv_mac_arm64_debug
 	lldb ./$<
 
 
 .PHONY: benchmark
-benchmark: flatcv
+benchmark: flatcv_mac_arm64
 	@./benchmark.sh
 
 
 .PHONY: leaks
-leaks: flatcv
+leaks: flatcv_mac_arm64
 	leaks --atExit -- \
 		./flatcv \
 			imgs/parrot_hq.jpeg \
@@ -119,14 +123,17 @@ leaks: flatcv
 			tmp/leaks_test.png
 
 
-flatcv: $(HDR_FILES) $(SRC_FILES)
+flatcv_mac_arm64: $(HDR_FILES) $(SRC_FILES)
+	@if [ "$$(uname)" != "Darwin" ] || [ "$$(uname -m)" != "arm64" ]; then \
+		echo "Error: This target can only be built on Apple Silicon"; \
+		exit 1; \
+	fi
 	gcc -Wall -Wextra -Wpedantic \
 		-Iinclude $(SRC_FILES) \
 		-lm -o $@
 
 .PHONY: mac-build
-mac-build: flatcv
-	cp flatcv flatcv_mac_arm64
+mac-build: flatcv_mac_arm64
 
 
 # Linux - Build binary inside Docker and copy it back to host
@@ -158,7 +165,7 @@ win-test: flatcv_windows_x86_64.exe
 
 
 .PHONY: build
-build: flatcv
+build: mac-build lin-build win-build wasm-build
 
 
 # WebAssembly build with Emscripten
@@ -179,8 +186,17 @@ wasm-build: flatcv.wasm
 
 
 .PHONY: install
-install: flatcv
-	sudo cp $< /usr/local/bin
+install:
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		make flatcv_mac_arm64; \
+		sudo cp flatcv_mac_arm64 /usr/local/bin/flatcv; \
+	elif [ "$$(uname)" = "Linux" ]; then \
+		make flatcv_linux_arm64; \
+		sudo cp flatcv_linux_arm64 /usr/local/bin/flatcv; \
+	else \
+		make flatcv_windows_x86_64.exe; \
+		echo "Copy flatcv_windows_x86_64.exe to your Windows machine!"; \
+	fi
 
 
 flatcv.h: $(HDR_SRC_FILES) license.txt
@@ -245,7 +261,7 @@ release: build combine mac-build lin-build win-build wasm-build
 clean:
 	-rm -f \
 		apply_test \
-		flatcv \
+		flatcv_* \
 		flatcv.c \
 		flatcv.h \
 		flatcv.js \
