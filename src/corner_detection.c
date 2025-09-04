@@ -343,8 +343,8 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
   // 10. Find corner peaks using thresholds
   // Gradually decrease thresholds until it finds at least 4 corners
   CornerPeaks *peaks = NULL;
-  double accuracy_thresh = 0.5;
-  double roundness_thresh = 0.3;
+  double accuracy_thresh = 0.4;
+  double roundness_thresh = 0.2;
   const double thresh_decrement = 0.05;
   const double min_thresh = 0.01;
 
