@@ -2,6 +2,12 @@
 help: makefile
 	@tail -n +4 makefile | grep ".PHONY"
 
+PREFIX ?= /usr/local
+CC ?= gcc
+CFLAGS ?=
+# libsanitizer is not supported on all targets
+EXTRAC_CFLAGS ?= -fsanitize=undefined,address
+
 # All source / header files in repository
 SRC_FILES := $(wildcard src/*.c)
 # Source files excluding CLI (for library builds)
@@ -16,7 +22,6 @@ HDR_SRC_FILES := \
 TEST_FILES := $(wildcard tests/*.c)
 
 
-
 .PHONY: format
 format:
 	clang-format -i $$(fd -e h -e c . src tests)
@@ -24,12 +29,12 @@ format:
 
 .PHONY: test-units
 test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
-	gcc -Wall -Wextra -Wpedantic \
+	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
 		-Iinclude tests/test.c $(LIB_SRC_FILES) \
 		-lm -o test_bin \
 	&& ./test_bin
 
-	gcc -Wall -Wextra -Wpedantic \
+	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
 		-Iinclude $(LIB_SRC_FILES) tests/apply_test.c \
 		-o apply_test \
 	&& ./apply_test
@@ -48,25 +53,26 @@ test-amalgamation: flatcv.h flatcv.c tests/test_amalgamation.c
 	# Test that amalgamated files compile and work correctly
 	mkdir -p tmp/amalgamation_test
 	cp flatcv.h flatcv.c tests/test_amalgamation.c tmp/amalgamation_test/
-	cd tmp/amalgamation_test && gcc -Wall -Wextra -Wpedantic \
+	cd tmp/amalgamation_test && $(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
 		flatcv.c test_amalgamation.c \
 		-lm -o test_amalgamation_bin \
 	&& ./test_amalgamation_bin
 
 
 .PHONY: test-corner-detection
-test-corner-detection: flatcv_mac_arm64 tests/test_corner_detection.py
+test-corner-detection: flatcv_mac tests/test_corner_detection.py
 	# Test corner detection accuracy against ground truth
 	./tests/test_corner_detection.py
 
 
 .PHONY: test
-test: flatcv_mac_arm64 test-units test-integration test-amalgamation test-corner-detection
+test: flatcv_mac test-units test-integration test-amalgamation test-corner-detection
 
 
 .PHONY: test-extended
 test-extended:
-	gcc \
+	$(CC) \
+		$(CFLAGS) \
 		-Wall \
 		-Wextra \
 		-Wpedantic \
@@ -83,8 +89,8 @@ test-extended:
 		-Wno-unused-parameter \
 		-Werror \
 		-g \
-		-fsanitize=undefined,address \
 		-fno-omit-frame-pointer \
+		$(EXTRA_CFLAGS) \
 		-Iinclude src/*.c tests/*.c
 
 
@@ -93,29 +99,29 @@ analyze:
 	clang --analyze -Iinclude $(SRC_FILES)
 
 
-flatcv_mac_arm64_debug: $(HDR_FILES) $(SRC_FILES)
-	@if [ "$$(uname)" != "Darwin" ] || [ "$$(uname -m)" != "arm64" ]; then \
-		echo "Error: This target can only be built on Apple Silicon"; \
+flatcv_mac_debug: $(HDR_FILES) $(SRC_FILES)
+	@if [ "$$(uname)" != "Darwin" ]; then \
+		echo "Error: This target can only be built on macOS"; \
 		exit 1; \
 	fi
-	clang -g -Wall -Wextra -Wpedantic \
+	$(CC) $(CFLAGS) -g -Wall -Wextra -Wpedantic \
 		-Iinclude $(SRC_FILES) \
 		-DDEBUG_LOGGING \
 		-lm -o $@
 
 
 .PHONY: debug
-debug: flatcv_mac_arm64_debug
+debug: flatcv_mac_debug
 	lldb ./$<
 
 
 .PHONY: benchmark
-benchmark: flatcv_mac_arm64
+benchmark: flatcv_mac
 	@./benchmark.sh
 
 
 .PHONY: leaks
-leaks: flatcv_mac_arm64
+leaks: flatcv_mac
 	leaks --atExit -- \
 		./flatcv \
 			imgs/parrot_hq.jpeg \
@@ -123,28 +129,51 @@ leaks: flatcv_mac_arm64
 			tmp/leaks_test.png
 
 
-flatcv_mac_arm64: $(HDR_FILES) $(SRC_FILES)
-	@if [ "$$(uname)" != "Darwin" ] || [ "$$(uname -m)" != "arm64" ]; then \
-		echo "Error: This target can only be built on Apple Silicon"; \
+flatcv_mac: $(HDR_FILES) $(SRC_FILES)
+	@if [ "$$(uname)" != "Darwin" ]; then \
+		echo "Error: This target can only be built on macOS"; \
 		exit 1; \
 	fi
-	gcc -Wall -Wextra -Wpedantic \
+	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
 		-Iinclude $(SRC_FILES) \
 		-lm -o $@
 
 .PHONY: mac-build
-mac-build: flatcv_mac_arm64
+mac-build: flatcv_mac
+
+
+libflatcv_mac.a: $(HDR_FILES) $(LIB_SRC_FILES)
+	@if [ "$$(uname)" != "Darwin" ]; then \
+		echo "Error: This target can only be built on macOS"; \
+		exit 1; \
+	fi
+	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic -c \
+		-Iinclude $(LIB_SRC_FILES) \
+		-fPIC
+	ar rcs $@ *.o
+
+libflatcv_mac.dylib: $(HDR_FILES) $(LIB_SRC_FILES)
+	@if [ "$$(uname)" != "Darwin" ]; then \
+		echo "Error: This target can only be built on macOS"; \
+		exit 1; \
+	fi
+	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic -dynamiclib -fPIC \
+		-Iinclude $(LIB_SRC_FILES) \
+		-lm -o $@
+
+.PHONY: mac-lib
+mac-lib: libflatcv_mac.a libflatcv_mac.dylib
 
 
 # Linux - Build binary inside Docker and copy it back to host
-flatcv_linux_arm64: Dockerfile
+flatcv_linux: Dockerfile
 	docker build -t flatcv-build .
 	docker create --name flatcv-tmp flatcv-build
-	docker cp flatcv-tmp:/flatcv ./flatcv_linux_arm64
+	docker cp flatcv-tmp:/flatcv ./flatcv_linux
 	docker rm flatcv-tmp
 
 .PHONY: lin-build
-lin-build: flatcv_linux_arm64
+lin-build: flatcv_linux
 
 
 # Windows - Cross-compilation with mingw-w64
@@ -188,14 +217,24 @@ wasm-build: flatcv.wasm
 .PHONY: install
 install:
 	@if [ "$$(uname)" = "Darwin" ]; then \
-		make flatcv_mac_arm64; \
-		sudo cp flatcv_mac_arm64 /usr/local/bin/flatcv; \
+		make flatcv_mac; \
+		cp flatcv_mac $(DESTDIR)$(PREFIX)/bin/flatcv; \
 	elif [ "$$(uname)" = "Linux" ]; then \
-		make flatcv_linux_arm64; \
-		sudo cp flatcv_linux_arm64 /usr/local/bin/flatcv; \
+		make flatcv_linux; \
+		cp flatcv_linux $(PREFIX)/bin/flatcv; \
 	else \
 		make flatcv_windows_x86_64.exe; \
 		echo "Copy flatcv_windows_x86_64.exe to your Windows machine!"; \
+	fi
+
+
+.PHONY: install-lib
+install-lib:
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		make mac-lib flatcv.h; \
+		cp libflatcv_mac.a $(DESTDIR)$(PREFIX)/lib/; \
+		cp libflatcv_mac.dylib $(DESTDIR)$(PREFIX)/lib/; \
+		cp flatcv.h $(DESTDIR)$(PREFIX)/include/; \
 	fi
 
 
