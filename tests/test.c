@@ -880,6 +880,185 @@ next_test:
   }
 }
 
+int32_t test_fcv_trim_threshold() {
+  bool test_ok = true;
+
+  // Test 1: Image with near-uniform border (simulating JPEG artifacts)
+  // Border pixels vary slightly from each other
+  {
+    int32_t width = 5;
+    int32_t height = 5;
+
+    // Create 5x5 RGBA image with near-uniform border
+    // Border has slight variations (RGB differs by ~5 units, within 2% of 255)
+    uint8_t data[100] = {
+      // Row 0: near-uniform border (slight variations)
+      0,   0,   0,   255, 2,   1,   3,   255, 1,   2,   1,   255, 3,   1,   2,
+      255, 0,   0,   0,   255,
+      // Row 1: border, content, border
+      2,   1,   0,   255, 255, 0,   0,   255, 0,   255, 0,   255, 0,   0,   255,
+      255, 1,   2,   1,   255,
+      // Row 2: border, content, border
+      0,   2,   1,   255, 128, 128, 128, 255, 255, 255, 255, 255, 64,  64,  64,
+      255, 2,   0,   2,   255,
+      // Row 3: border, content, border
+      1,   0,   2,   255, 0,   128, 255, 255, 255, 128, 0,   255, 128, 0,   255,
+      255, 0,   1,   0,   255,
+      // Row 4: near-uniform border (slight variations)
+      0,   0,   0,   255, 1,   3,   0,   255, 2,   0,   2,   255, 0,   2,   1,
+      255, 0,   0,   0,   255
+    };
+
+    int32_t result_width = width;
+    int32_t result_height = height;
+
+    // Test with 0% threshold (exact match) - should NOT trim the varied border
+    uint8_t *result =
+      fcv_trim_threshold(&result_width, &result_height, 4, data, 0.0);
+
+    if (!result) {
+      printf("❌ Trim threshold test failed: NULL result for 0%% threshold\n");
+      test_ok = false;
+    }
+    else {
+      // With 0% threshold, no trimming should occur due to slight variations
+      if (result_width != width || result_height != height) {
+        printf(
+          "❌ Trim threshold test failed: 0%% threshold should not trim varied "
+          "border, got %dx%d\n",
+          result_width,
+          result_height
+        );
+        test_ok = false;
+      }
+      free(result);
+    }
+
+    // Test with 2% threshold (~5 units) - should trim the varied border
+    result_width = width;
+    result_height = height;
+    result = fcv_trim_threshold(&result_width, &result_height, 4, data, 2.0);
+
+    if (!result) {
+      printf("❌ Trim threshold test failed: NULL result for 2%% threshold\n");
+      test_ok = false;
+    }
+    else {
+      // With 2% threshold, should trim to 3x3 center
+      if (result_width != 3 || result_height != 3) {
+        printf(
+          "❌ Trim threshold test failed: 2%% threshold should trim to 3x3, "
+          "got %dx%d\n",
+          result_width,
+          result_height
+        );
+        test_ok = false;
+      }
+      free(result);
+    }
+  }
+
+  // Test 2: Threshold clamping (negative and >100)
+  {
+    int32_t width = 3;
+    int32_t height = 3;
+    uint8_t data[36] = {
+      0, 0, 0, 255, 0,   0,   0,   255, 0, 0, 0, 255, 0,   0,   0,   255, 255, 255,
+      255, 255, 0, 0, 0, 255, 0,   0,   0, 255, 0, 0, 0, 255, 0,   0,   0,   255
+    };
+
+    int32_t result_width = width;
+    int32_t result_height = height;
+
+    // Negative threshold should be clamped to 0
+    uint8_t *result =
+      fcv_trim_threshold(&result_width, &result_height, 4, data, -10.0);
+    if (!result) {
+      printf("❌ Trim threshold test failed: NULL result for negative "
+             "threshold\n");
+      test_ok = false;
+    }
+    else {
+      free(result);
+    }
+
+    // Threshold > 100 should be clamped to 100
+    result_width = width;
+    result_height = height;
+    result = fcv_trim_threshold(&result_width, &result_height, 4, data, 150.0);
+    if (!result) {
+      printf(
+        "❌ Trim threshold test failed: NULL result for threshold > 100\n"
+      );
+      test_ok = false;
+    }
+    else {
+      free(result);
+    }
+  }
+
+  // Test 3: NULL input
+  {
+    int32_t width = 5;
+    int32_t height = 5;
+    uint8_t *result =
+      fcv_trim_threshold(&width, &height, 4, NULL, 2.0);
+    if (result != NULL) {
+      printf(
+        "❌ Trim threshold test failed: should return NULL for NULL input\n"
+      );
+      test_ok = false;
+      free(result);
+    }
+  }
+
+  // Test 4: High threshold (100%) should trim everything to minimum
+  {
+    int32_t width = 3;
+    int32_t height = 3;
+    // All different colors
+    uint8_t data[36] = {
+      255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255,
+      128, 0, 0, 255, 64, 64, 64, 255, 0, 128, 0, 255,
+      0, 0, 128, 255, 128, 128, 0, 255, 0, 128, 128, 255
+    };
+
+    int32_t result_width = width;
+    int32_t result_height = height;
+
+    uint8_t *result =
+      fcv_trim_threshold(&result_width, &result_height, 4, data, 100.0);
+    if (!result) {
+      printf(
+        "❌ Trim threshold test failed: NULL result for 100%% threshold\n"
+      );
+      test_ok = false;
+    }
+    else {
+      // With 100% tolerance, everything matches, should trim to minimum (1x1)
+      if (result_width != 1 || result_height != 1) {
+        printf(
+          "❌ Trim threshold test failed: 100%% threshold should trim to 1x1, "
+          "got %dx%d\n",
+          result_width,
+          result_height
+        );
+        test_ok = false;
+      }
+      free(result);
+    }
+  }
+
+  if (test_ok) {
+    printf("✅ Trim threshold test passed\n");
+    return 0;
+  }
+  else {
+    printf("❌ Trim threshold test failed\n");
+    return 1;
+  }
+}
+
 int32_t test_fcv_histogram() {
   bool test_ok = true;
 
@@ -1510,8 +1689,8 @@ int32_t main() {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
       !test_perspective_transform_float() && !test_fcv_foerstner_corner() &&
       !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk() &&
-      !test_fcv_trim() && !test_fcv_histogram() && !test_fcv_add_border() &&
-      !test_sort_corners()) {
+      !test_fcv_trim() && !test_fcv_trim_threshold() && !test_fcv_histogram() &&
+      !test_fcv_add_border() && !test_sort_corners()) {
     printf("✅ All tests passed\n");
     return 0;
   }
