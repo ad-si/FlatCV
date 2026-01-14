@@ -49,3 +49,41 @@ Successfully saved processed image to 'imgs/page_bw_smooth.png'
 ```scrut
 $ git diff --quiet imgs/page_bw_smooth.png
 ```
+
+
+### Otsu Threshold
+
+Apply [Otsu's method](https://en.wikipedia.org/wiki/Otsu%27s_method) to automatically find the optimal threshold value for binarization.
+
+Input | Output
+------|--------
+![](imgs/parrot.jpeg) | ![](imgs/parrot_threshold.png)
+
+```scrut
+$ ./flatcv imgs/parrot.jpeg threshold imgs/parrot_threshold.png
+Loaded image: 512x384 with 3 channels
+Executing pipeline with 1 operations:
+Applying operation: threshold
+  → Completed in \d+.\d+ ms \(output: 512x384\) (regex)
+Final output dimensions: 512x384
+Successfully saved processed image to 'imgs/parrot_threshold.png'
+```
+
+
+### Sobel Edge Detection
+
+Detect edges in an image using the [Sobel operator](https://en.wikipedia.org/wiki/Sobel_operator), which calculates the gradient of image intensity at each pixel.
+
+Input | Output
+------|--------
+![](imgs/parrot.jpeg) | ![](imgs/parrot_sobel.png)
+
+```scrut
+$ ./flatcv imgs/parrot.jpeg sobel imgs/parrot_sobel.png
+Loaded image: 512x384 with 3 channels
+Executing pipeline with 1 operations:
+Applying operation: sobel
+  → Completed in \d+.\d+ ms \(output: 512x384\) (regex)
+Final output dimensions: 512x384
+Successfully saved processed image to 'imgs/parrot_sobel.png'
+```

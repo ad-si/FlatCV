@@ -1,5 +1,10 @@
 ## Grayscale Conversion
 
+Convert color images to grayscale using the luminosity method, which weighs RGB channels based on human perception of brightness.
+
+
+### Basic Grayscale
+
 Input | Output
 ------|--------
 ![](imgs/parrot.jpeg) | ![](imgs/parrot_grayscale.jpeg)
