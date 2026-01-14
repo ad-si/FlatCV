@@ -27,7 +27,12 @@ typedef struct {
   int32_t capacity;
 } Queue;
 
-static Queue *create_queue(int32_t capacity) {
+static Queue *create_queue(size_t capacity) {
+  if (capacity == 0 || capacity > SIZE_MAX / sizeof(QueueItem) ||
+      capacity > INT32_MAX) {
+    return NULL;
+  }
+
   Queue *q = malloc(sizeof(Queue));
   if (!q) {
     return NULL;
@@ -42,7 +47,7 @@ static Queue *create_queue(int32_t capacity) {
   q->front = 0;
   q->rear = -1;
   q->size = 0;
-  q->capacity = capacity;
+  q->capacity = (int32_t)capacity;
   return q;
 }
 
@@ -109,8 +114,17 @@ uint8_t *fcv_watershed_segmentation(
     return NULL;
   }
 
-  // Validate all marker positions
+  if (width == 0 || height == 0) {
+    return NULL;
+  }
+
+  // Validate all marker positions and coordinates
   for (uint32_t m = 0; m < num_markers; m++) {
+    // Check for NaN/Inf
+    if (!isfinite(markers[m].x) || !isfinite(markers[m].y)) {
+      return NULL;
+    }
+
     int32_t marker_x = (int32_t)markers[m].x;
     int32_t marker_y = (int32_t)markers[m].y;
 
@@ -121,7 +135,21 @@ uint8_t *fcv_watershed_segmentation(
     }
   }
 
-  uint32_t img_length_px = width * height;
+  // Check for overflow: width * height
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+  size_t img_length_px = (size_t)width * height;
+
+  // Check for overflow in output_data allocation (pixels * 4)
+  if (img_length_px > SIZE_MAX / 4) {
+    return NULL;
+  }
+
+  // Check for overflow in labels allocation
+  if (img_length_px > SIZE_MAX / sizeof(int32_t)) {
+    return NULL;
+  }
 
   // Create output data
   uint8_t *output_data = malloc(img_length_px * 4);

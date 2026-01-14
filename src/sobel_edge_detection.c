@@ -34,11 +34,21 @@ uint8_t *fcv_sobel_edge_detection(
   uint32_t channels,
   uint8_t const *const data
 ) {
-  if (!data || width == 0 || height == 0) {
+  if (!data || width == 0 || height == 0 || channels == 0) {
     return NULL;
   }
 
-  uint32_t img_length_px = width * height;
+  // Check for overflow: width * height
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+  size_t img_length_px = (size_t)width * height;
+
+  // Check for overflow in magnitudes allocation
+  if (img_length_px > SIZE_MAX / sizeof(double)) {
+    return NULL;
+  }
+
   uint8_t *grayscale_data;
   bool allocated_grayscale = false;
 
@@ -107,14 +117,14 @@ uint8_t *fcv_sobel_edge_detection(
             py = height - 1;
           }
 
-          uint8_t pixel = grayscale_data[py * width + px];
+          uint8_t pixel = grayscale_data[(size_t)py * width + px];
           gx += pixel * sobel_x[ky + 1][kx + 1];
           gy += pixel * sobel_y[ky + 1][kx + 1];
         }
       }
 
-      double magnitude = sqrt(gx * gx + gy * gy);
-      magnitudes[y * width + x] = magnitude;
+      double magnitude = sqrt((double)gx * gx + (double)gy * gy);
+      magnitudes[(size_t)y * width + x] = magnitude;
 
       if (magnitude < min_magnitude) {
         min_magnitude = magnitude;
@@ -133,13 +143,21 @@ uint8_t *fcv_sobel_edge_detection(
 
   for (uint32_t y = 0; y < height; y++) {
     for (uint32_t x = 0; x < width; x++) {
-      double magnitude = magnitudes[y * width + x];
+      double magnitude = magnitudes[(size_t)y * width + x];
 
       // Normalize to 0-255 range based on actual min/max
       int32_t final_magnitude =
         (int32_t)(((magnitude - min_magnitude) / range) * 255.0);
 
-      sobel_data[y * width + x] = final_magnitude;
+      // Clamp to valid range
+      if (final_magnitude < 0) {
+        final_magnitude = 0;
+      }
+      if (final_magnitude > 255) {
+        final_magnitude = 255;
+      }
+
+      sobel_data[(size_t)y * width + x] = (uint8_t)final_magnitude;
     }
   }
 

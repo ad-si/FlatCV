@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <limits.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -28,8 +29,11 @@ void fcv_set_circle_pixel(
   uint8_t g,
   uint8_t b
 ) {
+  if (!data || width == 0 || height == 0 || channels == 0) {
+    return;
+  }
   if (px >= 0 && px < (int32_t)width && py >= 0 && py < (int32_t)height) {
-    uint32_t pixel_index = (py * width + px) * channels;
+    size_t pixel_index = ((size_t)py * width + px) * channels;
 
     if (channels == 1) {
       // Grayscale: use luminance formula
@@ -128,7 +132,18 @@ void fcv_draw_circle(
   double center_y,
   uint8_t *data
 ) {
-  if (!data) {
+  if (!data || !hex_color || width == 0 || height == 0 || channels == 0) {
+    return;
+  }
+
+  // Validate radius and center coordinates
+  if (radius < 0 || !isfinite(radius) || !isfinite(center_x) ||
+      !isfinite(center_y)) {
+    return;
+  }
+
+  // Reject excessive radius to prevent integer overflow in Bresenham algorithm
+  if (radius > INT32_MAX / 2) {
     return;
   }
 
@@ -197,7 +212,18 @@ void fcv_draw_disk(
   double center_y,
   uint8_t *data
 ) {
-  if (!data) {
+  if (!data || !hex_color || width == 0 || height == 0 || channels == 0) {
+    return;
+  }
+
+  // Validate radius and center coordinates
+  if (radius < 0 || !isfinite(radius) || !isfinite(center_x) ||
+      !isfinite(center_y)) {
+    return;
+  }
+
+  // Reject excessive radius to prevent integer overflow in Bresenham algorithm
+  if (radius > INT32_MAX / 2) {
     return;
   }
 
@@ -254,7 +280,18 @@ uint8_t *fcv_add_border(
   uint32_t *output_width,
   uint32_t *output_height
 ) {
-  if (!input_data || !output_width || !output_height || border_width == 0) {
+  if (!input_data || !output_width || !output_height || !hex_color ||
+      border_width == 0 || channels == 0) {
+    return NULL;
+  }
+
+  if (width == 0 || height == 0) {
+    return NULL;
+  }
+
+  // Check for overflow in output dimensions
+  if (border_width > (UINT32_MAX - width) / 2 ||
+      border_width > (UINT32_MAX - height) / 2) {
     return NULL;
   }
 
@@ -266,8 +303,17 @@ uint8_t *fcv_add_border(
   *output_width = width + 2 * border_width;
   *output_height = height + 2 * border_width;
 
-  // Allocate memory for output image
-  size_t output_size = *output_width * *output_height * channels;
+  // Check for overflow in memory allocation: output_width * output_height *
+  // channels
+  if (*output_width > SIZE_MAX / *output_height) {
+    return NULL;
+  }
+  size_t num_pixels = (size_t)(*output_width) * (*output_height);
+  if (num_pixels > SIZE_MAX / channels) {
+    return NULL;
+  }
+  size_t output_size = num_pixels * channels;
+
   uint8_t *output_data = malloc(output_size);
   if (!output_data) {
     return NULL;

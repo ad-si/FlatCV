@@ -23,13 +23,19 @@ uint8_t *fcv_binary_dilation_disk(
     return NULL;
   }
 
-  uint8_t *result = malloc(width * height);
+  // Check for overflow: width * height (width and height already validated > 0)
+  if ((size_t)width > SIZE_MAX / (size_t)height) {
+    return NULL;
+  }
+  size_t num_pixels = (size_t)width * (size_t)height;
+
+  uint8_t *result = malloc(num_pixels);
   if (!result) {
     return NULL;
   }
 
   // Initialize result to 0 (black)
-  memset(result, 0, width * height);
+  memset(result, 0, num_pixels);
 
   // For each pixel in the image
   for (int32_t y = 0; y < height; y++) {
@@ -74,13 +80,19 @@ static uint8_t *binary_erosion_disk_internal(
     return NULL;
   }
 
-  uint8_t *result = malloc(width * height);
+  // Check for overflow: width * height (width and height already validated > 0)
+  if ((size_t)width > SIZE_MAX / (size_t)height) {
+    return NULL;
+  }
+  size_t num_pixels = (size_t)width * (size_t)height;
+
+  uint8_t *result = malloc(num_pixels);
   if (!result) {
     return NULL;
   }
 
   // Initialize result to 0 (black)
-  memset(result, 0, width * height);
+  memset(result, 0, num_pixels);
 
   // For each pixel in the image
   for (int32_t y = 0; y < height; y++) {

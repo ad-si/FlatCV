@@ -26,15 +26,27 @@ uint8_t *fcv_single_to_multichannel(
   uint32_t height,
   uint8_t const *const data
 ) {
-  uint32_t img_length_px = width * height;
+  if (!data || width == 0 || height == 0) {
+    return NULL;
+  }
+
+  // Check for overflow: width * height * 4
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+  size_t img_length_px = (size_t)width * height;
+  if (img_length_px > SIZE_MAX / 4) {
+    return NULL;
+  }
+
   uint8_t *multichannel_data = malloc(img_length_px * 4);
 
   if (!multichannel_data) { // Memory allocation failed
     return NULL;
   }
 
-  for (uint32_t i = 0; i < img_length_px; i++) {
-    uint32_t rgba_index = i * 4;
+  for (size_t i = 0; i < img_length_px; i++) {
+    size_t rgba_index = i * 4;
     multichannel_data[rgba_index] = data[i];
     multichannel_data[rgba_index + 1] = data[i];
     multichannel_data[rgba_index + 2] = data[i];

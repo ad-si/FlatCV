@@ -33,7 +33,20 @@
  */
 uint8_t *
 fcv_grayscale(uint32_t width, uint32_t height, uint8_t const *const data) {
-  uint32_t img_length_byte = width * height * 4;
+  if (!data || width == 0 || height == 0) {
+    return NULL;
+  }
+
+  // Check for overflow: width * height * 4
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+  size_t num_pixels = (size_t)width * height;
+  if (num_pixels > SIZE_MAX / 4) {
+    return NULL;
+  }
+  size_t img_length_byte = num_pixels * 4;
+
   uint8_t *grayscale_data = malloc(img_length_byte);
 
   if (!grayscale_data) { // Memory allocation failed
@@ -77,14 +90,25 @@ uint8_t *fcv_grayscale_stretch(
   uint32_t height,
   uint8_t const *const data
 ) {
-  uint32_t img_length_byte = width * height * 4;
+  if (!data || width == 0 || height == 0) {
+    return NULL;
+  }
+
+  // Check for overflow: width * height * 4
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+  size_t img_length_px = (size_t)width * height;
+  if (img_length_px > SIZE_MAX / 4) {
+    return NULL;
+  }
+  size_t img_length_byte = img_length_px * 4;
+
   uint8_t *grayscale_data = malloc(img_length_byte);
 
   if (!grayscale_data) { // Memory allocation failed
     return NULL;
   }
-
-  uint32_t img_length_px = width * height;
   // Ignore 1.5625 % of the pixels
   uint32_t num_pixels_to_ignore = img_length_px >> 6;
 
@@ -136,7 +160,7 @@ uint8_t *fcv_grayscale_stretch(
   uint8_t range = max_val - min_val;
 
   // Process each pixel row by row
-  for (uint32_t i = 0; i < img_length_px; i++) {
+  for (size_t i = 0; i < img_length_px; i++) {
     uint32_t rgba_index = i * 4;
 
     uint8_t r = data[rgba_index];
@@ -145,7 +169,11 @@ uint8_t *fcv_grayscale_stretch(
 
     uint8_t gray = (r * R_WEIGHT + g * G_WEIGHT + b * B_WEIGHT) >> 8;
 
-    if (gray < min_val) {
+    if (range == 0) {
+      // All pixels have same value, preserve as-is
+      // (no stretching possible)
+    }
+    else if (gray < min_val) {
       gray = 0;
     }
     else if (gray > max_val) {
@@ -228,8 +256,20 @@ uint8_t *fcv_otsu_threshold_rgba(
   bool use_double_threshold,
   uint8_t const *const data
 ) {
+  if (!data || width == 0 || height == 0) {
+    return NULL;
+  }
+
+  // Check for overflow: width * height
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+
   uint8_t *grayscale_img = fcv_rgba_to_grayscale(width, height, data);
-  uint32_t img_length_px = width * height;
+  if (!grayscale_img) {
+    return NULL;
+  }
+  size_t img_length_px = (size_t)width * height;
 
   uint32_t histogram[256] = {0};
   for (uint32_t i = 0; i < img_length_px; i++) {
@@ -308,18 +348,45 @@ uint8_t *fcv_apply_gaussian_blur(
   double radius,
   uint8_t const *const data
 ) {
-  uint32_t img_length_px = width * height;
-  if (radius == 0) {
-    return memcpy(malloc(width * height * 4), data, width * height * 4);
+  if (!data || width == 0 || height == 0) {
+    return NULL;
   }
 
-  uint8_t *blurred_data = malloc(img_length_px * 4);
+  // Validate radius
+  if (radius < 0 || !isfinite(radius)) {
+    return NULL;
+  }
+
+  // Check for overflow: width * height * 4
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+  size_t img_length_px = (size_t)width * height;
+  if (img_length_px > SIZE_MAX / 4) {
+    return NULL;
+  }
+  size_t img_length_byte = img_length_px * 4;
+
+  if (radius == 0) {
+    uint8_t *copy = malloc(img_length_byte);
+    if (!copy) {
+      return NULL;
+    }
+    return memcpy(copy, data, img_length_byte);
+  }
+
+  // Reject excessive radius to prevent excessive memory allocation
+  if (radius > 1000) {
+    return NULL;
+  }
+
+  uint8_t *blurred_data = malloc(img_length_byte);
 
   if (!blurred_data) { // Memory allocation failed
     return NULL;
   }
 
-  uint32_t kernel_size = 2 * radius + 1;
+  uint32_t kernel_size = (uint32_t)(2 * radius + 1);
   float *kernel = malloc(kernel_size * sizeof(float));
 
   if (!kernel) { // Memory allocation failed
@@ -449,7 +516,14 @@ uint8_t *fcv_bw_smart(
   bool use_double_threshold,
   uint8_t const *const data
 ) {
+  if (!data || width == 0 || height == 0) {
+    return NULL;
+  }
+
   uint8_t *grayscale_data = fcv_grayscale(width, height, data);
+  if (!grayscale_data) {
+    return NULL;
+  }
 
   // Calculate blur radius dependent on image size
   // (Empirical formula after testing)
@@ -457,8 +531,24 @@ uint8_t *fcv_bw_smart(
 
   uint8_t *blurred_data =
     fcv_apply_gaussian_blur(width, height, blurRadius, grayscale_data);
+  if (!blurred_data) {
+    free(grayscale_data);
+    return NULL;
+  }
 
-  uint32_t img_length_px = width * height;
+  // Check for overflow: width * height * 4
+  if (width > SIZE_MAX / height) {
+    free(grayscale_data);
+    free(blurred_data);
+    return NULL;
+  }
+  size_t img_length_px = (size_t)width * height;
+  if (img_length_px > SIZE_MAX / 4) {
+    free(grayscale_data);
+    free(blurred_data);
+    return NULL;
+  }
+
   uint8_t *high_freq_data = malloc(img_length_px * 4);
 
   if (!high_freq_data) { // Memory allocation failed
@@ -524,18 +614,44 @@ uint8_t *fcv_resize(
   uint32_t *out_height,
   uint8_t const *const data
 ) {
-  if (resize_x <= 0.0 || resize_y <= 0.0) {
+  if (!data || !out_width || !out_height) {
     return NULL;
   }
 
-  *out_width = (uint32_t)(width * resize_x);
-  *out_height = (uint32_t)(height * resize_y);
+  if (width == 0 || height == 0) {
+    return NULL;
+  }
+
+  if (resize_x <= 0.0 || resize_y <= 0.0 || !isfinite(resize_x) ||
+      !isfinite(resize_y)) {
+    return NULL;
+  }
+
+  // Check for overflow in output dimensions
+  double new_width_d = (double)width * resize_x;
+  double new_height_d = (double)height * resize_y;
+
+  if (new_width_d > UINT32_MAX || new_height_d > UINT32_MAX) {
+    return NULL;
+  }
+
+  *out_width = (uint32_t)new_width_d;
+  *out_height = (uint32_t)new_height_d;
 
   if (*out_width == 0 || *out_height == 0) {
     return NULL;
   }
 
-  uint32_t out_img_length = *out_width * *out_height * 4;
+  // Check for overflow: out_width * out_height * 4
+  if (*out_width > SIZE_MAX / *out_height) {
+    return NULL;
+  }
+  size_t out_img_pixels = (size_t)(*out_width) * (*out_height);
+  if (out_img_pixels > SIZE_MAX / 4) {
+    return NULL;
+  }
+  size_t out_img_length = out_img_pixels * 4;
+
   uint8_t *resized_data = malloc(out_img_length);
 
   if (!resized_data) {

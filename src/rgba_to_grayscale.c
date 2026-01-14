@@ -27,7 +27,16 @@ uint8_t *fcv_rgba_to_grayscale(
   uint32_t height,
   uint8_t const *const data
 ) {
-  uint32_t img_length_px = width * height;
+  if (!data || width == 0 || height == 0) {
+    return NULL;
+  }
+
+  // Check for overflow: width * height
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+  size_t img_length_px = (size_t)width * height;
+
   uint8_t *grayscale_data = malloc(img_length_px);
 
   if (!grayscale_data) { // Memory allocation failed
@@ -35,8 +44,8 @@ uint8_t *fcv_rgba_to_grayscale(
   }
 
   // Process each pixel row by row
-  for (uint32_t i = 0; i < width * height; i++) {
-    uint32_t rgba_index = i * 4;
+  for (size_t i = 0; i < img_length_px; i++) {
+    size_t rgba_index = i * 4;
 
     uint8_t r = data[rgba_index];
     uint8_t g = data[rgba_index + 1];

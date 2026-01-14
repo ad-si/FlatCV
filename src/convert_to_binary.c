@@ -33,16 +33,23 @@ uint8_t *fcv_convert_to_binary(
   const char *foreground_hex,
   const char *background_hex
 ) {
-  assert(image_data != NULL);
-  assert(width > 0);
-  assert(height > 0);
-  assert(foreground_hex != NULL);
-  assert(background_hex != NULL);
+  if (!image_data || !foreground_hex || !background_hex) {
+    return NULL;
+  }
 
-  uint8_t *result = malloc(width * height);
+  if (width <= 0 || height <= 0) {
+    return NULL;
+  }
+
+  // Check for overflow: width * height (width and height already validated > 0)
+  if ((size_t)width > SIZE_MAX / (size_t)height) {
+    return NULL;
+  }
+  size_t num_pixels = (size_t)width * (size_t)height;
+
+  uint8_t *result = malloc(num_pixels);
   if (!result) {
-    fprintf(stderr, "Error: Failed to allocate memory for binary image\n");
-    exit(EXIT_FAILURE);
+    return NULL;
   }
 
   uint8_t r_fg, g_fg, b_fg;
@@ -51,23 +58,23 @@ uint8_t *fcv_convert_to_binary(
   uint8_t r_bg, g_bg, b_bg;
   fcv_parse_hex_color(background_hex, &r_bg, &g_bg, &b_bg);
 
-  for (int32_t i = 0; i < width * height * 4; i += 4) {
-    uint8_t r = image_data[i];
-    uint8_t g = image_data[i + 1];
-    uint8_t b = image_data[i + 2];
+  for (size_t i = 0; i < num_pixels; i++) {
+    size_t rgba_index = i * 4;
+    uint8_t r = image_data[rgba_index];
+    uint8_t g = image_data[rgba_index + 1];
+    uint8_t b = image_data[rgba_index + 2];
 
-    int32_t pixel_index = i / 4;
     if (r == r_fg && g == g_fg && b == b_fg) {
       // Convert foreground color to white
-      result[pixel_index] = 255;
+      result[i] = 255;
     }
     else if (r == r_bg && g == g_bg && b == b_bg) {
       // Convert background color to black
-      result[pixel_index] = 0;
+      result[i] = 0;
     }
     else {
       // Default to black for unmatched colors
-      result[pixel_index] = 0;
+      result[i] = 0;
     }
   }
 

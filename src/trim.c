@@ -66,12 +66,18 @@ uint8_t *fcv_trim(
   uint32_t channels,
   uint8_t const *const data
 ) {
-  if (!data || !width || !height || *width <= 0 || *height <= 0) {
+  if (!data || !width || !height || *width <= 0 || *height <= 0 ||
+      channels == 0) {
     return NULL;
   }
 
   uint32_t w = (uint32_t)*width;
   uint32_t h = (uint32_t)*height;
+
+  // Check for potential overflow in pixel index calculations
+  if (w > SIZE_MAX / h || (size_t)w * h > SIZE_MAX / channels) {
+    return NULL;
+  }
   uint32_t left = 0;
   uint32_t top = 0;
   uint32_t right = w;
@@ -172,9 +178,10 @@ uint8_t *fcv_trim(
 
   // If no trimming was done, return a copy
   if (left == 0 && top == 0 && right == w && bottom == h) {
-    uint8_t *result = malloc(w * h * channels);
+    size_t alloc_size = (size_t)w * h * channels;
+    uint8_t *result = malloc(alloc_size);
     if (result) {
-      memcpy(result, data, w * h * channels);
+      memcpy(result, data, alloc_size);
     }
     return result;
   }
@@ -209,7 +216,13 @@ uint8_t *fcv_trim_threshold(
   uint8_t const *const data,
   double threshold_percent
 ) {
-  if (!data || !width || !height || *width <= 0 || *height <= 0) {
+  if (!data || !width || !height || *width <= 0 || *height <= 0 ||
+      channels == 0) {
+    return NULL;
+  }
+
+  // Validate threshold_percent - reject invalid values
+  if (!isfinite(threshold_percent)) {
     return NULL;
   }
 
@@ -229,6 +242,11 @@ uint8_t *fcv_trim_threshold(
 
   uint32_t w = (uint32_t)*width;
   uint32_t h = (uint32_t)*height;
+
+  // Check for potential overflow in pixel index calculations
+  if (w > SIZE_MAX / h || (size_t)w * h > SIZE_MAX / channels) {
+    return NULL;
+  }
   uint32_t left = 0;
   uint32_t top = 0;
   uint32_t right = w;
@@ -328,9 +346,10 @@ uint8_t *fcv_trim_threshold(
 
   // If no trimming was done, return a copy
   if (left == 0 && top == 0 && right == w && bottom == h) {
-    uint8_t *result = malloc(w * h * channels);
+    size_t alloc_size = (size_t)w * h * channels;
+    uint8_t *result = malloc(alloc_size);
     if (result) {
-      memcpy(result, data, w * h * channels);
+      memcpy(result, data, alloc_size);
     }
     return result;
   }

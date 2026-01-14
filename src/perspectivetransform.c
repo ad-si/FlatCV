@@ -268,6 +268,24 @@ uint8_t *fcv_apply_matrix_3x3(
   int32_t out_height,
   Matrix3x3 *tmat
 ) {
+  if (!in_data || !tmat) {
+    return NULL;
+  }
+
+  if (in_width <= 0 || in_height <= 0 || out_width <= 0 || out_height <= 0) {
+    return NULL;
+  }
+
+  // Check for overflow: out_width * out_height * 4 (dimensions already
+  // validated > 0)
+  if ((size_t)out_width > SIZE_MAX / (size_t)out_height) {
+    return NULL;
+  }
+  size_t out_pixels = (size_t)out_width * (size_t)out_height;
+  if (out_pixels > SIZE_MAX / 4) {
+    return NULL;
+  }
+
   // Patch flip matrix if needed
   if (fabs(tmat->m00 + 1.0) < 1e-9 && fabs(tmat->m11 + 1.0) < 1e-9 &&
       tmat->m02 == 0.0 && tmat->m12 == 0.0) {
@@ -275,7 +293,7 @@ uint8_t *fcv_apply_matrix_3x3(
     tmat->m12 = in_height - 1;
   }
 
-  uint8_t *out_data = calloc(out_width * out_height * 4, sizeof(uint8_t));
+  uint8_t *out_data = calloc(out_pixels * 4, sizeof(uint8_t));
 
   if (!out_data) { // Memory allocation failed
     return NULL;

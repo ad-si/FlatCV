@@ -75,11 +75,27 @@ CornerPeaks *fcv_corner_peaks(
   double accuracy_thresh,
   double roundness_thresh
 ) {
-  if (!data) {
+  if (!data || width == 0 || height == 0) {
     return NULL;
   }
 
-  Point2D *candidates = malloc(sizeof(Point2D) * width * height);
+  // Validate thresholds
+  if (!isfinite(accuracy_thresh) || !isfinite(roundness_thresh)) {
+    return NULL;
+  }
+
+  // Check for overflow: width * height
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+  size_t num_pixels = (size_t)width * height;
+
+  // Check for overflow in candidates allocation
+  if (num_pixels > SIZE_MAX / sizeof(Point2D)) {
+    return NULL;
+  }
+
+  Point2D *candidates = malloc(sizeof(Point2D) * num_pixels);
   if (!candidates) {
     return NULL;
   }

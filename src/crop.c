@@ -36,21 +36,45 @@ uint8_t *fcv_crop(
   uint32_t new_width,
   uint32_t new_height
 ) {
+  if (!data) {
+    return NULL;
+  }
+
+  if (width == 0 || height == 0 || channels == 0 || new_width == 0 ||
+      new_height == 0) {
+    return NULL;
+  }
+
+  // Check for overflow in x + new_width and y + new_height
+  if (x > UINT32_MAX - new_width || y > UINT32_MAX - new_height) {
+    return NULL;
+  }
+
   if (x + new_width > width || y + new_height > height) {
     fprintf(stderr, "Crop area is outside the original image bounds.\n");
     return NULL;
   }
 
-  uint8_t *cropped_data = malloc(new_width * new_height * channels);
+  // Check for overflow in memory allocation: new_width * new_height * channels
+  if (new_width > SIZE_MAX / new_height) {
+    return NULL;
+  }
+  size_t num_pixels = (size_t)new_width * new_height;
+  if (num_pixels > SIZE_MAX / channels) {
+    return NULL;
+  }
+  size_t alloc_size = num_pixels * channels;
+
+  uint8_t *cropped_data = malloc(alloc_size);
   if (!cropped_data) {
     fprintf(stderr, "Memory allocation failed for cropped image.\n");
     return NULL;
   }
 
-  uint32_t row_bytes = new_width * channels;
+  size_t row_bytes = (size_t)new_width * channels;
   for (uint32_t i = 0; i < new_height; ++i) {
-    uint32_t src_index = ((y + i) * width + x) * channels;
-    uint32_t dst_index = i * row_bytes;
+    size_t src_index = ((size_t)(y + i) * width + x) * channels;
+    size_t dst_index = (size_t)i * row_bytes;
     memcpy(cropped_data + dst_index, data + src_index, row_bytes);
   }
 

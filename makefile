@@ -2,7 +2,7 @@
 help: makefile
 	@tail -n +4 makefile | grep ".PHONY"
 
-PREFIX ?= /usr/local
+PREFIX ?= $(HOME)/.local
 CC ?= gcc
 CFLAGS ?=
 # libsanitizer is not supported on all targets

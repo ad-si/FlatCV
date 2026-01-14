@@ -36,6 +36,21 @@ uint8_t *fcv_generate_histogram(
     return NULL;
   }
 
+  if (width == 0 || height == 0 || channels == 0) {
+    return NULL;
+  }
+
+  // Check for overflow in img_size calculation
+  if (width > SIZE_MAX / height) {
+    return NULL;
+  }
+  size_t img_size = (size_t)width * height;
+
+  // Validate that we can access all pixels
+  if (img_size > SIZE_MAX / channels) {
+    return NULL;
+  }
+
   // Output histogram dimensions
   const uint32_t hist_width = 256;  // One pixel per brightness value
   const uint32_t hist_height = 200; // Fixed height for visualization
@@ -43,8 +58,8 @@ uint8_t *fcv_generate_histogram(
   *out_width = hist_width;
   *out_height = hist_height;
 
-  uint32_t img_size = width * height;
-  uint32_t output_size = (*out_width) * (*out_height) * 4;
+  // Output size is fixed: 256 * 200 * 4 = 204800 bytes (no overflow possible)
+  size_t output_size = (size_t)hist_width * hist_height * 4;
 
   // Allocate output image (initialized to black background)
   uint8_t *output = calloc(output_size, sizeof(uint8_t));
@@ -67,8 +82,8 @@ uint8_t *fcv_generate_histogram(
   if (channels == 4) {
     // Check if it's actually grayscale (all RGB channels equal)
     is_grayscale = true;
-    for (uint32_t i = 0; i < img_size && is_grayscale; i++) {
-      uint32_t idx = i * 4;
+    for (size_t i = 0; i < img_size && is_grayscale; i++) {
+      size_t idx = i * 4;
       if (data[idx] != data[idx + 1] || data[idx] != data[idx + 2]) {
         is_grayscale = false;
       }
@@ -77,7 +92,7 @@ uint8_t *fcv_generate_histogram(
 
   if (is_grayscale) {
     // Single channel or grayscale image
-    for (uint32_t i = 0; i < img_size; i++) {
+    for (size_t i = 0; i < img_size; i++) {
       uint8_t value;
       if (channels == 1) {
         value = data[i];
@@ -91,8 +106,8 @@ uint8_t *fcv_generate_histogram(
   }
   else {
     // RGB or RGBA image - count each channel
-    for (uint32_t i = 0; i < img_size; i++) {
-      uint32_t idx = i * channels;
+    for (size_t i = 0; i < img_size; i++) {
+      size_t idx = i * channels;
       hist_r[data[idx]]++;
       if (channels >= 3) {
         hist_g[data[idx + 1]]++;
