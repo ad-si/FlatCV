@@ -36,7 +36,7 @@ test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 
 	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
 		-Iinclude $(LIB_SRC_FILES) tests/apply_test.c \
-		-o apply_test \
+		-lm -o apply_test \
 	&& ./apply_test
 
 
