@@ -96,7 +96,10 @@ void print32_t_usage(const char *program_name) {
   printf(
     "  flip_y          - Flip image vertically (mirror along horizontal axis)\n"
   );
-  printf("  trim            - Remove border pixels with same color\n");
+  printf(
+    "  trim [<threshold>%%] - Remove border pixels with same color (optional "
+    "threshold for JPEG artifacts/vignette)\n"
+  );
   printf("  histogram       - Generate brightness histogram visualization\n");
   printf(
     "  border <hex_color> <border_width> - Add colored border around image\n"
@@ -708,6 +711,44 @@ int32_t parse_pipeline(
           return 0;
         }
       }
+      else if (strcmp(piece, "trim") == 0) {
+        /* Trim operation with optional threshold percentage */
+        if (strchr(params_str, '%')) {
+          /* Percentage format: 2% */
+          add_operation(
+            pipeline,
+            piece,
+            0.0,
+            0,
+            0.0,
+            0,
+            0.0,
+            0,
+            0.0,
+            0,
+            params_str,
+            1
+          );
+        }
+        else {
+          /* Numeric threshold (interpreted as percentage) */
+          double param = atof(params_str);
+          add_operation(
+            pipeline,
+            piece,
+            param,
+            1,
+            0.0,
+            0,
+            0.0,
+            0,
+            0.0,
+            0,
+            NULL,
+            0
+          );
+        }
+      }
       else {
         /* Regular numeric parameter parsing for other operations */
         char *space2 = strchr(params_str, ' ');
@@ -1164,7 +1205,31 @@ uint8_t *apply_operation(
     return (uint8_t *)fcv_flip_y(*width, *height, input_data);
   }
   else if (strcmp(operation, "trim") == 0) {
-    return (uint8_t *)fcv_trim(width, height, 4, input_data);
+    if (has_string_param && param_str && strchr(param_str, '%')) {
+      // Trim with threshold percentage
+      double threshold = atof(param_str);
+      return (uint8_t *)fcv_trim_threshold(
+        width,
+        height,
+        4,
+        input_data,
+        threshold
+      );
+    }
+    else if (has_param) {
+      // Trim with threshold as numeric parameter
+      return (uint8_t *)fcv_trim_threshold(
+        width,
+        height,
+        4,
+        input_data,
+        param
+      );
+    }
+    else {
+      // Default trim without threshold
+      return (uint8_t *)fcv_trim(width, height, 4, input_data);
+    }
   }
   else if (strcmp(operation, "histogram") == 0) {
     uint32_t hist_width, hist_height;
