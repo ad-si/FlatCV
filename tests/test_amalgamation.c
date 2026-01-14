@@ -8,7 +8,7 @@
 
 #include "flatcv.h"
 
-int32_t test_amalgamation_basic() {
+int32_t test_amalgamation_basic(void) {
   uint32_t width = 4;
   uint32_t height = 4;
   uint8_t data[64] = {1, 1, 1, 255, 2, 2, 2, 255, 9, 9, 9, 255, 8, 8, 8, 255,
@@ -29,7 +29,7 @@ int32_t test_amalgamation_basic() {
   return 0;
 }
 
-int32_t main() {
+int32_t main(void) {
   printf("Testing amalgamated FlatCV library...\n");
 
   if (!test_amalgamation_basic()) {

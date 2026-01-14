@@ -165,8 +165,19 @@ libflatcv_mac.dylib: $(HDR_FILES) $(LIB_SRC_FILES)
 mac-lib: libflatcv_mac.a libflatcv_mac.dylib
 
 
+# Linux - Native build (run directly on Linux)
+flatcv_linux: $(HDR_FILES) $(SRC_FILES)
+	@if test "$$(uname)" != "Linux" \
+	then \
+		echo "Error: This target can only be built on Linux"; \
+		exit 1; \
+	fi
+	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
+		-Iinclude $(SRC_FILES) \
+		-lm -o $@
+
 # Linux - Build binary inside Docker and copy it back to host
-flatcv_linux: Dockerfile
+flatcv_linux_docker: Dockerfile
 	docker build -t flatcv-build .
 	docker create --name flatcv-tmp flatcv-build
 	docker cp flatcv-tmp:/flatcv ./flatcv_linux
@@ -174,6 +185,9 @@ flatcv_linux: Dockerfile
 
 .PHONY: lin-build
 lin-build: flatcv_linux
+
+.PHONY: lin-build-docker
+lin-build-docker: flatcv_linux_docker
 
 
 # Windows - Cross-compilation with mingw-w64
@@ -266,6 +280,11 @@ flatcv.c: flatcv.h $(LIB_SRC_FILES) license.txt
 			cat $$src >> $@; \
 		done
 	@echo '/* End of FlatCV amalgamation */' >> $@
+
+flatcv: flatcv.c flatcv.h src/cli.c
+	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
+		-Iinclude flatcv.c src/cli.c \
+		-lm -o $@
 
 .PHONY: combine
 combine: flatcv.h flatcv.c

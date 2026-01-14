@@ -71,3 +71,57 @@ fcv_flip_y(uint32_t width, uint32_t height, uint8_t const *const data) {
 
   return flipped_data;
 }
+
+/**
+ * Transpose an image (flip along main diagonal).
+ */
+uint8_t *
+fcv_transpose(uint32_t width, uint32_t height, uint8_t const *const data) {
+  uint32_t img_length_byte = width * height * 4;
+  uint8_t *transposed_data = malloc(img_length_byte);
+
+  if (!transposed_data) {
+    return NULL;
+  }
+
+  for (uint32_t y = 0; y < height; y++) {
+    for (uint32_t x = 0; x < width; x++) {
+      uint32_t src_index = (y * width + x) * 4;
+      uint32_t dst_index = (x * height + y) * 4;
+
+      transposed_data[dst_index] = data[src_index];
+      transposed_data[dst_index + 1] = data[src_index + 1];
+      transposed_data[dst_index + 2] = data[src_index + 2];
+      transposed_data[dst_index + 3] = data[src_index + 3];
+    }
+  }
+
+  return transposed_data;
+}
+
+/**
+ * Transverse an image (flip along anti-diagonal).
+ */
+uint8_t *
+fcv_transverse(uint32_t width, uint32_t height, uint8_t const *const data) {
+  uint32_t img_length_byte = width * height * 4;
+  uint8_t *transposed_data = malloc(img_length_byte);
+
+  if (!transposed_data) {
+    return NULL;
+  }
+
+  for (uint32_t y = 0; y < height; y++) {
+    for (uint32_t x = 0; x < width; x++) {
+      uint32_t src_index = (y * width + x) * 4;
+      uint32_t dst_index = ((width - 1 - x) * height + (height - 1 - y)) * 4;
+
+      transposed_data[dst_index] = data[src_index];
+      transposed_data[dst_index + 1] = data[src_index + 1];
+      transposed_data[dst_index + 2] = data[src_index + 2];
+      transposed_data[dst_index + 3] = data[src_index + 3];
+    }
+  }
+
+  return transposed_data;
+}

@@ -8,7 +8,7 @@
 #include "conversion.h"
 #include "perspectivetransform.h"
 
-int32_t translate_matrix_test() {
+int32_t translate_matrix_test(void) {
   printf("🎬 Start translate matrix test …\n");
   // Flip both axes
   Matrix3x3 tmat = {1, 0, -2, 0, 1, -2, 0, 0, 1};
@@ -55,7 +55,7 @@ int32_t translate_matrix_test() {
   return 0;
 }
 
-int32_t flip_matrix_test() {
+int32_t flip_matrix_test(void) {
   printf("🎬 Start flip matrix test …\n");
   // Flip both axes
   Matrix3x3 tmat = {-1, 0, 0, 0, -1, 0, 0, 0, 1};
@@ -97,7 +97,7 @@ int32_t flip_matrix_test() {
   return 0;
 }
 
-int32_t scale_matrix_test() {
+int32_t scale_matrix_test(void) {
   printf("🎬 Start scale matrix test …\n");
   // Scale image by 50%
   Matrix3x3 tmat = {2, 0, 0, 0, 2, 0, 0, 0, 1};
@@ -147,7 +147,7 @@ int32_t scale_matrix_test() {
   return 0;
 }
 
-int32_t main() {
+int32_t main(void) {
   if (!translate_matrix_test() && !flip_matrix_test() && !scale_matrix_test()) {
     printf("✅ All tests passed\n");
     return 0;

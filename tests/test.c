@@ -10,12 +10,117 @@
 #include "conversion.h"
 #include "corner_peaks.h"
 #include "draw.h"
+#include "exif.h"
+#include "flip.h"
+#include "rotate.h"
 #include "foerstner_corner.h"
 #include "histogram.h"
 #include "perspectivetransform.h"
 #include "rgba_to_grayscale.h"
 #include "sort_corners.h"
 #include "trim.h"
+
+int test_exif_orientation(void) {
+  printf("Testing EXIF orientation detection...\n");
+  int test_ok = 0;
+
+  struct {
+    const char *filename;
+    int expected;
+  } cases[] = {
+    {"tests/Landscape_2.jpg", 2},
+    {"tests/Landscape_3.jpg", 3},
+    {"tests/Landscape_4.jpg", 4},
+    {"tests/Landscape_5.jpg", 5},
+    {"tests/Landscape_6.jpg", 6},
+    {"tests/Landscape_7.jpg", 7},
+    {"tests/Landscape_8.jpg", 8},
+  };
+
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    FILE *f = fopen(cases[i].filename, "rb");
+    if (f) {
+      fclose(f);
+      int orientation = fcv_get_exif_orientation(cases[i].filename);
+      if (orientation != cases[i].expected) {
+        printf(
+          "❌ EXIF orientation test failed for %s: expected %d, got %d\n",
+          cases[i].filename,
+          cases[i].expected,
+          orientation
+        );
+        test_ok = 1;
+      }
+      else {
+        printf("  %s: OK (%d)\n", cases[i].filename, orientation);
+      }
+    }
+    else {
+      printf("  %s: Skipped (file not found)\n", cases[i].filename);
+    }
+  }
+  return test_ok;
+}
+
+int test_transformations(void) {
+  printf("Testing transformations (rotations and flips)...\n");
+  int test_ok = 0;
+
+  uint32_t width = 2;
+  uint32_t height = 3;
+  uint8_t data[] = {255, 0,   0,   255, 0, 255, 0, 255, 0,   0,   255, 255,
+                    255, 255, 255, 255, 0, 0,   0, 255, 255, 255, 0,   255};
+
+  uint8_t *rotated = fcv_rotate_90_cw(width, height, data);
+  if (!(rotated[0] == 0 && rotated[1] == 0 && rotated[2] == 0)) {
+    test_ok = 1;
+  }
+  if (!(rotated[4] == 0 && rotated[5] == 0 && rotated[6] == 255)) {
+    test_ok = 1;
+  }
+  if (!(rotated[8] == 255 && rotated[9] == 0 && rotated[10] == 0)) {
+    test_ok = 1;
+  }
+  if (!(rotated[12] == 255 && rotated[13] == 255 && rotated[14] == 0)) {
+    test_ok = 1;
+  }
+  free(rotated);
+
+  rotated = fcv_rotate_180(width, height, data);
+  if (!(rotated[0] == 255 && rotated[1] == 255 && rotated[2] == 0)) {
+    test_ok = 1;
+  }
+  if (!(rotated[4] == 0 && rotated[5] == 0 && rotated[6] == 0)) {
+    test_ok = 1;
+  }
+  if (!(rotated[20] == 255 && rotated[21] == 0 && rotated[22] == 0)) {
+    test_ok = 1;
+  }
+  free(rotated);
+
+  rotated = fcv_rotate_270_cw(width, height, data);
+  if (!(rotated[0] == 0 && rotated[1] == 255 && rotated[2] == 0)) {
+    test_ok = 1;
+  }
+  if (!(rotated[4] == 255 && rotated[5] == 255 && rotated[6] == 255)) {
+    test_ok = 1;
+  }
+  if (!(rotated[8] == 255 && rotated[9] == 255 && rotated[10] == 0)) {
+    test_ok = 1;
+  }
+  if (!(rotated[12] == 255 && rotated[13] == 0 && rotated[14] == 0)) {
+    test_ok = 1;
+  }
+  free(rotated);
+
+  if (test_ok) {
+    printf("❌ Transformations test failed\n");
+  }
+  else {
+    printf("  All transformations: OK\n");
+  }
+  return test_ok;
+}
 
 /**
  * Utility function to create binary images from arrays of 0s and 1s.
@@ -120,7 +225,7 @@ uint8_t *create_rgba_pattern_image(
   return data;
 }
 
-int32_t test_otsu_threshold() {
+int32_t test_otsu_threshold(void) {
   uint32_t width = 4;
   uint32_t height = 4;
   uint8_t data[64] = {1, 1, 1, 255, 2, 2, 2, 255, 9, 9, 9, 255, 8, 8, 8, 255,
@@ -165,7 +270,7 @@ int32_t test_otsu_threshold() {
   }
 }
 
-int32_t test_perspective_transform() {
+int32_t test_perspective_transform(void) {
   Corners src = {
     100,
     100, // Top-left
@@ -240,7 +345,7 @@ int32_t test_perspective_transform() {
   }
 }
 
-int32_t test_perspective_transform_float() {
+int32_t test_perspective_transform_float(void) {
   Corners src = {
     278.44,
     182.23, // Top-left
@@ -322,118 +427,117 @@ void free_fcv_corner_peaks(CornerPeaks *peaks) {
   }
 }
 
-int32_t test_fcv_foerstner_corner() {
+int32_t test_fcv_foerstner_corner(void) {
   // Create a simple test image with a corner pattern (5x5 RGBA)
   uint32_t width = 5;
   uint32_t height = 5;
 
   // Create a simple corner pattern: white square on black background
-  uint8_t data[100] = {
-    // Row 0: all black
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    // Row 1: black, then white corner
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    255,
-    255,
-    255,
-    255,
-    255,
-    255,
-    255,
-    255,
-    // Row 2: black, then white corner
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    255,
-    255,
-    255,
-    255,
-    255,
-    255,
-    255,
-    255,
-    // Row 3: all black
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    // Row 4: all black
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255
+  uint8_t data[100] = {// Row 0: all black
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       // Row 1: black, then white corner
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       // Row 2: black, then white corner
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       255,
+                       // Row 3: all black
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       // Row 4: all black
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255,
+                       0,
+                       0,
+                       0,
+                       255
   };
 
   // Convert RGBA to grayscale first
@@ -483,7 +587,7 @@ int32_t test_fcv_foerstner_corner() {
   }
 }
 
-int32_t test_fcv_corner_peaks() {
+int32_t test_fcv_corner_peaks(void) {
   // Test with simple synthetic corner response data (5x5 image, 2 channels)
   uint32_t width = 5;
   uint32_t height = 5;
@@ -606,7 +710,7 @@ int32_t test_fcv_corner_peaks() {
   }
 }
 
-int32_t test_fcv_binary_closing_disk() {
+int32_t test_fcv_binary_closing_disk(void) {
   // Test 1: Basic functionality with simple binary image
   uint32_t width = 7;
   uint32_t height = 7;
@@ -723,7 +827,7 @@ int32_t test_fcv_binary_closing_disk() {
   }
 }
 
-int32_t test_fcv_trim() {
+int32_t test_fcv_trim(void) {
   bool test_ok = true;
 
   // Test 1: Image with uniform border that can be trimmed
@@ -787,8 +891,7 @@ int32_t test_fcv_trim() {
           }
         }
         if (!content_correct) {
-          printf(
-            "❌ Trim test failed: trimmed content doesn't match expected\n"
+          printf("❌ Trim test failed: trimmed content doesn't match expected\n"
           );
           test_ok = false;
         }
@@ -880,7 +983,7 @@ next_test:
   }
 }
 
-int32_t test_fcv_trim_threshold() {
+int32_t test_fcv_trim_threshold(void) {
   bool test_ok = true;
 
   // Test 1: Image with near-uniform border (simulating JPEG artifacts)
@@ -891,22 +994,111 @@ int32_t test_fcv_trim_threshold() {
 
     // Create 5x5 RGBA image with near-uniform border
     // Border has slight variations (RGB differs by ~5 units, within 2% of 255)
-    uint8_t data[100] = {
-      // Row 0: near-uniform border (slight variations)
-      0,   0,   0,   255, 2,   1,   3,   255, 1,   2,   1,   255, 3,   1,   2,
-      255, 0,   0,   0,   255,
-      // Row 1: border, content, border
-      2,   1,   0,   255, 255, 0,   0,   255, 0,   255, 0,   255, 0,   0,   255,
-      255, 1,   2,   1,   255,
-      // Row 2: border, content, border
-      0,   2,   1,   255, 128, 128, 128, 255, 255, 255, 255, 255, 64,  64,  64,
-      255, 2,   0,   2,   255,
-      // Row 3: border, content, border
-      1,   0,   2,   255, 0,   128, 255, 255, 255, 128, 0,   255, 128, 0,   255,
-      255, 0,   1,   0,   255,
-      // Row 4: near-uniform border (slight variations)
-      0,   0,   0,   255, 1,   3,   0,   255, 2,   0,   2,   255, 0,   2,   1,
-      255, 0,   0,   0,   255
+    uint8_t data[100] = {// Row 0: near-uniform border (slight variations)
+                         0,
+                         0,
+                         0,
+                         255,
+                         2,
+                         1,
+                         3,
+                         255,
+                         1,
+                         2,
+                         1,
+                         255,
+                         3,
+                         1,
+                         2,
+                         255,
+                         0,
+                         0,
+                         0,
+                         255,
+                         // Row 1: border, content, border
+                         2,
+                         1,
+                         0,
+                         255,
+                         255,
+                         0,
+                         0,
+                         255,
+                         0,
+                         255,
+                         0,
+                         255,
+                         0,
+                         0,
+                         255,
+                         255,
+                         1,
+                         2,
+                         1,
+                         255,
+                         // Row 2: border, content, border
+                         0,
+                         2,
+                         1,
+                         255,
+                         128,
+                         128,
+                         128,
+                         255,
+                         255,
+                         255,
+                         255,
+                         255,
+                         64,
+                         64,
+                         64,
+                         255,
+                         2,
+                         0,
+                         2,
+                         255,
+                         // Row 3: border, content, border
+                         1,
+                         0,
+                         2,
+                         255,
+                         0,
+                         128,
+                         255,
+                         255,
+                         255,
+                         128,
+                         0,
+                         255,
+                         128,
+                         0,
+                         255,
+                         255,
+                         0,
+                         1,
+                         0,
+                         255,
+                         // Row 4: near-uniform border (slight variations)
+                         0,
+                         0,
+                         0,
+                         255,
+                         1,
+                         3,
+                         0,
+                         255,
+                         2,
+                         0,
+                         2,
+                         255,
+                         0,
+                         2,
+                         1,
+                         255,
+                         0,
+                         0,
+                         0,
+                         255
     };
 
     int32_t result_width = width;
@@ -962,10 +1154,9 @@ int32_t test_fcv_trim_threshold() {
   {
     int32_t width = 3;
     int32_t height = 3;
-    uint8_t data[36] = {
-      0, 0, 0, 255, 0,   0,   0,   255, 0, 0, 0, 255, 0,   0,   0,   255, 255, 255,
-      255, 255, 0, 0, 0, 255, 0,   0,   0, 255, 0, 0, 0, 255, 0,   0,   0,   255
-    };
+    uint8_t data[36] = {0, 0, 0, 255, 0,   0,   0,   255, 0, 0, 0, 255,
+                        0, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255,
+                        0, 0, 0, 255, 0,   0,   0,   255, 0, 0, 0, 255};
 
     int32_t result_width = width;
     int32_t result_height = height;
@@ -987,8 +1178,7 @@ int32_t test_fcv_trim_threshold() {
     result_height = height;
     result = fcv_trim_threshold(&result_width, &result_height, 4, data, 150.0);
     if (!result) {
-      printf(
-        "❌ Trim threshold test failed: NULL result for threshold > 100\n"
+      printf("❌ Trim threshold test failed: NULL result for threshold > 100\n"
       );
       test_ok = false;
     }
@@ -1001,8 +1191,7 @@ int32_t test_fcv_trim_threshold() {
   {
     int32_t width = 5;
     int32_t height = 5;
-    uint8_t *result =
-      fcv_trim_threshold(&width, &height, 4, NULL, 2.0);
+    uint8_t *result = fcv_trim_threshold(&width, &height, 4, NULL, 2.0);
     if (result != NULL) {
       printf(
         "❌ Trim threshold test failed: should return NULL for NULL input\n"
@@ -1017,11 +1206,9 @@ int32_t test_fcv_trim_threshold() {
     int32_t width = 3;
     int32_t height = 3;
     // All different colors
-    uint8_t data[36] = {
-      255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255,
-      128, 0, 0, 255, 64, 64, 64, 255, 0, 128, 0, 255,
-      0, 0, 128, 255, 128, 128, 0, 255, 0, 128, 128, 255
-    };
+    uint8_t data[36] = {255, 0, 0,   255, 0,   255, 0,  255, 0, 0,   255, 255,
+                        128, 0, 0,   255, 64,  64,  64, 255, 0, 128, 0,   255,
+                        0,   0, 128, 255, 128, 128, 0,  255, 0, 128, 128, 255};
 
     int32_t result_width = width;
     int32_t result_height = height;
@@ -1029,8 +1216,7 @@ int32_t test_fcv_trim_threshold() {
     uint8_t *result =
       fcv_trim_threshold(&result_width, &result_height, 4, data, 100.0);
     if (!result) {
-      printf(
-        "❌ Trim threshold test failed: NULL result for 100%% threshold\n"
+      printf("❌ Trim threshold test failed: NULL result for 100%% threshold\n"
       );
       test_ok = false;
     }
@@ -1059,7 +1245,7 @@ int32_t test_fcv_trim_threshold() {
   }
 }
 
-int32_t test_fcv_histogram() {
+int32_t test_fcv_histogram(void) {
   bool test_ok = true;
 
   // Test 1: Basic functionality with RGB image
@@ -1198,10 +1384,8 @@ int32_t test_fcv_histogram() {
       {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 128, 128, 128, 255};
     uint8_t *result = fcv_generate_histogram(2, 2, 4, data, NULL, NULL);
     if (result != NULL) {
-      printf(
-        "❌ Histogram test failed: should return NULL for NULL output "
-        "parameters\n"
-      );
+      printf("❌ Histogram test failed: should return NULL for NULL output "
+             "parameters\n");
       test_ok = false;
       free(result);
     }
@@ -1217,7 +1401,7 @@ int32_t test_fcv_histogram() {
   }
 }
 
-int32_t test_fcv_add_border() {
+int32_t test_fcv_add_border(void) {
   printf("Testing fcv_add_border...\n");
 
   // Create a simple 2x2 RGBA test image (blue pixels)
@@ -1332,7 +1516,7 @@ int32_t test_fcv_add_border() {
   return 0;
 }
 
-int32_t test_sort_corners() {
+int32_t test_sort_corners(void) {
   bool test_ok = true;
 
   // Test 1: Basic corner sorting with known coordinates
@@ -1521,10 +1705,8 @@ int32_t test_sort_corners() {
     if (sorted.tl_x != 0 || sorted.tl_y != 0 || sorted.tr_x != 0 ||
         sorted.tr_y != 0 || sorted.br_x != 0 || sorted.br_y != 0 ||
         sorted.bl_x != 0 || sorted.bl_y != 0) {
-      printf(
-        "❌ Sort corners test failed: insufficient corners should return "
-        "zeros\n"
-      );
+      printf("❌ Sort corners test failed: insufficient corners should return "
+             "zeros\n");
       test_ok = false;
     }
   }
@@ -1552,10 +1734,8 @@ int32_t test_sort_corners() {
       test_ok = false;
     }
     if (fabs(sorted.tr_x - 692) > 0.1 || fabs(sorted.tr_y - 76) > 0.1) {
-      printf(
-        "❌ Sort corners test failed: extra corners case - top-right "
-        "incorrect\n"
-      );
+      printf("❌ Sort corners test failed: extra corners case - top-right "
+             "incorrect\n");
       test_ok = false;
     }
   }
@@ -1685,12 +1865,13 @@ int32_t test_sort_corners() {
   }
 }
 
-int32_t main() {
+int32_t main(void) {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
       !test_perspective_transform_float() && !test_fcv_foerstner_corner() &&
       !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk() &&
       !test_fcv_trim() && !test_fcv_trim_threshold() && !test_fcv_histogram() &&
-      !test_fcv_add_border() && !test_sort_corners()) {
+      !test_fcv_add_border() && !test_sort_corners() &&
+      !test_exif_orientation() && !test_transformations()) {
     printf("✅ All tests passed\n");
     return 0;
   }

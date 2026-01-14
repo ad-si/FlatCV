@@ -4,25 +4,19 @@
 
 #include <stdint.h>
 
-uint8_t *fcv_flip_x(
+uint8_t *fcv_rotate_90_cw(
   uint32_t width,
   uint32_t height,
   uint8_t const * const data
 );
 
-uint8_t *fcv_flip_y(
+uint8_t *fcv_rotate_180(
   uint32_t width,
   uint32_t height,
   uint8_t const * const data
 );
 
-uint8_t *fcv_transpose(
-  uint32_t width,
-  uint32_t height,
-  uint8_t const * const data
-);
-
-uint8_t *fcv_transverse(
+uint8_t *fcv_rotate_270_cw(
   uint32_t width,
   uint32_t height,
   uint8_t const * const data

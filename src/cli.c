@@ -18,8 +18,10 @@
 #include "conversion.h"
 #include "crop.h"
 #include "draw.h"
+#include "exif.h"
 #include "extract_document.h"
 #include "flip.h"
+#include "rotate.h"
 #include "foerstner_corner.h"
 #include "histogram.h"
 #include "perspectivetransform.h"
@@ -63,29 +65,22 @@ void print32_t_usage(const char *program_name) {
     "  bw_smooth       - Smooth (anti-aliased) black and white conversion\n"
   );
   printf("  detect_corners  - Detect corners and output as JSON\n");
-  printf(
-    "  draw_corners    - Detect corners and draw circles at each corner\n"
+  printf("  draw_corners    - Detect corners and draw circles at each corner\n"
   );
   printf("  sobel           - Apply Sobel edge detection\n");
   printf(
     "  circle <hex_color> <radius> <x>x<y> - Draw a colored circle at position "
     "(x,y)\n"
   );
-  printf(
-    "  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
-    "position "
-    "(x,y)\n"
-  );
-  printf(
-    "  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
-    "markers at "
-    "specified coordinates\n"
-  );
+  printf("  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
+         "position "
+         "(x,y)\n");
+  printf("  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
+         "markers at "
+         "specified coordinates\n");
   printf("  crop <widthxheight+x+y> - Crop the image\n");
-  printf(
-    "  extract_document - Extract document using corner detection and "
-    "perspective transform (auto-size)\n"
-  );
+  printf("  extract_document - Extract document using corner detection and "
+         "perspective transform (auto-size)\n");
   printf(
     "  extract_document_to <output_width>x<output_height> - Extract document "
     "to specific dimensions\n"
@@ -823,9 +818,8 @@ uint8_t *apply_operation(
       fprintf(stderr, "Error: blur operation requires radius parameter\n");
       return NULL;
     }
-    return (
-      uint8_t *
-    )fcv_apply_gaussian_blur(*width, *height, param, input_data);
+    return (uint8_t *)
+      fcv_apply_gaussian_blur(*width, *height, param, input_data);
   }
   else if (strcmp(operation, "resize") == 0) {
     double resize_x, resize_y;
@@ -894,9 +888,8 @@ uint8_t *apply_operation(
     return result;
   }
   else if (strcmp(operation, "threshold") == 0) {
-    return (
-      uint8_t *
-    )fcv_otsu_threshold_rgba(*width, *height, false, input_data);
+    return (uint8_t *)
+      fcv_otsu_threshold_rgba(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smart") == 0) {
     return (uint8_t *)fcv_bw_smart(*width, *height, false, input_data);
@@ -1208,23 +1201,12 @@ uint8_t *apply_operation(
     if (has_string_param && param_str && strchr(param_str, '%')) {
       // Trim with threshold percentage
       double threshold = atof(param_str);
-      return (uint8_t *)fcv_trim_threshold(
-        width,
-        height,
-        4,
-        input_data,
-        threshold
-      );
+      return (uint8_t *)
+        fcv_trim_threshold(width, height, 4, input_data, threshold);
     }
     else if (has_param) {
       // Trim with threshold as numeric parameter
-      return (uint8_t *)fcv_trim_threshold(
-        width,
-        height,
-        4,
-        input_data,
-        param
-      );
+      return (uint8_t *)fcv_trim_threshold(width, height, 4, input_data, param);
     }
     else {
       // Default trim without threshold
@@ -1402,6 +1384,56 @@ int32_t main(int32_t argc, char *argv[]) {
     fprintf(stderr, "Error: Could not load image '%s'\n", input_path);
     free_pipeline(pipeline);
     return 1;
+  }
+
+  // Handle EXIF orientation for JPEGs
+  const char *ext_in = strrchr(input_path, '.');
+  if (ext_in && (strcmp(ext_in, ".jpg") == 0 || strcmp(ext_in, ".jpeg") == 0 ||
+                 strcmp(ext_in, ".JPG") == 0 || strcmp(ext_in, ".JPEG") == 0)) {
+    int32_t orientation = fcv_get_exif_orientation(input_path);
+    if (orientation > 1 && orientation <= 8) {
+      fprintf(stderr, "Applying EXIF orientation: %d\n", orientation);
+      uint8_t *rotated_data = NULL;
+      uint32_t old_width = (uint32_t)width;
+      uint32_t old_height = (uint32_t)height;
+
+      switch (orientation) {
+      case 2: // Flip Horizontal
+        rotated_data = fcv_flip_x(old_width, old_height, image_data);
+        break;
+      case 3: // 180 degrees
+        rotated_data = fcv_rotate_180(old_width, old_height, image_data);
+        break;
+      case 4: // Flip Vertical
+        rotated_data = fcv_flip_y(old_width, old_height, image_data);
+        break;
+      case 5: // Transpose
+        rotated_data = fcv_transpose(old_width, old_height, image_data);
+        width = (int32_t)old_height;
+        height = (int32_t)old_width;
+        break;
+      case 6: // 90 degrees CW
+        rotated_data = fcv_rotate_90_cw(old_width, old_height, image_data);
+        width = (int32_t)old_height;
+        height = (int32_t)old_width;
+        break;
+      case 7: // Transverse
+        rotated_data = fcv_transverse(old_width, old_height, image_data);
+        width = (int32_t)old_height;
+        height = (int32_t)old_width;
+        break;
+      case 8: // 270 degrees CW
+        rotated_data = fcv_rotate_270_cw(old_width, old_height, image_data);
+        width = (int32_t)old_height;
+        height = (int32_t)old_width;
+        break;
+      }
+
+      if (rotated_data) {
+        stbi_image_free(image_data);
+        image_data = rotated_data;
+      }
+    }
   }
 
   fprintf(
