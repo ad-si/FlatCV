@@ -67,7 +67,8 @@ static uint8_t *binary_erosion_disk(
   uint8_t const *image_data,
   int32_t width,
   int32_t height,
-  int32_t radius
+  int32_t radius,
+  bool replicate_border
 ) {
   if (!image_data || width <= 0 || height <= 0 || radius < 0) {
     return NULL;
@@ -98,15 +99,27 @@ static uint8_t *binary_erosion_disk(
             int32_t ny = y + dy;
             int32_t nx = x + dx;
 
-            // Check bounds - pixels outside image are considered black (0)
+            uint8_t neighbor_value;
+
+            // Check bounds
             if (ny < 0 || ny >= height || nx < 0 || nx >= width) {
-              can_erode = false;
+              if (replicate_border) {
+                // Replicate border: clamp coordinates to valid range
+                int32_t clamped_y = ny < 0 ? 0 : (ny >= height ? height - 1 : ny);
+                int32_t clamped_x = nx < 0 ? 0 : (nx >= width ? width - 1 : nx);
+                neighbor_value = image_data[clamped_y * width + clamped_x];
+              }
+              else {
+                // Default: treat out-of-bounds as black
+                neighbor_value = 0;
+              }
             }
             else {
-              int32_t nidx = ny * width + nx;
-              if (image_data[nidx] != 255) {
-                can_erode = false;
-              }
+              neighbor_value = image_data[ny * width + nx];
+            }
+
+            if (neighbor_value != 255) {
+              can_erode = false;
             }
           }
         }
@@ -138,7 +151,11 @@ uint8_t *fcv_binary_closing_disk(
   }
 
   // Step 2: Erosion of the dilated image
-  uint8_t *result = binary_erosion_disk(dilated, width, height, radius);
+  // Use replicate_border=true to preserve original white pixels at borders
+  // In a closing operation, out-of-bounds pixels use "replicate" border mode
+  // which clamps coordinates to valid range, preventing border pixels from
+  // being erroneously eroded due to artificial black boundary
+  uint8_t *result = binary_erosion_disk(dilated, width, height, radius, true);
 
   // Free intermediate result
   free(dilated);
