@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+      - name: Build
+        run: make flatcv_linux
+      - name: Run unit tests
+        run: make test-units
+      - name: Test amalgamation
+        run: make test-amalgamation
+
+  test-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: make flatcv_mac
+      - name: Run unit tests
+        run: make test-units
+      - name: Test amalgamation
+        run: make test-amalgamation
+
+  test-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          gcc -Wall -Wextra -Wpedantic \
+            -Iinclude src/*.c \
+            -lm -o flatcv_windows.exe
+      - name: Run unit tests
+        run: |
+          LIB_SRC=$(ls src/*.c | grep -v cli.c | tr '\n' ' ')
+          gcc -Wall -Wextra -Wpedantic \
+            -Iinclude tests/test.c $LIB_SRC \
+            -lm -o test_bin.exe
+          ./test_bin.exe
+          gcc -Wall -Wextra -Wpedantic \
+            -Iinclude $LIB_SRC tests/apply_test.c \
+            -o apply_test.exe
+          ./apply_test.exe
+      - name: Test amalgamation
+        run: |
+          make flatcv.h flatcv.c
+          mkdir -p tmp/amalgamation_test
+          cp flatcv.h flatcv.c tests/test_amalgamation.c tmp/amalgamation_test/
+          cd tmp/amalgamation_test && \
+            gcc -Wall -Wextra -Wpedantic \
+              flatcv.c test_amalgamation.c \
+              -lm -o test_amalgamation_bin.exe && \
+            ./test_amalgamation_bin.exe
