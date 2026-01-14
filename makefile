@@ -42,9 +42,17 @@ test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 
 CLI_TEST_FILES := $(wildcard tests/cli/*.md)
 
+# Detect platform for native binary target
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    FLATCV_NATIVE := flatcv_mac
+else ifeq ($(UNAME_S),Linux)
+    FLATCV_NATIVE := flatcv_linux
+endif
+
 # Integration tests for CLI
 .PHONY: test-integration
-test-integration: build $(CLI_TEST_FILES)
+test-integration: $(FLATCV_NATIVE) $(CLI_TEST_FILES)
 	scrut test --combine-output --work-directory=$$(pwd) $(CLI_TEST_FILES)
 
 
@@ -167,7 +175,7 @@ mac-lib: libflatcv_mac.a libflatcv_mac.dylib
 
 # Linux - Native build (run directly on Linux)
 flatcv_linux: $(HDR_FILES) $(SRC_FILES)
-	@if test "$$(uname)" != "Linux" \
+	@if test "$$(uname)" != "Linux"; \
 	then \
 		echo "Error: This target can only be built on Linux"; \
 		exit 1; \
