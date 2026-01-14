@@ -15,6 +15,7 @@
 #endif
 #include "stb_image_write.h"
 
+#include "binary_closing_disk.h"
 #include "conversion.h"
 #include "crop.h"
 #include "draw.h"
@@ -65,29 +66,22 @@ void print32_t_usage(const char *program_name) {
     "  bw_smooth       - Smooth (anti-aliased) black and white conversion\n"
   );
   printf("  detect_corners  - Detect corners and output as JSON\n");
-  printf(
-    "  draw_corners    - Detect corners and draw circles at each corner\n"
+  printf("  draw_corners    - Detect corners and draw circles at each corner\n"
   );
   printf("  sobel           - Apply Sobel edge detection\n");
   printf(
     "  circle <hex_color> <radius> <x>x<y> - Draw a colored circle at position "
     "(x,y)\n"
   );
-  printf(
-    "  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
-    "position "
-    "(x,y)\n"
-  );
-  printf(
-    "  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
-    "markers at "
-    "specified coordinates\n"
-  );
+  printf("  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
+         "position "
+         "(x,y)\n");
+  printf("  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
+         "markers at "
+         "specified coordinates\n");
   printf("  crop <widthxheight+x+y> - Crop the image\n");
-  printf(
-    "  extract_document - Extract document using corner detection and "
-    "perspective transform (auto-size)\n"
-  );
+  printf("  extract_document - Extract document using corner detection and "
+         "perspective transform (auto-size)\n");
   printf(
     "  extract_document_to <output_width>x<output_height> - Extract document "
     "to specific dimensions\n"
@@ -106,6 +100,10 @@ void print32_t_usage(const char *program_name) {
   printf(
     "  border <hex_color> <border_width> - Add colored border around image\n"
   );
+  printf("  erode <radius>  - Binary erosion with disk structuring element\n");
+  printf("  dilate <radius> - Binary dilation with disk structuring element\n");
+  printf("  close <radius>  - Binary closing (dilation then erosion)\n");
+  printf("  open <radius>   - Binary opening (erosion then dilation)\n");
   printf("\nPipeline syntax:\n");
   printf("  Operations are applied in sequence\n");
   printf("  Use parentheses for operations with parameters: (blur 3.0)\n");
@@ -825,9 +823,8 @@ uint8_t *apply_operation(
       fprintf(stderr, "Error: blur operation requires radius parameter\n");
       return NULL;
     }
-    return (
-      uint8_t *
-    )fcv_apply_gaussian_blur(*width, *height, param, input_data);
+    return (uint8_t *)
+      fcv_apply_gaussian_blur(*width, *height, param, input_data);
   }
   else if (strcmp(operation, "resize") == 0) {
     double resize_x, resize_y;
@@ -896,9 +893,8 @@ uint8_t *apply_operation(
     return result;
   }
   else if (strcmp(operation, "threshold") == 0) {
-    return (
-      uint8_t *
-    )fcv_otsu_threshold_rgba(*width, *height, false, input_data);
+    return (uint8_t *)
+      fcv_otsu_threshold_rgba(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smart") == 0) {
     return (uint8_t *)fcv_bw_smart(*width, *height, false, input_data);
@@ -1210,9 +1206,8 @@ uint8_t *apply_operation(
     if (has_string_param && param_str && strchr(param_str, '%')) {
       // Trim with threshold percentage
       double threshold = atof(param_str);
-      return (
-        uint8_t *
-      )fcv_trim_threshold(width, height, 4, input_data, threshold);
+      return (uint8_t *)
+        fcv_trim_threshold(width, height, 4, input_data, threshold);
     }
     else if (has_param) {
       // Trim with threshold as numeric parameter
@@ -1267,6 +1262,110 @@ uint8_t *apply_operation(
       *height = output_height;
     }
 
+    return result;
+  }
+  else if (strcmp(operation, "erode") == 0) {
+    if (!has_param) {
+      fprintf(stderr, "Error: erode operation requires radius parameter\n");
+      return NULL;
+    }
+
+    // Convert RGBA to grayscale for binary morphology
+    uint8_t *grayscale_data =
+      fcv_rgba_to_grayscale(*width, *height, input_data);
+    if (!grayscale_data) {
+      return NULL;
+    }
+
+    uint8_t *eroded =
+      fcv_binary_erosion_disk(grayscale_data, *width, *height, (int32_t)param);
+    free(grayscale_data);
+
+    if (!eroded) {
+      return NULL;
+    }
+
+    // Convert back to RGBA
+    uint8_t *result = fcv_single_to_multichannel(*width, *height, eroded);
+    free(eroded);
+    return result;
+  }
+  else if (strcmp(operation, "dilate") == 0) {
+    if (!has_param) {
+      fprintf(stderr, "Error: dilate operation requires radius parameter\n");
+      return NULL;
+    }
+
+    // Convert RGBA to grayscale for binary morphology
+    uint8_t *grayscale_data =
+      fcv_rgba_to_grayscale(*width, *height, input_data);
+    if (!grayscale_data) {
+      return NULL;
+    }
+
+    uint8_t *dilated =
+      fcv_binary_dilation_disk(grayscale_data, *width, *height, (int32_t)param);
+    free(grayscale_data);
+
+    if (!dilated) {
+      return NULL;
+    }
+
+    // Convert back to RGBA
+    uint8_t *result = fcv_single_to_multichannel(*width, *height, dilated);
+    free(dilated);
+    return result;
+  }
+  else if (strcmp(operation, "close") == 0) {
+    if (!has_param) {
+      fprintf(stderr, "Error: close operation requires radius parameter\n");
+      return NULL;
+    }
+
+    // Convert RGBA to grayscale for binary morphology
+    uint8_t *grayscale_data =
+      fcv_rgba_to_grayscale(*width, *height, input_data);
+    if (!grayscale_data) {
+      return NULL;
+    }
+
+    uint8_t *closed =
+      fcv_binary_closing_disk(grayscale_data, *width, *height, (int32_t)param);
+    free(grayscale_data);
+
+    if (!closed) {
+      return NULL;
+    }
+
+    // Convert back to RGBA
+    uint8_t *result = fcv_single_to_multichannel(*width, *height, closed);
+    free(closed);
+    return result;
+  }
+  else if (strcmp(operation, "open") == 0) {
+    if (!has_param) {
+      fprintf(stderr, "Error: open operation requires radius parameter\n");
+      return NULL;
+    }
+
+    // Convert RGBA to grayscale for binary morphology
+    uint8_t *grayscale_data =
+      fcv_rgba_to_grayscale(*width, *height, input_data);
+    if (!grayscale_data) {
+      return NULL;
+    }
+
+    uint8_t *opened =
+      fcv_binary_opening_disk(grayscale_data, *width, *height, (int32_t)param);
+    free(grayscale_data);
+
+    if (!opened) {
+      return NULL;
+    }
+
+    // Convert back to RGBA
+    uint8_t *result = fcv_single_to_multichannel(*width, *height, opened);
+    free(opened);
     return result;
   }
   else {

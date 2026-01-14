@@ -13,7 +13,7 @@
 #include "flatcv.h"
 #endif
 
-static uint8_t *binary_dilation_disk(
+uint8_t *fcv_binary_dilation_disk(
   uint8_t const *image_data,
   int32_t width,
   int32_t height,
@@ -63,7 +63,7 @@ static uint8_t *binary_dilation_disk(
   return result;
 }
 
-static uint8_t *binary_erosion_disk(
+static uint8_t *binary_erosion_disk_internal(
   uint8_t const *image_data,
   int32_t width,
   int32_t height,
@@ -105,7 +105,8 @@ static uint8_t *binary_erosion_disk(
             if (ny < 0 || ny >= height || nx < 0 || nx >= width) {
               if (replicate_border) {
                 // Replicate border: clamp coordinates to valid range
-                int32_t clamped_y = ny < 0 ? 0 : (ny >= height ? height - 1 : ny);
+                int32_t clamped_y =
+                  ny < 0 ? 0 : (ny >= height ? height - 1 : ny);
                 int32_t clamped_x = nx < 0 ? 0 : (nx >= width ? width - 1 : nx);
                 neighbor_value = image_data[clamped_y * width + clamped_x];
               }
@@ -134,6 +135,16 @@ static uint8_t *binary_erosion_disk(
   return result;
 }
 
+uint8_t *fcv_binary_erosion_disk(
+  uint8_t const *image_data,
+  int32_t width,
+  int32_t height,
+  int32_t radius
+) {
+  // Public API uses default behavior: treat out-of-bounds as black
+  return binary_erosion_disk_internal(image_data, width, height, radius, false);
+}
+
 uint8_t *fcv_binary_closing_disk(
   uint8_t const *image_data,
   int32_t width,
@@ -145,7 +156,8 @@ uint8_t *fcv_binary_closing_disk(
   }
 
   // Step 1: Dilation
-  uint8_t *dilated = binary_dilation_disk(image_data, width, height, radius);
+  uint8_t *dilated =
+    fcv_binary_dilation_disk(image_data, width, height, radius);
   if (!dilated) {
     return NULL;
   }
@@ -155,10 +167,36 @@ uint8_t *fcv_binary_closing_disk(
   // In a closing operation, out-of-bounds pixels use "replicate" border mode
   // which clamps coordinates to valid range, preventing border pixels from
   // being erroneously eroded due to artificial black boundary
-  uint8_t *result = binary_erosion_disk(dilated, width, height, radius, true);
+  uint8_t *result =
+    binary_erosion_disk_internal(dilated, width, height, radius, true);
 
   // Free intermediate result
   free(dilated);
+
+  return result;
+}
+
+uint8_t *fcv_binary_opening_disk(
+  uint8_t const *image_data,
+  int32_t width,
+  int32_t height,
+  int32_t radius
+) {
+  if (!image_data || width <= 0 || height <= 0 || radius < 0) {
+    return NULL;
+  }
+
+  // Step 1: Erosion
+  uint8_t *eroded = fcv_binary_erosion_disk(image_data, width, height, radius);
+  if (!eroded) {
+    return NULL;
+  }
+
+  // Step 2: Dilation of the eroded image
+  uint8_t *result = fcv_binary_dilation_disk(eroded, width, height, radius);
+
+  // Free intermediate result
+  free(eroded);
 
   return result;
 }
