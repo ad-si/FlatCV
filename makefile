@@ -53,6 +53,7 @@ endif
 # Integration tests for CLI
 .PHONY: test-integration
 test-integration: $(FLATCV_NATIVE) $(CLI_TEST_FILES)
+	ln -sf $(FLATCV_NATIVE) flatcv
 	scrut test --combine-output --work-directory=$$(pwd) $(CLI_TEST_FILES)
 
 

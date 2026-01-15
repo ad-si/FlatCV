@@ -3,6 +3,7 @@
 - [Introduction](introduction.md)
 - [Usage](usage.md)
   - [Flip](flip.md)
+  - [Rotate](rotate.md)
   - [Crop](crop.md)
   - [Trim](trim.md)
   - [Resize](resize.md)
