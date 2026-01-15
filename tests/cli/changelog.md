@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-01-15 - 0.3.0
+
+- Add and improve several image manipulation features
+  - Rotate
+  - Border
+  - Morphological operations: erode, dilate, open, and close
+    - Fix binary_erosion_disk function
+  - Histogram
+  - Add threshold parameter to trim operation
+  - Corner detection
+    - Improve results by gradually lowering threshold for corner peaks
+        and interpolating missing ones
+- Add support for images with EXIF rotation
+- Add input validation, NULL checks, and integer overflow protection
+- Add cross-platform CI testing
+- Fix macOS build in makefile
+- Add more examples to documentation
+
 
 ## 2025-08-23 - 0.2.0
 

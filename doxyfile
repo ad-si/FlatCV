@@ -1,6 +1,6 @@
 DOXYFILE_ENCODING      = UTF-8
 PROJECT_NAME           = FlatCV
-PROJECT_NUMBER         = 0.2.0
+PROJECT_NUMBER         = 0.3.0
 PROJECT_BRIEF          = Computer vision library in pure C.
 PROJECT_LOGO           =
 PROJECT_ICON           =
