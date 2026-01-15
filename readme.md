@@ -33,6 +33,10 @@ for more details on each feature.
 
 FlatCV can either be used as a C library or via its CLI.
 
+You can get the single file version of the code and the CLI binaries
+in the release artifacts section of each release:
+[github.com/ad-si/FlatCV/releases](https://github.com/ad-si/FlatCV/releases)
+
 
 ### CLI
 
