@@ -217,7 +217,7 @@ win-test: flatcv_windows_x86_64.exe
 
 
 .PHONY: build
-build: mac-build lin-build win-build wasm-build
+build: mac-build lin-build-docker win-build wasm-build
 
 
 # WebAssembly build with Emscripten
@@ -320,7 +320,7 @@ docs/build: tests/cli/imgs
 
 
 .PHONY: release
-release: build combine mac-build lin-build win-build wasm-build
+release: combine mac-build lin-build-docker win-build wasm-build
 	@echo "1. Add binaries to GitHub release: https://github.com/ad-si/FlatCV/releases"
 
 

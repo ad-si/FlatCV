@@ -1738,8 +1738,8 @@ var wasmImports = {
 };
 var wasmExports = await createWasm();
 var ___wasm_call_ctors = createExportWrapper('__wasm_call_ctors', 0);
-var _free = Module['_free'] = createExportWrapper('free', 1);
 var _malloc = Module['_malloc'] = createExportWrapper('malloc', 1);
+var _free = Module['_free'] = createExportWrapper('free', 1);
 var _fcv_grayscale = Module['_fcv_grayscale'] = createExportWrapper('fcv_grayscale', 3);
 var _fcv_otsu_threshold_rgba = Module['_fcv_otsu_threshold_rgba'] = createExportWrapper('fcv_otsu_threshold_rgba', 4);
 var _fcv_apply_gaussian_blur = Module['_fcv_apply_gaussian_blur'] = createExportWrapper('fcv_apply_gaussian_blur', 4);
