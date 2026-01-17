@@ -34,6 +34,10 @@ module FlatCV
   , Matrix3x3(..)
   , Point2D(..)
 
+    -- * Pretty printing
+  , prettyShowCorners
+  , prettyShowMatrix3x3
+
     -- * Color conversion
   , grayscale
   , grayscaleStretch
@@ -112,7 +116,8 @@ import Foreign.ForeignPtr (newForeignPtr, FinalizerPtr, castForeignPtr)
 import Foreign.Marshal.Alloc (alloca, free, mallocBytes)
 import Foreign.Marshal.Array (pokeArray)
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
-import Foreign.Storable (Storable(..), peek, poke)
+import Foreign.Storable (Storable(..), peek, poke, sizeOf, alignment)
+import Text.Printf (printf)
 
 import qualified FlatCV.Raw as Raw
 
@@ -131,8 +136,8 @@ data Point2D = Point2D
   } deriving (Show, Eq)
 
 instance Storable Point2D where
-  sizeOf _ = 16
-  alignment _ = 8
+  sizeOf _ = 2 * sizeOf (0.0 :: Double)
+  alignment _ = alignment (0.0 :: Double)
   peek ptr = do
     x <- peekByteOff ptr 0
     y <- peekByteOff ptr 8
@@ -154,8 +159,8 @@ data Corners = Corners
   } deriving (Show, Eq)
 
 instance Storable Corners where
-  sizeOf _ = 64
-  alignment _ = 8
+  sizeOf _ = 8 * sizeOf (0.0 :: Double)
+  alignment _ = alignment (0.0 :: Double)
   peek ptr = do
     tlX <- peekByteOff ptr 0
     tlY <- peekByteOff ptr 8
@@ -176,6 +181,12 @@ instance Storable Corners where
     pokeByteOff ptr 48 blX
     pokeByteOff ptr 56 blY
 
+-- | Pretty print corners for debugging
+prettyShowCorners :: Corners -> String
+prettyShowCorners Corners{..} =
+  show (tlX, tlY) ++ " " ++ show (trX, trY) ++ "\n" ++
+  show (blX, blY) ++ " " ++ show (brX, brY)
+
 -- | 3x3 transformation matrix
 data Matrix3x3 = Matrix3x3
   { m00 :: {-# UNPACK #-} !Double
@@ -190,8 +201,8 @@ data Matrix3x3 = Matrix3x3
   } deriving (Show, Eq)
 
 instance Storable Matrix3x3 where
-  sizeOf _ = 72
-  alignment _ = 8
+  sizeOf _ = 9 * sizeOf (0.0 :: Double)
+  alignment _ = alignment (0.0 :: Double)
   peek ptr = do
     m00 <- peekByteOff ptr 0
     m01 <- peekByteOff ptr 8
@@ -213,6 +224,14 @@ instance Storable Matrix3x3 where
     pokeByteOff ptr 48 m20
     pokeByteOff ptr 56 m21
     pokeByteOff ptr 64 m22
+
+-- | Pretty print 3x3 matrix for debugging
+prettyShowMatrix3x3 :: Matrix3x3 -> String
+prettyShowMatrix3x3 Matrix3x3{..} =
+  let fNum n = printf "% .5f" (n :: Double)
+  in fNum m00 ++ " " ++ fNum m01 ++ " " ++ fNum m02 ++ "\n" ++
+     fNum m10 ++ " " ++ fNum m11 ++ " " ++ fNum m12 ++ "\n" ++
+     fNum m20 ++ " " ++ fNum m21 ++ " " ++ fNum m22
 
 -- Foreign finalizer for C-allocated memory
 foreign import ccall "stdlib.h &free" finalizerFree :: FinalizerPtr CUChar

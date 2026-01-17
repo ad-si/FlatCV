@@ -181,6 +181,11 @@ main = hspec $ do
         blX corners `shouldBe` 6
         blY corners `shouldBe` 7
 
+    describe "prettyShowCorners" $ do
+      it "formats corners as a readable string" $ do
+        let corners = Corners 0 0 100 0 100 100 0 100
+        prettyShowCorners corners `shouldBe` "(0.0,0.0) (100.0,0.0)\n(0.0,100.0) (100.0,100.0)"
+
     describe "Matrix3x3" $ do
       it "has correct Storable instance" $ do
         let mat = Matrix3x3 1 0 0 0 1 0 0 0 1  -- Identity matrix
@@ -188,6 +193,13 @@ main = hspec $ do
         m11 mat `shouldBe` 1
         m22 mat `shouldBe` 1
         m01 mat `shouldBe` 0
+
+    describe "prettyShowMatrix3x3" $ do
+      it "formats matrix as a readable string" $ do
+        let mat = Matrix3x3 1 0 0 0 1 0 0 0 1
+        -- Just check it contains the values and has newlines
+        prettyShowMatrix3x3 mat `shouldContain` "1.00000"
+        prettyShowMatrix3x3 mat `shouldContain` "\n"
 
     describe "calculatePerspectiveTransform" $ do
       it "calculates identity-like transform for same corners" $ do
