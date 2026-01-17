@@ -103,6 +103,38 @@ module FlatCV
     -- * Utility
   , parseHexColor
   , convertToBinary
+
+    -- * Pointer-based API (zero-copy)
+    -- | These functions work directly with 'Ptr Word8' for zero-copy
+    -- interop with foreign data. The caller is responsible for memory
+    -- management. Output pointers are allocated by the C library and
+    -- must be freed with 'Foreign.Marshal.Alloc.free'.
+
+    -- ** Color conversion (pointer-based)
+  , grayscalePtr
+  , grayscaleStretchPtr
+  , rgbaToGrayscalePtr
+  , singleToMultichannelPtr
+
+    -- ** Filtering (pointer-based)
+  , gaussianBlurPtr
+
+    -- ** Thresholding (pointer-based)
+  , otsuThresholdPtr
+  , bwSmartPtr
+
+    -- ** Perspective transform (pointer-based)
+  , calculatePerspectiveTransformPtr
+  , applyMatrix3x3Ptr
+  , detectCornersPtr
+
+    -- ** Geometric transforms (pointer-based)
+  , flipXPtr
+  , flipYPtr
+  , transposePtr
+  , rotate90CWPtr
+  , rotate180Ptr
+  , rotate270CWPtr
   ) where
 
 import Control.Monad (when)
@@ -608,3 +640,100 @@ convertToBinary width height fgHex bgHex input =
     withCString bgHex $ \bgPtr ->
       withImageData input (\p -> Raw.fcv_convert_to_binary p width height fgPtr bgPtr)
         (fromIntegral $ width * height * 4)
+
+--------------------------------------------------------------------------------
+-- Pointer-based API (zero-copy)
+--------------------------------------------------------------------------------
+
+-- | Convert RGBA image to grayscale (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+grayscalePtr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+grayscalePtr = Raw.fcv_grayscale
+
+-- | Convert to grayscale with contrast stretching (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+grayscaleStretchPtr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+grayscaleStretchPtr = Raw.fcv_grayscale_stretch
+
+-- | Convert RGBA to single-channel grayscale (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+rgbaToGrayscalePtr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+rgbaToGrayscalePtr = Raw.fcv_rgba_to_grayscale
+
+-- | Convert single-channel grayscale to RGBA (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+singleToMultichannelPtr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+singleToMultichannelPtr = Raw.fcv_single_to_multichannel
+
+-- | Apply Gaussian blur (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+gaussianBlurPtr :: Word32 -> Word32 -> Double -> Ptr Word8 -> IO (Ptr Word8)
+gaussianBlurPtr = Raw.fcv_apply_gaussian_blur
+
+-- | Apply Otsu threshold (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+otsuThresholdPtr :: Word32 -> Word32 -> Bool -> Ptr Word8 -> IO (Ptr Word8)
+otsuThresholdPtr = Raw.fcv_otsu_threshold_rgba
+
+-- | Smart black and white conversion (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+bwSmartPtr :: Word32 -> Word32 -> Bool -> Ptr Word8 -> IO (Ptr Word8)
+bwSmartPtr = Raw.fcv_bw_smart
+
+-- | Calculate perspective transform matrix (pointer-based).
+-- Takes pointers to Corners structs, returns pointer to Matrix3x3.
+-- Output matrix is allocated by C and must be freed by caller.
+calculatePerspectiveTransformPtr :: Ptr Corners -> Ptr Corners -> IO (Ptr Matrix3x3)
+calculatePerspectiveTransformPtr srcPtr dstPtr = do
+  matPtr <- Raw.fcv_calculate_perspective_transform (castPtr srcPtr) (castPtr dstPtr)
+  return (castPtr matPtr)
+
+-- | Apply 3x3 transformation matrix (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+applyMatrix3x3Ptr
+  :: Int32         -- ^ Input width
+  -> Int32         -- ^ Input height
+  -> Ptr Word8     -- ^ Input data
+  -> Int32         -- ^ Output width
+  -> Int32         -- ^ Output height
+  -> Ptr Matrix3x3 -- ^ Transformation matrix
+  -> IO (Ptr Word8)
+applyMatrix3x3Ptr inW inH inPtr outW outH matPtr =
+  Raw.fcv_apply_matrix_3x3 inW inH inPtr outW outH (castPtr matPtr)
+
+-- | Detect document corners (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+detectCornersPtr :: Ptr Word8 -> Int32 -> Int32 -> IO (Ptr Corners)
+detectCornersPtr inPtr w h = do
+  cornersPtr <- Raw.fcv_detect_corners_ptr inPtr w h
+  return (castPtr cornersPtr)
+
+-- | Flip image horizontally (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+flipXPtr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+flipXPtr = Raw.fcv_flip_x
+
+-- | Flip image vertically (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+flipYPtr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+flipYPtr = Raw.fcv_flip_y
+
+-- | Transpose image (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+transposePtr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+transposePtr = Raw.fcv_transpose
+
+-- | Rotate 90 degrees clockwise (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+rotate90CWPtr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+rotate90CWPtr = Raw.fcv_rotate_90_cw
+
+-- | Rotate 180 degrees (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+rotate180Ptr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+rotate180Ptr = Raw.fcv_rotate_180
+
+-- | Rotate 270 degrees clockwise (pointer-based).
+-- Output is allocated by C and must be freed by caller.
+rotate270CWPtr :: Word32 -> Word32 -> Ptr Word8 -> IO (Ptr Word8)
+rotate270CWPtr = Raw.fcv_rotate_270_cw
