@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 -- |
@@ -139,6 +140,8 @@ module FlatCV
 
 import Control.Monad (when)
 import Data.Int (Int32)
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Word (Word8, Word32)
 import qualified Data.Vector.Storable as V
 import qualified Data.Vector.Storable.Mutable as MV
@@ -214,10 +217,10 @@ instance Storable Corners where
     pokeByteOff ptr 56 blY
 
 -- | Pretty print corners for debugging
-prettyShowCorners :: Corners -> String
+prettyShowCorners :: Corners -> Text
 prettyShowCorners Corners{..} =
-  show (tlX, tlY) ++ " " ++ show (trX, trY) ++ "\n" ++
-  show (blX, blY) ++ " " ++ show (brX, brY)
+  T.pack (show (tlX, tlY)) <> " " <> T.pack (show (trX, trY)) <> "\n" <>
+  T.pack (show (blX, blY)) <> " " <> T.pack (show (brX, brY))
 
 -- | 3x3 transformation matrix
 data Matrix3x3 = Matrix3x3
@@ -258,12 +261,12 @@ instance Storable Matrix3x3 where
     pokeByteOff ptr 64 m22
 
 -- | Pretty print 3x3 matrix for debugging
-prettyShowMatrix3x3 :: Matrix3x3 -> String
+prettyShowMatrix3x3 :: Matrix3x3 -> Text
 prettyShowMatrix3x3 Matrix3x3{..} =
-  let fNum n = printf "% .5f" (n :: Double)
-  in fNum m00 ++ " " ++ fNum m01 ++ " " ++ fNum m02 ++ "\n" ++
-     fNum m10 ++ " " ++ fNum m11 ++ " " ++ fNum m12 ++ "\n" ++
-     fNum m20 ++ " " ++ fNum m21 ++ " " ++ fNum m22
+  let fNum n = T.pack (printf "% .5f" (n :: Double))
+  in fNum m00 <> " " <> fNum m01 <> " " <> fNum m02 <> "\n" <>
+     fNum m10 <> " " <> fNum m11 <> " " <> fNum m12 <> "\n" <>
+     fNum m20 <> " " <> fNum m21 <> " " <> fNum m22
 
 -- Foreign finalizer for C-allocated memory
 foreign import ccall "stdlib.h &free" finalizerFree :: FinalizerPtr CUChar
@@ -539,31 +542,31 @@ extractDocumentAuto width height input = do
 --------------------------------------------------------------------------------
 
 -- | Draw a circle outline on an image (modifies input in place)
-drawCircle :: Word32 -> Word32 -> Word32 -> String -> Double -> Double -> Double -> V.Vector Word8 -> IO (V.Vector Word8)
+drawCircle :: Word32 -> Word32 -> Word32 -> Text -> Double -> Double -> Double -> V.Vector Word8 -> IO (V.Vector Word8)
 drawCircle width height channels hexColor radius centerX centerY input = do
   output <- V.thaw input
   MV.unsafeWith output $ \ptr ->
-    withCString hexColor $ \colorPtr ->
+    withCString (T.unpack hexColor) $ \colorPtr ->
       Raw.fcv_draw_circle width height channels colorPtr radius centerX centerY ptr
   V.unsafeFreeze output
 
 -- | Draw a filled disk on an image (modifies input in place)
-drawDisk :: Word32 -> Word32 -> Word32 -> String -> Double -> Double -> Double -> V.Vector Word8 -> IO (V.Vector Word8)
+drawDisk :: Word32 -> Word32 -> Word32 -> Text -> Double -> Double -> Double -> V.Vector Word8 -> IO (V.Vector Word8)
 drawDisk width height channels hexColor radius centerX centerY input = do
   output <- V.thaw input
   MV.unsafeWith output $ \ptr ->
-    withCString hexColor $ \colorPtr ->
+    withCString (T.unpack hexColor) $ \colorPtr ->
       Raw.fcv_draw_disk width height channels colorPtr radius centerX centerY ptr
   V.unsafeFreeze output
 
 -- | Add a border around an image
 -- Returns (output width, output height, output data)
-addBorder :: Word32 -> Word32 -> Word32 -> String -> Word32 -> V.Vector Word8 -> IO (Word32, Word32, V.Vector Word8)
+addBorder :: Word32 -> Word32 -> Word32 -> Text -> Word32 -> V.Vector Word8 -> IO (Word32, Word32, V.Vector Word8)
 addBorder width height channels hexColor borderWidth input = do
   alloca $ \outWPtr ->
     alloca $ \outHPtr -> do
       V.unsafeWith input $ \inPtr ->
-        withCString hexColor $ \colorPtr -> do
+        withCString (T.unpack hexColor) $ \colorPtr -> do
           outPtr <- Raw.fcv_add_border width height channels colorPtr borderWidth inPtr outWPtr outHPtr
           when (outPtr == nullPtr) $ error "FlatCV: add_border failed"
           outW <- peek outWPtr
@@ -621,12 +624,12 @@ getExifOrientation path =
 --------------------------------------------------------------------------------
 
 -- | Parse hex color string (e.g., "#FF0000" or "FF0000") to RGB
-parseHexColor :: String -> IO (Word8, Word8, Word8)
+parseHexColor :: Text -> IO (Word8, Word8, Word8)
 parseHexColor hexColor =
   alloca $ \rPtr ->
     alloca $ \gPtr ->
       alloca $ \bPtr ->
-        withCString hexColor $ \colorPtr -> do
+        withCString (T.unpack hexColor) $ \colorPtr -> do
           Raw.fcv_parse_hex_color colorPtr rPtr gPtr bPtr
           r <- peek rPtr
           g <- peek gPtr
@@ -634,10 +637,10 @@ parseHexColor hexColor =
           return (r, g, b)
 
 -- | Convert image to binary with custom foreground and background colors
-convertToBinary :: Int32 -> Int32 -> String -> String -> V.Vector Word8 -> IO (V.Vector Word8)
+convertToBinary :: Int32 -> Int32 -> Text -> Text -> V.Vector Word8 -> IO (V.Vector Word8)
 convertToBinary width height fgHex bgHex input =
-  withCString fgHex $ \fgPtr ->
-    withCString bgHex $ \bgPtr ->
+  withCString (T.unpack fgHex) $ \fgPtr ->
+    withCString (T.unpack bgHex) $ \bgPtr ->
       withImageData input (\p -> Raw.fcv_convert_to_binary p width height fgPtr bgPtr)
         (fromIntegral $ width * height * 4)
 

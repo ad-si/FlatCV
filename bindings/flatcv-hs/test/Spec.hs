@@ -2,6 +2,8 @@
 
 module Main where
 
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Word (Word8)
 import qualified Data.Vector.Storable as V
 import Test.Hspec
@@ -184,7 +186,7 @@ main = hspec $ do
     describe "prettyShowCorners" $ do
       it "formats corners as a readable string" $ do
         let corners = Corners 0 0 100 0 100 100 0 100
-        prettyShowCorners corners `shouldBe` "(0.0,0.0) (100.0,0.0)\n(0.0,100.0) (100.0,100.0)"
+        prettyShowCorners corners `shouldBe` ("(0.0,0.0) (100.0,0.0)\n(0.0,100.0) (100.0,100.0)" :: Text)
 
     describe "Matrix3x3" $ do
       it "has correct Storable instance" $ do
@@ -198,8 +200,8 @@ main = hspec $ do
       it "formats matrix as a readable string" $ do
         let mat = Matrix3x3 1 0 0 0 1 0 0 0 1
         -- Just check it contains the values and has newlines
-        prettyShowMatrix3x3 mat `shouldContain` "1.00000"
-        prettyShowMatrix3x3 mat `shouldContain` "\n"
+        prettyShowMatrix3x3 mat `shouldSatisfy` T.isInfixOf "1.00000"
+        prettyShowMatrix3x3 mat `shouldSatisfy` T.isInfixOf "\n"
 
     describe "calculatePerspectiveTransform" $ do
       it "calculates identity-like transform for same corners" $ do

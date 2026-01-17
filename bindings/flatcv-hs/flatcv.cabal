@@ -43,6 +43,7 @@ library
 
     build-depends:
         base >= 4.12 && < 5,
+        text >= 1.2 && < 2.2,
         vector >= 0.12 && < 0.14
 
     include-dirs:       .
@@ -60,4 +61,5 @@ test-suite flatcv-test
         base >= 4.12 && < 5,
         flatcv,
         hspec >= 2.7 && < 2.12,
+        text >= 1.2 && < 2.2,
         vector >= 0.12 && < 0.14
