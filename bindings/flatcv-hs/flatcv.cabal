@@ -21,7 +21,7 @@ build-type:         Simple
 extra-source-files:
     flatcv.h
     flatcv_impl.c
-    CHANGELOG.md
+    changelog.md
     README.md
 
 homepage:           https://github.com/ad-si/FlatCV
