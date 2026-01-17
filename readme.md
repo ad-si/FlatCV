@@ -29,6 +29,16 @@ Check out the [official documentation][docs]
 for more details on each feature.
 
 
+### Cross Platform Support
+
+- Linux (x86 & arm64)
+- macOS (x86 & arm64)
+- Windows (x86 & arm64)
+- PowerPC
+- RISC-V
+- …
+
+
 ## Usage
 
 FlatCV can either be used as a C library or via its CLI.
