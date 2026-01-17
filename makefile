@@ -298,6 +298,11 @@ flatcv: flatcv.c flatcv.h src/cli.c
 .PHONY: combine
 combine: flatcv.h flatcv.c
 
+.PHONY: hs-bindings
+hs-bindings: flatcv.h flatcv.c
+	cp flatcv.h bindings/flatcv-hs/
+	cp flatcv.c bindings/flatcv-hs/flatcv_impl.c
+
 
 .PHONY: docs-lib/build
 docs-lib/build:

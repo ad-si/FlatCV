@@ -1,0 +1,63 @@
+cabal-version:      2.4
+name:               flatcv
+version:            0.3.0
+synopsis:           Haskell bindings for FlatCV image processing library
+description:
+    FlatCV is a lightweight, dependency-free image processing library
+    written in C. This package provides Haskell bindings to the FlatCV
+    library, enabling fast image operations like grayscale conversion,
+    Gaussian blur, edge detection, perspective transforms, and more.
+    .
+    The library is particularly useful for document scanning and
+    image preprocessing tasks.
+
+license:            ISC
+license-file:       LICENSE
+author:             Adrian Sieber
+maintainer:         mail@adriansieber.com
+copyright:          2025 Adrian Sieber
+category:           Graphics, Image
+build-type:         Simple
+extra-source-files:
+    flatcv.h
+    flatcv_impl.c
+    CHANGELOG.md
+    README.md
+
+homepage:           https://github.com/ad-si/FlatCV
+bug-reports:        https://github.com/ad-si/FlatCV/issues
+
+source-repository head
+    type:     git
+    location: https://github.com/ad-si/FlatCV.git
+
+library
+    exposed-modules:    FlatCV
+    other-modules:      FlatCV.Raw
+    build-tool-depends: c2hs:c2hs >= 0.28
+    hs-source-dirs:     src
+    default-language:   Haskell2010
+    default-extensions:
+        RecordWildCards
+
+    build-depends:
+        base >= 4.12 && < 5,
+        vector >= 0.12
+
+    include-dirs:       .
+    c-sources:          flatcv_impl.c
+
+    cc-options:         -O2
+    ghc-options:        -Wall
+
+test-suite flatcv-test
+    type:               exitcode-stdio-1.0
+    main-is:            Spec.hs
+    hs-source-dirs:     test
+    default-language:   Haskell2010
+    ghc-options:        -Wall -threaded -rtsopts -with-rtsopts=-N
+    build-depends:
+        base >= 4.12 && < 5,
+        flatcv,
+        hspec >= 2.7,
+        vector >= 0.12

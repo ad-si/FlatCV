@@ -1,0 +1,4 @@
+.direnv
+.stack-work
+flatcv.h
+flatcv_impl.c

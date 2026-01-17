@@ -1,0 +1,6 @@
+resolver: lts-24.28
+
+system-ghc: true  # Installed via Nix
+
+packages:
+  - .
