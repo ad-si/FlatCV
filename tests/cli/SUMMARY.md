@@ -18,5 +18,6 @@
   - [Document-Extraction](document-extraction.md)
 - [Benchmark](benchmark.md)
 - [FAQ](faq.md)
+- [Haskell Bindings](haskell-bindings.md)
 - [Changelog](changelog.md)
 - [Playground](playground/index.html)
