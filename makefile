@@ -45,6 +45,12 @@ test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 		uv run tests/generate_qr_test_images.py; \
 	fi
 
+	@if [ ! -d tests/qr_codes_difficulty ] \
+		|| [ -z "$$(ls -A tests/qr_codes_difficulty 2>/dev/null)" ]; then \
+		echo "Generating difficulty-tiered QR test images (one-time, pyzxing-validated)..."; \
+		uv run tests/generate_qr_test_images.py --difficulty --per-level 30 --seed 42; \
+	fi
+
 	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
 		-Iinclude $(LIB_SRC_FILES) tests/test_qr_code.c \
 		-lm -o test_qr_code \

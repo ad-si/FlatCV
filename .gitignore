@@ -15,6 +15,7 @@
 /test_qr_code
 /tests/book
 /tests/cli/imgs
+/tests/qr_codes_difficulty
 /tests/qr_codes_generated
 /tests/qr_codes_photos
 /tmp

@@ -194,6 +194,288 @@ static int test_generated_images(void) {
   return failed;
 }
 
+typedef struct {
+  char **entries;
+  size_t count;
+  size_t capacity;
+  uint8_t *seen; /* parallel to entries: 1 once matched in this run */
+} KnownFailureList;
+
+static int known_failure_load(KnownFailureList *kfl, const char *path) {
+  kfl->entries = NULL;
+  kfl->count = 0;
+  kfl->capacity = 0;
+  kfl->seen = NULL;
+
+  FILE *f = fopen(path, "r");
+  if (!f) {
+    return 0; /* missing file = no known failures */
+  }
+
+  char line[512];
+  while (fgets(line, sizeof(line), f)) {
+    char *p = line;
+    while (*p == ' ' || *p == '\t') {
+      p++;
+    }
+    if (*p == '#' || *p == '\n' || *p == '\r' || *p == '\0') {
+      continue;
+    }
+    size_t len = strlen(p);
+    while (len > 0 && (p[len - 1] == '\n' || p[len - 1] == '\r' ||
+                       p[len - 1] == ' ' || p[len - 1] == '\t')) {
+      p[--len] = '\0';
+    }
+    if (len == 0) {
+      continue;
+    }
+
+    if (kfl->count == kfl->capacity) {
+      size_t new_cap = kfl->capacity == 0 ? 16 : kfl->capacity * 2;
+      char **ne = realloc(kfl->entries, new_cap * sizeof(*ne));
+      uint8_t *ns = realloc(kfl->seen, new_cap * sizeof(*ns));
+      if (!ne || !ns) {
+        fclose(f);
+        return -1;
+      }
+      kfl->entries = ne;
+      kfl->seen = ns;
+      kfl->capacity = new_cap;
+    }
+    kfl->entries[kfl->count] = strdup(p);
+    kfl->seen[kfl->count] = 0;
+    kfl->count++;
+  }
+  fclose(f);
+  return 0;
+}
+
+static int known_failure_check(KnownFailureList *kfl, const char *relpath) {
+  for (size_t i = 0; i < kfl->count; i++) {
+    if (strcmp(kfl->entries[i], relpath) == 0) {
+      kfl->seen[i] = 1;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static void known_failure_free(KnownFailureList *kfl) {
+  for (size_t i = 0; i < kfl->count; i++) {
+    free(kfl->entries[i]);
+  }
+  free(kfl->entries);
+  free(kfl->seen);
+}
+
+static int expected_text_from_filename(
+  const char *name,
+  size_t name_len,
+  char *out,
+  size_t out_size
+) {
+  /* Filename: <index>_<text>.png — split on the first '_'. */
+  if (name_len < 5 || strcmp(name + name_len - 4, ".png") != 0) {
+    return -1;
+  }
+  size_t stem_len = name_len - 4;
+  const char *sep = NULL;
+  for (size_t i = 0; i < stem_len; i++) {
+    if (name[i] == '_') {
+      sep = name + i;
+      break;
+    }
+  }
+  if (!sep || (size_t)(sep - name) >= stem_len - 1) {
+    return -1;
+  }
+  size_t text_len = stem_len - (size_t)(sep - name) - 1;
+  if (text_len == 0 || text_len >= out_size) {
+    return -1;
+  }
+  memcpy(out, sep + 1, text_len);
+  out[text_len] = '\0';
+  return 0;
+}
+
+typedef struct {
+  int total;
+  int passed;
+  int failed_expected; /* failed AND listed in known_failures */
+  int failed_new;      /* failed AND NOT listed: regressions */
+  int fixed;           /* listed but passed: candidates to remove */
+} LevelStats;
+
+static int run_difficulty_level(
+  const char *root_dir,
+  const char *level_name,
+  KnownFailureList *kfl,
+  LevelStats *stats
+) {
+  char dir_path[512];
+  snprintf(dir_path, sizeof(dir_path), "%s/%s", root_dir, level_name);
+
+  DIR *dir = opendir(dir_path);
+  if (!dir) {
+    printf("  %s: SKIP (directory missing)\n", level_name);
+    return 0;
+  }
+
+  memset(stats, 0, sizeof(*stats));
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != NULL) {
+    const char *name = entry->d_name;
+    size_t name_len = strlen(name);
+    char expected[256];
+    if (expected_text_from_filename(
+          name,
+          name_len,
+          expected,
+          sizeof(expected)
+        ) != 0) {
+      continue;
+    }
+
+    char relpath[512];
+    snprintf(relpath, sizeof(relpath), "%s/%s", level_name, name);
+
+    char full_path[768];
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, name);
+
+    int width, height, channels;
+    uint8_t *img = stbi_load(full_path, &width, &height, &channels, 1);
+    if (!img) {
+      stats->total++;
+      stats->failed_new++;
+      printf("  %s: LOAD FAIL\n", relpath);
+      continue;
+    }
+
+    FCVQRCodeResult result = fcv_decode_qr_codes(width, height, img);
+    stats->total++;
+
+    int match = 0;
+    for (size_t j = 0; j < result.count; j++) {
+      if (result.codes[j].text && strcmp(result.codes[j].text, expected) == 0) {
+        match = 1;
+        break;
+      }
+    }
+
+    int is_known = known_failure_check(kfl, relpath);
+    if (match) {
+      stats->passed++;
+      if (is_known) {
+        stats->fixed++;
+        printf("  %s: FIXED (remove from known_failures.txt)\n", relpath);
+      }
+    }
+    else {
+      if (is_known) {
+        stats->failed_expected++;
+      }
+      else {
+        stats->failed_new++;
+        printf("  %s: REGRESSION — expected \"%s\"", relpath, expected);
+        if (result.count > 0 && result.codes[0].text) {
+          printf(", got \"%s\"", result.codes[0].text);
+        }
+        printf("\n");
+      }
+    }
+
+    fcv_free_qr_result(result);
+    stbi_image_free(img);
+  }
+
+  closedir(dir);
+  return 0;
+}
+
+static int test_difficulty_images(void) {
+  const char *root_dir = "tests/qr_codes_difficulty";
+  const char *kfl_path = "tests/qr_codes_difficulty_known_failures.txt";
+  const char *levels[] =
+    {"level_1", "level_2", "level_3", "level_4", "level_5"};
+  const size_t num_levels = sizeof(levels) / sizeof(levels[0]);
+
+  printf("Test: Difficulty-tiered QR images (%s)...\n", root_dir);
+
+  DIR *dir = opendir(root_dir);
+  if (!dir) {
+    printf("  SKIP: directory not found\n");
+    return 0;
+  }
+  closedir(dir);
+
+  KnownFailureList kfl;
+  if (known_failure_load(&kfl, kfl_path) < 0) {
+    printf("  FAILED to load %s\n", kfl_path);
+    return 1;
+  }
+
+  LevelStats totals = {0};
+  int regression_count = 0;
+  int fixed_count = 0;
+
+  for (size_t i = 0; i < num_levels; i++) {
+    LevelStats ls;
+    run_difficulty_level(root_dir, levels[i], &kfl, &ls);
+    totals.total += ls.total;
+    totals.passed += ls.passed;
+    totals.failed_expected += ls.failed_expected;
+    totals.failed_new += ls.failed_new;
+    totals.fixed += ls.fixed;
+    regression_count += ls.failed_new;
+    fixed_count += ls.fixed;
+
+    if (ls.total > 0) {
+      double rate = 100.0 * (double)ls.passed / (double)ls.total;
+      printf(
+        "  %s: %d/%d passed (%.1f%%), %d known-failing\n",
+        levels[i],
+        ls.passed,
+        ls.total,
+        rate,
+        ls.failed_expected
+      );
+    }
+  }
+
+  /* Any known-failure entry that was never matched (because its image
+   * no longer exists) is stale and should be removed. */
+  int stale_count = 0;
+  for (size_t i = 0; i < kfl.count; i++) {
+    if (!kfl.seen[i]) {
+      printf(
+        "  STALE: %s listed in known_failures.txt but not found\n",
+        kfl.entries[i]
+      );
+      stale_count++;
+    }
+  }
+
+  printf(
+    "  Difficulty total: %d/%d passed, %d known-failing, %d new regressions, "
+    "%d fixed, %d stale\n",
+    totals.passed,
+    totals.total,
+    totals.failed_expected,
+    regression_count,
+    fixed_count,
+    stale_count
+  );
+
+  known_failure_free(&kfl);
+
+  int bad = regression_count + fixed_count + stale_count;
+  if (bad > 0) {
+    test_failures += bad;
+    return 1;
+  }
+  return 0;
+}
+
 static int test_photo_images(void) {
   const char *dir_path = "tests/qr_codes_photos";
   printf("Test: Photo QR images (%s)...\n", dir_path);
@@ -323,6 +605,7 @@ int main(void) {
   any_failed |= test_solid_images();
   any_failed |= test_free_null_result();
   any_failed |= test_generated_images();
+  any_failed |= test_difficulty_images();
   any_failed |= test_photo_images();
 
   printf("\n==========================\n");
