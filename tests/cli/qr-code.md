@@ -79,3 +79,18 @@ The decoder works as follows:
    - Byte (mode 4) — 8 bits per character
    - Alphanumeric (mode 2) — pairs in 11 bits, remainder in 6
    - Numeric (mode 1) — triples in 10 bits, with 7-bit and 4-bit remainders
+
+
+### Related
+
+- [Quirc] - QR decoder library written in C.
+- [Rqrr] - QR reader written in Rust.
+- [Rxing] - Rust port of the ZXing multi-format barcode library.
+- [ZBar] - C library for reading bar codes from images and video streams.
+- [Zedbar] - Rust library for reading bar codes from images based on ZBar.
+
+[Quirc]: https://github.com/dlbeer/quirc
+[Rqrr]: https://github.com/WanzenBug/rqrr
+[Rxing]: https://github.com/rxing-core/rxing
+[ZBar]: https://github.com/mchehab/zbar
+[Zedbar]: https://github.com/eventualbuddha/zedbar
