@@ -18,15 +18,15 @@ Applying operation: qr
       {
         "text": "Hello World!",
         "corners": {
-          "top_left": [63.2, 63.2],
-          "top_right": [863.2, 63.2],
-          "bottom_right": [863.2, 863.2],
-          "bottom_left": [63.2, 863.2]
+          "top_left": [63.5, 63.5],
+          "top_right": [863.5, 63.5],
+          "bottom_right": [863.5, 863.5],
+          "bottom_left": [63.5, 863.5]
         },
         "finders": {
-          "top_left": [175.2, 175.2],
-          "top_right": [751.2, 175.2],
-          "bottom_left": [175.2, 751.2]
+          "top_left": [175.5, 175.5],
+          "top_right": [751.5, 175.5],
+          "bottom_left": [175.5, 751.5]
         },
         "module_size": 32.00
       }
