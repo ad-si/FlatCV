@@ -25,6 +25,7 @@
 #include "foerstner_corner.h"
 #include "histogram.h"
 #include "perspectivetransform.h"
+#include "qr_code.h"
 #include "rgba_to_grayscale.h"
 #include "rotate.h"
 #include "single_to_multichannel.h"
@@ -102,6 +103,8 @@ void print32_t_usage(const char *program_name) {
   printf(
     "  border <hex_color> <border_width> - Add colored border around image\n"
   );
+  printf("  qr              - Decode QR codes and output as JSON\n");
+  printf("  draw_qr         - Decode QR codes and draw corners + finders\n");
   printf("  erode <radius>  - Binary erosion with disk structuring element\n");
   printf("  dilate <radius> - Binary dilation with disk structuring element\n");
   printf("  close <radius>  - Binary closing (dilation then erosion)\n");
@@ -926,6 +929,186 @@ uint8_t *apply_operation(
     }
     return result;
   }
+  else if (strcmp(operation, "qr") == 0) {
+    uint8_t *grayscale_data =
+      fcv_rgba_to_grayscale(*width, *height, input_data);
+    if (!grayscale_data) {
+      return NULL;
+    }
+
+    FCVQRCodeResult qrs = fcv_decode_qr_codes(*width, *height, grayscale_data);
+    free(grayscale_data);
+
+    printf("  {\n");
+    printf("    \"qr_codes\": [");
+    for (size_t i = 0; i < qrs.count; i++) {
+      FCVQRCode *qr = &qrs.codes[i];
+      if (i > 0) {
+        printf(",");
+      }
+      printf("\n      {\n");
+      printf("        \"text\": \"");
+      for (const char *p = qr->text; *p; p++) {
+        switch (*p) {
+        case '"':
+          printf("\\\"");
+          break;
+        case '\\':
+          printf("\\\\");
+          break;
+        case '\n':
+          printf("\\n");
+          break;
+        case '\r':
+          printf("\\r");
+          break;
+        case '\t':
+          printf("\\t");
+          break;
+        default:
+          putchar(*p);
+        }
+      }
+      printf("\",\n");
+      printf("        \"corners\": {\n");
+      printf(
+        "          \"top_left\": [%.1f, %.1f],\n",
+        qr->corners.tl_x,
+        qr->corners.tl_y
+      );
+      printf(
+        "          \"top_right\": [%.1f, %.1f],\n",
+        qr->corners.tr_x,
+        qr->corners.tr_y
+      );
+      printf(
+        "          \"bottom_right\": [%.1f, %.1f],\n",
+        qr->corners.br_x,
+        qr->corners.br_y
+      );
+      printf(
+        "          \"bottom_left\": [%.1f, %.1f]\n",
+        qr->corners.bl_x,
+        qr->corners.bl_y
+      );
+      printf("        },\n");
+      printf("        \"finders\": {\n");
+      printf(
+        "          \"top_left\": [%.1f, %.1f],\n",
+        qr->finders[0].x,
+        qr->finders[0].y
+      );
+      printf(
+        "          \"top_right\": [%.1f, %.1f],\n",
+        qr->finders[1].x,
+        qr->finders[1].y
+      );
+      printf(
+        "          \"bottom_left\": [%.1f, %.1f]\n",
+        qr->finders[2].x,
+        qr->finders[2].y
+      );
+      printf("        },\n");
+      printf("        \"module_size\": %.2f\n", qr->module_size);
+      printf("      }");
+    }
+    if (qrs.count > 0) {
+      printf("\n    ");
+    }
+    printf("]\n");
+    printf("  }\n");
+
+    fcv_free_qr_result(qrs);
+
+    // Return a copy of the input data without modification
+    uint8_t *result = malloc((size_t)(*width) * (*height) * 4);
+    if (result) {
+      memcpy(result, input_data, (size_t)(*width) * (*height) * 4);
+    }
+    return result;
+  }
+  else if (strcmp(operation, "draw_qr") == 0) {
+    uint8_t *grayscale_data =
+      fcv_rgba_to_grayscale(*width, *height, input_data);
+    if (!grayscale_data) {
+      return NULL;
+    }
+    FCVQRCodeResult qrs = fcv_decode_qr_codes(*width, *height, grayscale_data);
+    free(grayscale_data);
+
+    uint32_t img_length_byte = (*width) * (*height) * 4;
+    uint8_t *result = malloc(img_length_byte);
+    if (!result) {
+      fcv_free_qr_result(qrs);
+      return NULL;
+    }
+    memcpy(result, input_data, img_length_byte);
+
+    const double corner_radius = fmin(*width, *height) * 0.015;
+    const double finder_radius = fmin(*width, *height) * 0.020;
+    const char *green = "00C800";
+    const char *red = "C80000";
+
+    for (size_t i = 0; i < qrs.count; i++) {
+      FCVQRCode *qr = &qrs.codes[i];
+      fcv_draw_disk(
+        *width,
+        *height,
+        4,
+        green,
+        corner_radius,
+        qr->corners.tl_x,
+        qr->corners.tl_y,
+        result
+      );
+      fcv_draw_disk(
+        *width,
+        *height,
+        4,
+        green,
+        corner_radius,
+        qr->corners.tr_x,
+        qr->corners.tr_y,
+        result
+      );
+      fcv_draw_disk(
+        *width,
+        *height,
+        4,
+        green,
+        corner_radius,
+        qr->corners.br_x,
+        qr->corners.br_y,
+        result
+      );
+      fcv_draw_disk(
+        *width,
+        *height,
+        4,
+        green,
+        corner_radius,
+        qr->corners.bl_x,
+        qr->corners.bl_y,
+        result
+      );
+      for (int f = 0; f < 3; f++) {
+        fcv_draw_disk(
+          *width,
+          *height,
+          4,
+          red,
+          finder_radius,
+          qr->finders[f].x,
+          qr->finders[f].y,
+          result
+        );
+      }
+      printf("  QR code %zu: \"%s\"\n", i + 1, qr->text);
+    }
+
+    fcv_free_qr_result(qrs);
+    return result;
+  }
   else if (strcmp(operation, "draw_corners") == 0) {
     Corners cs = fcv_detect_corners(input_data, *width, *height);
     printf("  Detected corners:\n");
@@ -1504,22 +1687,23 @@ int32_t main(int32_t argc, char *argv[]) {
 
   const char *input_path = argv[1];
 
-  // Check if this is a detect_corners operation (no output image required)
-  int32_t is_detect_corners_only = 0;
-  if (argc == 3 && strcmp(argv[2], "detect_corners") == 0) {
-    is_detect_corners_only = 1;
+  // Info-only operations don't require an output image
+  int32_t is_info_only = 0;
+  if (argc == 3 &&
+      (strcmp(argv[2], "detect_corners") == 0 || strcmp(argv[2], "qr") == 0)) {
+    is_info_only = 1;
   }
 
-  const char *output_path = is_detect_corners_only ? NULL : argv[argc - 1];
+  const char *output_path = is_info_only ? NULL : argv[argc - 1];
 
-  if (!is_detect_corners_only && argc < 4) {
+  if (!is_info_only && argc < 4) {
     print32_t_usage(argv[0]);
     return 1;
   }
 
   // Parse pipeline from arguments between input and output
   Pipeline *pipeline = create_pipeline();
-  int32_t pipeline_end_idx = is_detect_corners_only ? argc : argc - 1;
+  int32_t pipeline_end_idx = is_info_only ? argc : argc - 1;
   if (!parse_pipeline(argc, argv, 2, pipeline_end_idx, pipeline)) {
     free_pipeline(pipeline);
     return 1;
@@ -1609,7 +1793,7 @@ int32_t main(int32_t argc, char *argv[]) {
     return 1;
   }
 
-  if (!is_detect_corners_only) {
+  if (!is_info_only) {
     fprintf(stderr, "Final output dimensions: %dx%d\n", width, height);
 
     int32_t write_result;

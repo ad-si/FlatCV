@@ -1,3 +1,8 @@
+*.a
+*.dylib
+*.o
+*.so
+.DS_Store
 /.aider*
 /.direnv
 /apply_test
@@ -7,7 +12,11 @@
 /flatcv.h
 /flatcv_*
 /test_bin
+/test_qr_code
 /tests/book
 /tests/cli/imgs
+/tests/qr_codes_generated
+/tests/qr_codes_photos
 /tmp
+_codeql_detected_source_root
 temp_*

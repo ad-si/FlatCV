@@ -22,6 +22,7 @@ Image processing and computer vision library in pure C.
 [Grayscale](https://flatcv.ad-si.com/grayscale.html),
 [Binarize](https://flatcv.ad-si.com/binarize.html) \
 [Corner-Detection](https://flatcv.ad-si.com/corner-detection.html),
+[QR-Code Decoding](https://flatcv.ad-si.com/qr-code.html),
 [Segmentation](https://flatcv.ad-si.com/segmentation.html),
 [Document-Extraction](https://flatcv.ad-si.com/document-extraction.html)
 

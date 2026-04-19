@@ -14,6 +14,7 @@
   - [Morphology](morphology.md)
   - [Histogram](histogram.md)
   - [Corner-Detection](corner-detection.md)
+  - [QR-Code](qr-code.md)
   - [Segmentation](segmentation.md)
   - [Document-Extraction](document-extraction.md)
 - [Benchmark](benchmark.md)

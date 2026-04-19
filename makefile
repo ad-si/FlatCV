@@ -39,6 +39,17 @@ test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 		-lm -o apply_test \
 	&& ./apply_test
 
+	@if [ ! -d tests/qr_codes_generated ] \
+		|| [ -z "$$(ls -A tests/qr_codes_generated 2>/dev/null)" ]; then \
+		echo "Generating QR test images..."; \
+		uv run tests/generate_qr_test_images.py; \
+	fi
+
+	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
+		-Iinclude $(LIB_SRC_FILES) tests/test_qr_code.c \
+		-lm -o test_qr_code \
+	&& ./test_qr_code
+
 
 CLI_TEST_FILES := $(wildcard tests/cli/*.md)
 
@@ -341,4 +352,5 @@ clean:
 		tests/cli/playground/flatcv.js \
 		tests/cli/playground/flatcv.wasm \
 		test_bin \
+		test_qr_code \
 		test_amalgamation_bin
