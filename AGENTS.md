@@ -1,0 +1,5 @@
+- Run `make test` after every change to ensure its correct implementation
+- Do not run any other tests
+- Add tests in`./tests` when applicable
+  - A unit test for the C library
+  - An integration test for the CLI in `tests/cli`
