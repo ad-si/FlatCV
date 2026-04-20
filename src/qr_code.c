@@ -1628,6 +1628,92 @@ static uint8_t *sample_grid_homography_offset_mode(
   return grid;
 }
 
+/* ---- Timing pattern check ----
+   The timing patterns on row 6 and column 6 alternate dark/light between the
+   three finder patterns. Starting at module (6, 8) = dark, (6, 9) = light,
+   (6, 10) = dark, … — dark whenever col or row is even. Real QRs have a
+   near-perfect match; a grid sampled from three incidental 1:1:3:1:1 runs in
+   noise produces essentially random bits here (~50% error). Returns the
+   fraction of timing modules whose value disagrees with the spec, 0.0 for a
+   perfect match and up to 1.0 for all wrong. */
+static float timing_error_rate(uint8_t const *grid, int qr_size) {
+  if (qr_size < 15) {
+    return 0.0f;
+  }
+  int errors = 0;
+  int total = 0;
+  for (int c = 8; c <= qr_size - 9; c++) {
+    int expected = ((c % 2) == 0) ? 1 : 0;
+    int actual = grid[6 * qr_size + c] ? 1 : 0;
+    if (actual != expected) {
+      errors++;
+    }
+    total++;
+  }
+  for (int r = 8; r <= qr_size - 9; r++) {
+    int expected = ((r % 2) == 0) ? 1 : 0;
+    int actual = grid[r * qr_size + 6] ? 1 : 0;
+    if (actual != expected) {
+      errors++;
+    }
+    total++;
+  }
+  if (total == 0) {
+    return 1.0f;
+  }
+  return (float)errors / (float)total;
+}
+
+/* ---- Finder pattern structural check ----
+   After sampling, each of the three 7x7 finder regions should match the
+   canonical dark/light pattern (outer ring dark, 1-module light inset, 3x3
+   dark core). Plus the 1-module separator (row/col between finder and data)
+   should be light. Incidental 1:1:3:1:1 runs in noise almost never project
+   into grids whose TL/TR/BL 7x7 windows all match the finder pattern.
+   Returns the fraction of the 48 checked cells (16 per finder) that
+   disagree — callers reject above ~0.10. */
+static const uint8_t FINDER_PATTERN[7][7] = {
+  {1, 1, 1, 1, 1, 1, 1},
+  {1, 0, 0, 0, 0, 0, 1},
+  {1, 0, 1, 1, 1, 0, 1},
+  {1, 0, 1, 1, 1, 0, 1},
+  {1, 0, 1, 1, 1, 0, 1},
+  {1, 0, 0, 0, 0, 0, 1},
+  {1, 1, 1, 1, 1, 1, 1},
+};
+
+static float finder_error_rate(uint8_t const *grid, int qr_size) {
+  if (qr_size < 21) {
+    return 1.0f;
+  }
+  int errors = 0;
+  int total = 0;
+  /* TL at (0,0); TR at (0, qr_size-7); BL at (qr_size-7, 0). */
+  const int origins[3][2] = {
+    {0, 0},
+    {0, qr_size - 7},
+    {qr_size - 7, 0},
+  };
+  for (int f = 0; f < 3; f++) {
+    int r0 = origins[f][0];
+    int c0 = origins[f][1];
+    for (int dr = 0; dr < 7; dr++) {
+      for (int dc = 0; dc < 7; dc++) {
+        int expected = FINDER_PATTERN[dr][dc];
+        int actual = grid[(r0 + dr) * qr_size + (c0 + dc)] ? 1 : 0;
+        if (actual != expected) {
+          errors++;
+        }
+        total++;
+      }
+    }
+  }
+  if (total == 0) {
+    return 1.0f;
+  }
+  return (float)errors / (float)total;
+}
+
 /* ---- Format information ---- */
 
 static const int FMT_COORDS1[15][2] = {
@@ -2728,6 +2814,24 @@ static char *decode_grid(
   int *out_fmt_dist,
   int *out_rs_cost
 ) {
+  /* Gate on the timing pattern before the expensive RS path runs. Triples
+     lifted from noise almost always flunk this (alternation is random).
+     Threshold 0.22 gives real QRs under moderate blur/perspective plenty of
+     headroom while nearly every hallucinated grid sits around 0.5. Larger
+     QRs have long timing runs so even random bits rarely land under 22% —
+     smaller v1 QRs with 5-module runs can still pass with 1 error (20%). */
+  if (timing_error_rate(grid, qr_size) > 0.22f) {
+    return NULL;
+  }
+  /* Structural check on the three finder windows. Real QRs match the
+     7x7 finder pattern at (0,0) / (0, qr_size-7) / (qr_size-7, 0) almost
+     perfectly; hallucinated grids only match about half the 147 cells.
+     The 0.15 cap leaves room for moderate homography drift and sampling
+     jitter under blur/perspective while killing the small-module numeric
+     FPs that slipped past the timing alternation. */
+  if (finder_error_rate(grid, qr_size) > 0.15f) {
+    return NULL;
+  }
   int ec_level, mask_pattern;
   int fmt_dist = 16;
   if (decode_format(grid, qr_size, &ec_level, &mask_pattern, &fmt_dist) < 0) {
@@ -3392,8 +3496,8 @@ static void run_all_attempts(
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 &&
-            strlen(*best_decoded) >= 5)) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
+          )) {
         bin = binarize_adaptive(sharp, w, h);
         if (bin) {
           try_pipeline(
@@ -3556,8 +3660,8 @@ static void run_all_attempts(
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 &&
-            strlen(*best_decoded) >= 5)) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
+          )) {
         bin = binarize_adaptive(med, w, h);
         if (bin) {
           try_pipeline(
