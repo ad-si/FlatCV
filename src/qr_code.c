@@ -436,6 +436,25 @@ static uint8_t *median_filter_3x3(uint8_t const *gray, int w, int h) {
   return out;
 }
 
+/* ---- Inverted polarity ----
+   QR spec allows light-on-dark modules (level_13 corpus); flatcv's finder
+   and sampling code assume dark-on-light. Retrying with 255 - v lets the
+   same pipeline decode both polarities without any per-stage branching. */
+static uint8_t *invert_gray(uint8_t const *gray, int w, int h) {
+  if (w <= 0 || h <= 0) {
+    return NULL;
+  }
+  size_t n = (size_t)w * (size_t)h;
+  uint8_t *out = malloc(n);
+  if (!out) {
+    return NULL;
+  }
+  for (size_t i = 0; i < n; i++) {
+    out[i] = (uint8_t)(255 - gray[i]);
+  }
+  return out;
+}
+
 /* ---- Pixel access ---- */
 
 static int is_dark(uint8_t const *px, int w, int h, int x, int y) {
@@ -3266,43 +3285,24 @@ static void try_pipeline(
   }
 }
 
-FCVQRCodeResult fcv_decode_qr_codes(
-  uint32_t width,
-  uint32_t height,
-  uint8_t const *const gray_pixels
+/* Runs the full binarizer/preprocessor cascade against `gray_pixels`. The
+   sequence is cheapest-first; each attempt short-circuits once a
+   high-confidence decode (fmt_dist <= 1, length >= 5) is in hand, so the
+   work only expands as far as the image demands. Called twice by the
+   public decoder — once for the original polarity and once for the
+   inverted buffer — which lets light-on-dark QRs (level_13) ride the same
+   Sauvola/upsample/median passes the normal-polarity pass has. */
+static void run_all_attempts(
+  uint8_t const *gray_pixels,
+  int w,
+  int h,
+  char **best_decoded,
+  int *best_fmt_dist,
+  int *best_rs_cost,
+  Corners *best_corners,
+  Point2D best_finders[3],
+  double *best_module_size
 ) {
-  FCVQRCodeResult result;
-  result.codes = NULL;
-  result.count = 0;
-
-  if (!gray_pixels || width == 0 || height == 0) {
-    return result;
-  }
-  if (width > INT32_MAX || height > INT32_MAX) {
-    return result;
-  }
-
-  result.codes = malloc(MAX_QR_CODES * sizeof(FCVQRCode));
-  if (!result.codes) {
-    return result;
-  }
-
-  int w = (int)width;
-  int h = (int)height;
-
-  char *best_decoded = NULL;
-  Corners best_corners = {0};
-  Point2D best_finders[3] = {{0, 0}, {0, 0}, {0, 0}};
-  double best_module_size = 0;
-  int best_fmt_dist = 16;
-  int best_rs_cost = 100000;
-
-  /* Pipeline runs a sequence of binarization attempts on progressively more
-     aggressive preprocessing. try_pipeline keeps the lowest-fmt_dist decode,
-     so additional attempts only ever improve the result. Order is
-     cheapest-first; we short-circuit once we have a high-confidence decode
-     (fmt_dist <= 1, i.e. format BCH error correction matched cleanly). */
-
   /* Attempt 1: Otsu on original. */
   uint8_t *bin = binarize_global_otsu(gray_pixels, w, h);
   if (bin) {
@@ -3311,18 +3311,18 @@ FCVQRCodeResult fcv_decode_qr_codes(
       gray_pixels,
       w,
       h,
-      &best_decoded,
-      &best_fmt_dist,
-      &best_rs_cost,
-      &best_corners,
+      best_decoded,
+      best_fmt_dist,
+      best_rs_cost,
+      best_corners,
       best_finders,
-      &best_module_size
+      best_module_size
     );
     free(bin);
   }
 
   /* Attempt 2: adaptive on original. */
-  if (!(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+  if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5)) {
     bin = binarize_adaptive(gray_pixels, w, h);
     if (bin) {
       try_pipeline(
@@ -3330,12 +3330,12 @@ FCVQRCodeResult fcv_decode_qr_codes(
         gray_pixels,
         w,
         h,
-        &best_decoded,
-        &best_fmt_dist,
-        &best_rs_cost,
-        &best_corners,
+        best_decoded,
+        best_fmt_dist,
+        best_rs_cost,
+        best_corners,
         best_finders,
-        &best_module_size
+        best_module_size
       );
       free(bin);
     }
@@ -3351,7 +3351,7 @@ FCVQRCodeResult fcv_decode_qr_codes(
   /* Attempt 3: Sauvola on original. Targets faded / low-contrast modules
      where adaptive's fixed min_std fallback misclassifies. */
   if (!small_image &&
-      !(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+      !(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5)) {
     bin = binarize_sauvola(gray_pixels, w, h);
     if (bin) {
       try_pipeline(
@@ -3359,12 +3359,12 @@ FCVQRCodeResult fcv_decode_qr_codes(
         gray_pixels,
         w,
         h,
-        &best_decoded,
-        &best_fmt_dist,
-        &best_rs_cost,
-        &best_corners,
+        best_decoded,
+        best_fmt_dist,
+        best_rs_cost,
+        best_corners,
         best_finders,
-        &best_module_size
+        best_module_size
       );
       free(bin);
     }
@@ -3373,7 +3373,7 @@ FCVQRCodeResult fcv_decode_qr_codes(
   /* Attempt 4: unsharp mask + Otsu, then unsharp mask + adaptive. Targets
      blurred QRs (level_4/5 generators add Gaussian blur radius up to 1.8). */
   if (!small_image &&
-      !(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+      !(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5)) {
     uint8_t *sharp = unsharp_mask_gray(gray_pixels, w, h);
     if (sharp) {
       bin = binarize_global_otsu(sharp, w, h);
@@ -3383,16 +3383,17 @@ FCVQRCodeResult fcv_decode_qr_codes(
           sharp,
           w,
           h,
-          &best_decoded,
-          &best_fmt_dist,
-          &best_rs_cost,
-          &best_corners,
+          best_decoded,
+          best_fmt_dist,
+          best_rs_cost,
+          best_corners,
           best_finders,
-          &best_module_size
+          best_module_size
         );
         free(bin);
       }
-      if (!(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 &&
+            strlen(*best_decoded) >= 5)) {
         bin = binarize_adaptive(sharp, w, h);
         if (bin) {
           try_pipeline(
@@ -3400,12 +3401,12 @@ FCVQRCodeResult fcv_decode_qr_codes(
             sharp,
             w,
             h,
-            &best_decoded,
-            &best_fmt_dist,
-            &best_rs_cost,
-            &best_corners,
+            best_decoded,
+            best_fmt_dist,
+            best_rs_cost,
+            best_corners,
             best_finders,
-            &best_module_size
+            best_module_size
           );
           free(bin);
         }
@@ -3429,7 +3430,7 @@ FCVQRCodeResult fcv_decode_qr_codes(
        (modules < 4 px) cannot reliably decode at native resolution and a
        length-5 wrong decode (e.g. "Mz4Y9c" with fd=0 + uncorrectable RS)
        must not block 3x exploration that may surface "Mz4Y9a". */
-    if (best_decoded && best_fmt_dist == 0 && strlen(best_decoded) >= 10) {
+    if (*best_decoded && *best_fmt_dist == 0 && strlen(*best_decoded) >= 10) {
       break;
     }
     int wn = w * n_try;
@@ -3487,40 +3488,40 @@ FCVQRCodeResult fcv_decode_qr_codes(
        spatial outputs back to native coordinates by 1/n. */
     if (best_decoded_up) {
       int replace = 0;
-      int prev_len = (best_decoded) ? (int)strlen(best_decoded) : -1;
+      int prev_len = (*best_decoded) ? (int)strlen(*best_decoded) : -1;
       int new_len = (int)strlen(best_decoded_up);
-      if (!best_decoded) {
+      if (!*best_decoded) {
         replace = 1;
       }
-      else if (best_fmt_dist_up < best_fmt_dist) {
+      else if (best_fmt_dist_up < *best_fmt_dist) {
         replace = 1;
       }
-      else if (best_fmt_dist_up == best_fmt_dist && new_len > prev_len) {
+      else if (best_fmt_dist_up == *best_fmt_dist && new_len > prev_len) {
         replace = 1;
       }
-      else if (best_fmt_dist_up == best_fmt_dist && new_len == prev_len &&
-               best_rs_cost_up < best_rs_cost) {
+      else if (best_fmt_dist_up == *best_fmt_dist && new_len == prev_len &&
+               best_rs_cost_up < *best_rs_cost) {
         replace = 1;
       }
       if (replace) {
         double inv = 1.0 / (double)n_try;
-        free(best_decoded);
-        best_decoded = best_decoded_up;
-        best_fmt_dist = best_fmt_dist_up;
-        best_rs_cost = best_rs_cost_up;
-        best_corners.tl_x = best_corners_up.tl_x * inv;
-        best_corners.tl_y = best_corners_up.tl_y * inv;
-        best_corners.tr_x = best_corners_up.tr_x * inv;
-        best_corners.tr_y = best_corners_up.tr_y * inv;
-        best_corners.br_x = best_corners_up.br_x * inv;
-        best_corners.br_y = best_corners_up.br_y * inv;
-        best_corners.bl_x = best_corners_up.bl_x * inv;
-        best_corners.bl_y = best_corners_up.bl_y * inv;
+        free(*best_decoded);
+        *best_decoded = best_decoded_up;
+        *best_fmt_dist = best_fmt_dist_up;
+        *best_rs_cost = best_rs_cost_up;
+        best_corners->tl_x = best_corners_up.tl_x * inv;
+        best_corners->tl_y = best_corners_up.tl_y * inv;
+        best_corners->tr_x = best_corners_up.tr_x * inv;
+        best_corners->tr_y = best_corners_up.tr_y * inv;
+        best_corners->br_x = best_corners_up.br_x * inv;
+        best_corners->br_y = best_corners_up.br_y * inv;
+        best_corners->bl_x = best_corners_up.bl_x * inv;
+        best_corners->bl_y = best_corners_up.bl_y * inv;
         for (int i = 0; i < 3; i++) {
           best_finders[i].x = best_finders_up[i].x * inv;
           best_finders[i].y = best_finders_up[i].y * inv;
         }
-        best_module_size = best_module_size_up * inv;
+        *best_module_size = best_module_size_up * inv;
       }
       else {
         free(best_decoded_up);
@@ -3535,8 +3536,8 @@ FCVQRCodeResult fcv_decode_qr_codes(
      when nothing decoded OR the existing decode is suspiciously short
      (a count-field truncation of byte mode); a long decode from earlier
      is trusted and we don't risk displacing it. */
-  int existing_short = best_decoded && strlen(best_decoded) < 8;
-  if (!small_image && (!best_decoded || existing_short)) {
+  int existing_short = *best_decoded && strlen(*best_decoded) < 8;
+  if (!small_image && (!*best_decoded || existing_short)) {
     uint8_t *med = median_filter_3x3(gray_pixels, w, h);
     if (med) {
       bin = binarize_global_otsu(med, w, h);
@@ -3546,16 +3547,17 @@ FCVQRCodeResult fcv_decode_qr_codes(
           med,
           w,
           h,
-          &best_decoded,
-          &best_fmt_dist,
-          &best_rs_cost,
-          &best_corners,
+          best_decoded,
+          best_fmt_dist,
+          best_rs_cost,
+          best_corners,
           best_finders,
-          &best_module_size
+          best_module_size
         );
         free(bin);
       }
-      if (!(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 &&
+            strlen(*best_decoded) >= 5)) {
         bin = binarize_adaptive(med, w, h);
         if (bin) {
           try_pipeline(
@@ -3563,17 +3565,85 @@ FCVQRCodeResult fcv_decode_qr_codes(
             med,
             w,
             h,
-            &best_decoded,
-            &best_fmt_dist,
-            &best_rs_cost,
-            &best_corners,
+            best_decoded,
+            best_fmt_dist,
+            best_rs_cost,
+            best_corners,
             best_finders,
-            &best_module_size
+            best_module_size
           );
           free(bin);
         }
       }
       free(med);
+    }
+  }
+}
+
+FCVQRCodeResult fcv_decode_qr_codes(
+  uint32_t width,
+  uint32_t height,
+  uint8_t const *const gray_pixels
+) {
+  FCVQRCodeResult result;
+  result.codes = NULL;
+  result.count = 0;
+
+  if (!gray_pixels || width == 0 || height == 0) {
+    return result;
+  }
+  if (width > INT32_MAX || height > INT32_MAX) {
+    return result;
+  }
+
+  result.codes = malloc(MAX_QR_CODES * sizeof(FCVQRCode));
+  if (!result.codes) {
+    return result;
+  }
+
+  int w = (int)width;
+  int h = (int)height;
+
+  char *best_decoded = NULL;
+  Corners best_corners = {0};
+  Point2D best_finders[3] = {{0, 0}, {0, 0}, {0, 0}};
+  double best_module_size = 0;
+  int best_fmt_dist = 16;
+  int best_rs_cost = 100000;
+
+  run_all_attempts(
+    gray_pixels,
+    w,
+    h,
+    &best_decoded,
+    &best_fmt_dist,
+    &best_rs_cost,
+    &best_corners,
+    best_finders,
+    &best_module_size
+  );
+
+  /* Inverted-polarity retry. Handles level_13's light-on-dark and
+     coloured-inverted palettes by running the exact same attempt cascade
+     on 255 - v. Only fires when nothing has decoded confidently: a strong
+     normal-polarity decode is never worth displacing, and inverting
+     near-uniform regions can produce plausible-looking noise that the
+     ratio-7 finder check occasionally latches onto. */
+  if (!(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+    uint8_t *inv = invert_gray(gray_pixels, w, h);
+    if (inv) {
+      run_all_attempts(
+        inv,
+        w,
+        h,
+        &best_decoded,
+        &best_fmt_dist,
+        &best_rs_cost,
+        &best_corners,
+        best_finders,
+        &best_module_size
+      );
+      free(inv);
     }
   }
 
