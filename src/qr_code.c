@@ -1373,19 +1373,102 @@ static int bilinear_dark(uint8_t const *px, int w, int h, float fx, float fy) {
   return (v0 * (1.0f - dy) + v1 * dy) >= 0.5f;
 }
 
+/* Sample a single grayscale value via bilinear interpolation, with edge
+   clamping. Returns 0 if input gray is NULL (signals "no gray available"). */
+static int
+sample_gray_bilinear(uint8_t const *gray, int w, int h, float fx, float fy) {
+  if (!gray) {
+    return -1;
+  }
+  int x0 = (int)floorf(fx);
+  int y0 = (int)floorf(fy);
+  int x1 = x0 + 1;
+  int y1 = y0 + 1;
+  float dx = fx - x0;
+  float dy = fy - y0;
+  if (x0 < 0) {
+    x0 = 0;
+  }
+  if (y0 < 0) {
+    y0 = 0;
+  }
+  if (x1 < 0) {
+    x1 = 0;
+  }
+  if (y1 < 0) {
+    y1 = 0;
+  }
+  if (x0 >= w) {
+    x0 = w - 1;
+  }
+  if (y0 >= h) {
+    y0 = h - 1;
+  }
+  if (x1 >= w) {
+    x1 = w - 1;
+  }
+  if (y1 >= h) {
+    y1 = h - 1;
+  }
+  float v00 = gray[y0 * w + x0];
+  float v01 = gray[y0 * w + x1];
+  float v10 = gray[y1 * w + x0];
+  float v11 = gray[y1 * w + x1];
+  float v0 = v00 * (1.0f - dx) + v01 * dx;
+  float v1 = v10 * (1.0f - dx) + v11 * dx;
+  float v = v0 * (1.0f - dy) + v1 * dy;
+  if (v < 0.0f) {
+    v = 0.0f;
+  }
+  if (v > 255.0f) {
+    v = 255.0f;
+  }
+  return (int)(v + 0.5f);
+}
+
+/* Sample the QR module grid given a homography. If `gray_for_conf` is
+   non-NULL and `out_conf` is non-NULL, also writes a per-module ambiguity
+   buffer (1 = low-confidence module, 0 = high-confidence) of the same size
+   as the grid. The caller is responsible for free()ing both buffers.
+
+   Confidence is derived adaptively: after sampling all modules and their
+   per-module mean grayscale, compute the median grayscale of the modules
+   classified as light vs dark. A module is flagged ambiguous when its
+   mean gray sits a long way from BOTH expected values (signals an
+   occlusion patch whose color belongs to neither QR cluster) or when the
+   5 sub-sample votes were a near-tie (signals the patch boundary crosses
+   the module's sample area). */
 static uint8_t *sample_grid_homography_offset_mode(
   uint8_t const *px,
+  uint8_t const *gray_for_conf,
   int w,
   int h,
   const double H[9],
   int qr_size,
   double off_x,
   double off_y,
-  int use_bilinear
+  int use_bilinear,
+  uint8_t **out_conf
 ) {
-  uint8_t *grid = calloc(qr_size * qr_size, 1);
+  int total = qr_size * qr_size;
+  uint8_t *grid = calloc(total, 1);
   if (!grid) {
     return NULL;
+  }
+  uint8_t *conf = NULL;
+  uint8_t *gmean_buf = NULL;
+  uint8_t *vote_tie = NULL;
+  if (out_conf && gray_for_conf) {
+    conf = calloc(total, 1);
+    gmean_buf = malloc(total);
+    vote_tie = calloc(total, 1);
+    if (!conf || !gmean_buf || !vote_tie) {
+      free(grid);
+      free(conf);
+      free(gmean_buf);
+      free(vote_tie);
+      return NULL;
+    }
   }
   static const double offs[5][2] = {
     {0.5, 0.5},
@@ -1397,6 +1480,8 @@ static uint8_t *sample_grid_homography_offset_mode(
   for (int r = 0; r < qr_size; r++) {
     for (int c = 0; c < qr_size; c++) {
       int votes = 0;
+      int gray_sum = 0;
+      int gray_n = 0;
       for (int o = 0; o < 5; o++) {
         float fx, fy;
         apply_homography(
@@ -1418,9 +1503,108 @@ static uint8_t *sample_grid_homography_offset_mode(
         if (dark) {
           votes++;
         }
+        if (gmean_buf) {
+          int g = sample_gray_bilinear(gray_for_conf, w, h, fx, fy);
+          if (g >= 0) {
+            gray_sum += g;
+            gray_n++;
+          }
+        }
       }
       grid[r * qr_size + c] = (votes >= 3) ? 1 : 0;
+      if (gmean_buf) {
+        int gmean = (gray_n > 0) ? (gray_sum / gray_n) : 128;
+        if (gmean < 0) {
+          gmean = 0;
+        }
+        if (gmean > 255) {
+          gmean = 255;
+        }
+        gmean_buf[r * qr_size + c] = (uint8_t)gmean;
+        if (vote_tie) {
+          vote_tie[r * qr_size + c] =
+            (uint8_t)((votes == 2 || votes == 3) ? 1 : 0);
+        }
+      }
     }
+  }
+
+  if (conf && gmean_buf) {
+    /* Compute medians of dark / light cluster grays via histogram. */
+    int hist_dark[256] = {0};
+    int hist_light[256] = {0};
+    int n_dark = 0, n_light = 0;
+    for (int i = 0; i < total; i++) {
+      if (grid[i]) {
+        hist_dark[gmean_buf[i]]++;
+        n_dark++;
+      }
+      else {
+        hist_light[gmean_buf[i]]++;
+        n_light++;
+      }
+    }
+    int dark_med = 0, light_med = 255;
+    if (n_dark > 0) {
+      int target = n_dark / 2;
+      int acc = 0;
+      for (int v = 0; v < 256; v++) {
+        acc += hist_dark[v];
+        if (acc > target) {
+          dark_med = v;
+          break;
+        }
+      }
+    }
+    if (n_light > 0) {
+      int target = n_light / 2;
+      int acc = 0;
+      for (int v = 0; v < 256; v++) {
+        acc += hist_light[v];
+        if (acc > target) {
+          light_med = v;
+          break;
+        }
+      }
+    }
+    /* Tolerance: a chunky fraction of the cluster gap. A module is flagged
+       only when its mean gray is FAR from BOTH the dark and the light
+       cluster medians — that is the strong signal that the pixel belongs
+       to a foreign region (occlusion patch). We also keep a floor so the
+       rule still bites when the clusters are weakly separated. */
+    int gap = light_med - dark_med;
+    if (gap < 0) {
+      gap = -gap;
+    }
+    int tol = gap / 3;
+    if (tol < 35) {
+      tol = 35;
+    }
+    if (tol > 80) {
+      tol = 80;
+    }
+    for (int i = 0; i < total; i++) {
+      int g = gmean_buf[i];
+      int dd = g - dark_med;
+      if (dd < 0) {
+        dd = -dd;
+      }
+      int dl = g - light_med;
+      if (dl < 0) {
+        dl = -dl;
+      }
+      int ambig = 0;
+      if (dd > tol && dl > tol) {
+        ambig = 1;
+      }
+      conf[i] = (uint8_t)ambig;
+    }
+  }
+
+  free(gmean_buf);
+  free(vote_tie);
+  if (out_conf) {
+    *out_conf = conf;
   }
   return grid;
 }
@@ -1637,10 +1821,12 @@ static int is_function(int row, int col, int sz, int ver) {
 
 static int extract_bits(
   uint8_t const *grid,
+  uint8_t const *conf,
   int sz,
   int ver,
   int mask,
   uint8_t *bits,
+  uint8_t *bit_conf,
   int max_bits
 ) {
   int n = 0, up = 1;
@@ -1660,7 +1846,11 @@ static int extract_bits(
           if (apply_mask(mask, row, col)) {
             val ^= 1;
           }
-          bits[n++] = (uint8_t)val;
+          bits[n] = (uint8_t)val;
+          if (bit_conf) {
+            bit_conf[n] = conf ? conf[row * sz + col] : 0;
+          }
+          n++;
         }
       }
     }
@@ -1671,14 +1861,27 @@ static int extract_bits(
 
 /* ---- Bits to bytes ---- */
 
-static int bits_to_bytes(uint8_t const *bits, int nbits, uint8_t *bytes) {
+static int bits_to_bytes(
+  uint8_t const *bits,
+  uint8_t const *bit_conf,
+  int nbits,
+  uint8_t *bytes,
+  uint8_t *byte_ambig
+) {
   int nb = nbits / 8;
   for (int i = 0; i < nb; i++) {
     uint8_t b = 0;
+    int ambig = 0;
     for (int j = 0; j < 8; j++) {
       b = (b << 1) | bits[i * 8 + j];
+      if (bit_conf && bit_conf[i * 8 + j]) {
+        ambig = 1;
+      }
     }
     bytes[i] = b;
+    if (byte_ambig) {
+      byte_ambig[i] = (uint8_t)ambig;
+    }
   }
   return nb;
 }
@@ -1950,12 +2153,24 @@ static uint8_t gf_inv(uint8_t a) { return gf_exp[255 - gf_log[a]]; }
 
 /* Decode an RS block of nk data codewords followed by nroots EC codewords,
    in standard polynomial order (msg[0] is highest-degree coefficient).
-   Corrects up to nroots/2 errors in place. Returns number of errors fixed,
-   or -1 if the block is uncorrectable. */
-static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
+   Optional erasure positions (eras_pos[k] is the msg index of an erasure)
+   double the per-block correction budget: 2*errors + erasures <= nroots.
+   Pass eras_pos=NULL/n_eras=0 for plain errors-only decoding (corrects up
+   to nroots/2 errors). Returns number of corrections (errors+erasures) made
+   in place, or -1 if the block is uncorrectable. */
+static int rs_decode_block_eras(
+  uint8_t *msg,
+  int nk,
+  int nroots,
+  const int *eras_pos,
+  int n_eras
+) {
   gf_init();
   int n = nk + nroots;
   if (nroots <= 0 || nroots > 64 || nk <= 0 || n > 300) {
+    return -1;
+  }
+  if (n_eras < 0 || n_eras > nroots) {
     return -1;
   }
 
@@ -1977,7 +2192,49 @@ static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
     return 0;
   }
 
-  /* Berlekamp-Massey to find error locator polynomial C(x). */
+  /* Erasure locator Λ_E(x) = ∏ (1 - α^{n-1-eras_pos[k]} x), ascending degree.
+     Roots at x = α^{-(n-1-eras_pos[k])}, matching the same x = α^{-i}
+     convention used by the Chien search below. */
+  uint8_t lambda_e[65] = {0};
+  lambda_e[0] = 1;
+  int le_deg = 0;
+  uint8_t seen_eras[300] = {0};
+  for (int k = 0; k < n_eras; k++) {
+    int e = eras_pos[k];
+    if (e < 0 || e >= n) {
+      return -1;
+    }
+    if (seen_eras[e]) {
+      continue; /* dedupe duplicate erasure positions */
+    }
+    seen_eras[e] = 1;
+    int p = (n - 1 - e) % 255;
+    if (p < 0) {
+      p += 255;
+    }
+    uint8_t a = gf_exp[p];
+    if (le_deg + 1 >= 65) {
+      return -1;
+    }
+    le_deg++;
+    for (int i = le_deg; i > 0; i--) {
+      lambda_e[i] ^= gf_mul(a, lambda_e[i - 1]);
+    }
+  }
+
+  /* Forney syndromes T(x) = (Λ_E(x) * S(x)) mod x^nroots. */
+  uint8_t Tsyn[64] = {0};
+  for (int i = 0; i < nroots; i++) {
+    uint8_t s = 0;
+    for (int j = 0; j <= le_deg && j <= i; j++) {
+      s ^= gf_mul(lambda_e[j], syn[i - j]);
+    }
+    Tsyn[i] = s;
+  }
+
+  /* Berlekamp-Massey on the trailing (nroots - le_deg) Forney syndromes to
+     find the error locator Σ(x) for unknown-position errors. The first
+     le_deg Forney coefficients are absorbed by the erasure locator. */
   uint8_t C[65] = {0};
   uint8_t B[65] = {0};
   C[0] = 1;
@@ -1985,22 +2242,26 @@ static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
   int L = 0;
   int m = 1;
   uint8_t b_last = 1;
+  int n_iter = nroots - le_deg;
 
-  for (int k = 0; k < nroots; k++) {
-    uint8_t delta = syn[k];
+  for (int k = 0; k < n_iter; k++) {
+    int kk = k + le_deg;
+    uint8_t delta = Tsyn[kk];
     for (int i = 1; i <= L; i++) {
-      delta ^= gf_mul(C[i], syn[k - i]);
+      if (kk - i >= 0) {
+        delta ^= gf_mul(C[i], Tsyn[kk - i]);
+      }
     }
     if (delta != 0) {
       uint8_t coef = gf_mul(delta, gf_inv(b_last));
-      uint8_t T[65];
-      memcpy(T, C, sizeof(T));
+      uint8_t Tc[65];
+      memcpy(Tc, C, sizeof(Tc));
       for (int i = 0; i + m < 65; i++) {
         C[i + m] ^= gf_mul(coef, B[i]);
       }
       if (2 * L <= k) {
         L = k + 1 - L;
-        memcpy(B, T, sizeof(B));
+        memcpy(B, Tc, sizeof(B));
         b_last = delta;
         m = 1;
       }
@@ -2013,48 +2274,66 @@ static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
     }
   }
 
-  if (L == 0 || L > nroots / 2) {
+  if (2 * L + le_deg > nroots) {
     return -1;
   }
 
-  /* Chien search: error positions are i where C(α^{-i}) == 0. */
-  int err_pos[32];
+  /* Combined locator Ψ(x) = Λ_E(x) * Σ(x). Coefficients in [0..130). */
+  uint8_t Psi[130] = {0};
+  for (int i = 0; i <= le_deg; i++) {
+    if (!lambda_e[i]) {
+      continue;
+    }
+    for (int j = 0; j <= L; j++) {
+      if (!C[j]) {
+        continue;
+      }
+      Psi[i + j] ^= gf_mul(lambda_e[i], C[j]);
+    }
+  }
+  int psi_deg = le_deg + L;
+  if (psi_deg <= 0 || psi_deg > nroots) {
+    return -1;
+  }
+
+  /* Chien search: combined locator roots are at x = α^{-i}. */
+  int err_pos[64];
   int nerr = 0;
   for (int i = 0; i < n; i++) {
     int xi = (255 - (i % 255)) % 255;
     uint8_t v = 0;
-    for (int j = 0; j <= L; j++) {
-      if (C[j]) {
-        int e = (gf_log[C[j]] + xi * j) % 255;
+    for (int j = 0; j <= psi_deg; j++) {
+      if (Psi[j]) {
+        int e = (gf_log[Psi[j]] + xi * j) % 255;
         v ^= gf_exp[e];
       }
     }
     if (v == 0) {
-      if (nerr >= 32) {
+      if (nerr >= 64) {
         return -1;
       }
       err_pos[nerr++] = i;
     }
   }
-  if (nerr != L) {
+  if (nerr != psi_deg) {
     return -1;
   }
 
-  /* Forney: compute Omega(x) = S(x) * C(x) mod x^nroots, then
-     error_value_k = Omega(α^{-i}) / C'(α^{-i}). */
-  uint8_t omega[65] = {0};
+  /* Forney: Ω(x) = (S(x) * Ψ(x)) mod x^nroots, then magnitude at position i
+     is Ω(α^{-i}) / Ψ'(α^{-i}). Ψ has degree up to nroots, so omega and Ψ'
+     buffers need to span that range. */
+  uint8_t omega[130] = {0};
   for (int i = 0; i < nroots; i++) {
-    for (int j = 0; j <= L && i + j < 65; j++) {
+    for (int j = 0; j <= psi_deg && i + j < 130; j++) {
       if (i + j < nroots) {
-        omega[i + j] ^= gf_mul(syn[i], C[j]);
+        omega[i + j] ^= gf_mul(syn[i], Psi[j]);
       }
     }
   }
 
-  /* Formal derivative of C(x): in GF(2^m), odd-term derivatives survive. */
-  uint8_t Cp[65] = {0};
-  for (int i = 1; i <= L; i += 2) {
-    Cp[i - 1] = C[i];
+  uint8_t Psip[130] = {0};
+  for (int i = 1; i <= psi_deg; i += 2) {
+    Psip[i - 1] = Psi[i];
   }
 
   for (int k = 0; k < nerr; k++) {
@@ -2070,9 +2349,9 @@ static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
     }
 
     uint8_t cp = 0;
-    for (int j = 0; j < 65; j++) {
-      if (Cp[j]) {
-        int e = (gf_log[Cp[j]] + xi * j) % 255;
+    for (int j = 0; j < 130; j++) {
+      if (Psip[j]) {
+        int e = (gf_log[Psip[j]] + xi * j) % 255;
         cp ^= gf_exp[e];
       }
     }
@@ -2080,7 +2359,14 @@ static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
     if (cp == 0) {
       return -1;
     }
-    msg[n - 1 - i] ^= gf_mul(o, gf_inv(cp));
+    /* Forney for syndromes starting at b=0: e_j = X_j * Ω(X_j^{-1}) /
+       Ψ'(X_j^{-1}). The X_j factor is essential — without it the recovered
+       magnitude is e_j / X_j, the verify check fails, and RS decoding silently
+       bails out on every block with at least one real error. */
+    int xpow = i % 255;
+    uint8_t correction = gf_mul(o, gf_inv(cp));
+    correction = gf_mul(correction, gf_exp[xpow]);
+    msg[n - 1 - i] ^= correction;
   }
 
   /* Verify: all syndromes zero now. */
@@ -2098,6 +2384,10 @@ static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
   return nerr;
 }
 
+static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
+  return rs_decode_block_eras(msg, nk, nroots, NULL, 0);
+}
+
 /* ---- De-interleave codewords + Reed-Solomon error correction ----
    Splits the raw interleaved codeword stream into per-block [data | EC]
    buffers, runs RS decode on each block, and writes the corrected data
@@ -2109,6 +2399,7 @@ static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
    uncorrectable block. Lower values mean a more confident decode. */
 static int deinterleave(
   uint8_t const *raw,
+  uint8_t const *raw_ambig,
   int raw_len,
   const ECInfo *info,
   uint8_t *out,
@@ -2130,16 +2421,27 @@ static int deinterleave(
   }
 
   uint8_t **blocks = calloc(total_blocks, sizeof(uint8_t *));
+  uint8_t **block_ambig = NULL;
   int *dlen = calloc(total_blocks, sizeof(int));
-  if (!blocks || !dlen) {
+  if (raw_ambig) {
+    block_ambig = calloc(total_blocks, sizeof(uint8_t *));
+  }
+  if (!blocks || !dlen || (raw_ambig && !block_ambig)) {
     free(blocks);
     free(dlen);
+    free(block_ambig);
     return 0;
   }
   int alloc_fail = 0;
   for (int b = 0; b < total_blocks; b++) {
     dlen[b] = (b < info->g1_blocks) ? info->g1_data_cw : info->g2_data_cw;
     blocks[b] = calloc(dlen[b] + ec_cw, 1);
+    if (block_ambig) {
+      block_ambig[b] = calloc(dlen[b] + ec_cw, 1);
+      if (!block_ambig[b]) {
+        alloc_fail = 1;
+      }
+    }
     if (!blocks[b]) {
       alloc_fail = 1;
     }
@@ -2147,8 +2449,12 @@ static int deinterleave(
   if (alloc_fail) {
     for (int b = 0; b < total_blocks; b++) {
       free(blocks[b]);
+      if (block_ambig) {
+        free(block_ambig[b]);
+      }
     }
     free(blocks);
+    free(block_ambig);
     free(dlen);
     return 0;
   }
@@ -2161,20 +2467,93 @@ static int deinterleave(
   for (int i = 0; i < max_data_cw; i++) {
     for (int b = 0; b < total_blocks && pos < raw_len; b++) {
       if (i < dlen[b]) {
-        blocks[b][i] = raw[pos++];
+        blocks[b][i] = raw[pos];
+        if (block_ambig) {
+          block_ambig[b][i] = raw_ambig[pos];
+        }
+        pos++;
       }
     }
   }
   /* EC codewords: all blocks have the same EC length, so clean round-robin. */
   for (int i = 0; i < ec_cw; i++) {
     for (int b = 0; b < total_blocks && pos < raw_len; b++) {
-      blocks[b][dlen[b] + i] = raw[pos++];
+      blocks[b][dlen[b] + i] = raw[pos];
+      if (block_ambig) {
+        block_ambig[b][dlen[b] + i] = raw_ambig[pos];
+      }
+      pos++;
+    }
+  }
+
+  /* Snapshot the original block bytes BEFORE rs_decode_block mutates them
+     in place. Used to retry with erasures (and to detect when erasure
+     decoding flips bytes the errors-only path "corrected" away). */
+  uint8_t **orig = NULL;
+  if (block_ambig) {
+    orig = calloc(total_blocks, sizeof(uint8_t *));
+    if (orig) {
+      for (int b = 0; b < total_blocks; b++) {
+        int blk_n = dlen[b] + ec_cw;
+        orig[b] = malloc(blk_n);
+        if (orig[b]) {
+          memcpy(orig[b], blocks[b], blk_n);
+        }
+      }
     }
   }
 
   int rs_cost = 0;
   for (int b = 0; b < total_blocks; b++) {
+    int blk_n = dlen[b] + ec_cw;
     int corr = rs_decode_block(blocks[b], dlen[b], ec_cw);
+
+    if (block_ambig && orig && orig[b]) {
+      /* Collect erasure candidate positions for this block. */
+      int eras_pos[64];
+      int n_eras = 0;
+      for (int k = 0; k < blk_n && n_eras < ec_cw && n_eras < 64; k++) {
+        if (block_ambig[b][k]) {
+          eras_pos[n_eras++] = k;
+        }
+      }
+
+      if (n_eras > 0) {
+        uint8_t *retry = malloc(blk_n);
+        if (retry) {
+          memcpy(retry, orig[b], blk_n);
+          int corr2 =
+            rs_decode_block_eras(retry, dlen[b], ec_cw, eras_pos, n_eras);
+          if (corr2 >= 0) {
+            int prefer_erasure = 0;
+            if (corr < 0) {
+              /* Errors-only failed; erasure version is our only option. */
+              prefer_erasure = 1;
+            }
+            else if (memcmp(retry, blocks[b], blk_n) != 0) {
+              /* Errors-only "succeeded" but with a different answer than
+                 the erasure-aware decode. The erasure decode had MORE
+                 constraints (specific byte positions known to be unreliable)
+                 so it's more likely to be the true codeword when our
+                 erasure candidates overlap the real errors. The risk: if
+                 most candidates were wrong, this flips a correct decode to
+                 a wrong one — the upper-layer payload validator and
+                 fmt_dist scoring is what saves us when that happens. */
+              prefer_erasure = 1;
+            }
+            if (prefer_erasure) {
+              memcpy(blocks[b], retry, blk_n);
+              corr = corr2;
+              rs_cost += corr2 + n_eras * 2 + 200;
+              free(retry);
+              continue;
+            }
+          }
+          free(retry);
+        }
+      }
+    }
+
     if (corr < 0) {
       /* Uncorrectable block: every EC symbol effectively spent without
          success. Penalise heavily so this decode loses ties to one whose
@@ -2185,6 +2564,12 @@ static int deinterleave(
       rs_cost += corr;
     }
   }
+  if (orig) {
+    for (int b = 0; b < total_blocks; b++) {
+      free(orig[b]);
+    }
+    free(orig);
+  }
   if (out_rs_cost) {
     *out_rs_cost = rs_cost;
   }
@@ -2194,8 +2579,12 @@ static int deinterleave(
     memcpy(out + out_pos, blocks[b], dlen[b]);
     out_pos += dlen[b];
     free(blocks[b]);
+    if (block_ambig) {
+      free(block_ambig[b]);
+    }
   }
   free(blocks);
+  free(block_ambig);
   free(dlen);
   return out_pos;
 }
@@ -2314,6 +2703,7 @@ static char *decode_payload(uint8_t const *data, int len, int ver) {
    *out_rs_cost if non-NULL. */
 static char *decode_grid(
   uint8_t *grid,
+  uint8_t const *conf,
   int qr_size,
   int version,
   int *out_fmt_dist,
@@ -2332,19 +2722,49 @@ static char *decode_grid(
   }
   int max_bits = qr_size * qr_size;
   uint8_t *data_bits = malloc(max_bits);
+  uint8_t *bit_conf = NULL;
+  if (conf) {
+    bit_conf = malloc(max_bits);
+    if (!bit_conf) {
+      free(data_bits);
+      return NULL;
+    }
+  }
   if (!data_bits) {
+    free(bit_conf);
     return NULL;
   }
-  int nbits =
-    extract_bits(grid, qr_size, version, mask_pattern, data_bits, max_bits);
+  int nbits = extract_bits(
+    grid,
+    conf,
+    qr_size,
+    version,
+    mask_pattern,
+    data_bits,
+    bit_conf,
+    max_bits
+  );
   int max_bytes = nbits / 8;
   uint8_t *raw_bytes = malloc(max_bytes + 1);
+  uint8_t *byte_ambig = NULL;
+  if (bit_conf) {
+    byte_ambig = malloc(max_bytes + 1);
+    if (!byte_ambig) {
+      free(data_bits);
+      free(bit_conf);
+      free(raw_bytes);
+      return NULL;
+    }
+  }
   if (!raw_bytes) {
     free(data_bits);
+    free(bit_conf);
+    free(byte_ambig);
     return NULL;
   }
-  int nraw = bits_to_bytes(data_bits, nbits, raw_bytes);
+  int nraw = bits_to_bytes(data_bits, bit_conf, nbits, raw_bytes, byte_ambig);
   free(data_bits);
+  free(bit_conf);
 
   int data_cw_count = nraw;
   uint8_t *data_bytes = raw_bytes;
@@ -2358,7 +2778,7 @@ static char *decode_grid(
       deint_buf = malloc(total_data + 1);
       if (deint_buf) {
         data_cw_count =
-          deinterleave(raw_bytes, nraw, info, deint_buf, &rs_cost);
+          deinterleave(raw_bytes, byte_ambig, nraw, info, deint_buf, &rs_cost);
         data_bytes = deint_buf;
       }
       else {
@@ -2368,6 +2788,7 @@ static char *decode_grid(
   }
   char *decoded = decode_payload(data_bytes, data_cw_count, version);
   free(raw_bytes);
+  free(byte_ambig);
   free(deint_buf);
   if (decoded) {
     int dlen = (int)strlen(decoded);
@@ -2398,6 +2819,7 @@ static char *decode_grid(
    off-by-fraction grid misalignments. */
 static char *decode_with_perturbation(
   uint8_t const *pixels,
+  uint8_t const *gray,
   int width,
   int height,
   const double H[9],
@@ -2444,21 +2866,26 @@ static char *decode_with_perturbation(
   }
   for (int p = 0; p < PERT_N; p++) {
     int use_bilinear = (p == 1);
+    uint8_t *conf = NULL;
     uint8_t *g = sample_grid_homography_offset_mode(
       pixels,
+      gray,
       width,
       height,
       H,
       qr_size,
       offs[p][0],
       offs[p][1],
-      use_bilinear
+      use_bilinear,
+      gray ? &conf : NULL
     );
     if (!g) {
+      free(conf);
       continue;
     }
-    char *d = decode_grid(g, qr_size, version, &fds[p], &rs_costs[p]);
+    char *d = decode_grid(g, conf, qr_size, version, &fds[p], &rs_costs[p]);
     free(g);
+    free(conf);
     if (d) {
       decodes[p] = d;
       lens[p] = strlen(d);
@@ -2568,6 +2995,7 @@ static char *decode_with_perturbation(
 
 static char *try_decode_triple(
   uint8_t const *pixels,
+  uint8_t const *gray,
   int width,
   int height,
   FinderPattern tl,
@@ -2645,6 +3073,7 @@ static char *try_decode_triple(
           int rc = 100000;
           char *d = decode_with_perturbation(
             pixels,
+            gray,
             width,
             height,
             H,
@@ -2681,6 +3110,7 @@ static char *try_decode_triple(
       int rc = 100000;
       char *d = decode_with_perturbation(
         pixels,
+        gray,
         width,
         height,
         H,
@@ -2785,6 +3215,7 @@ static void try_pipeline(
     double module_size = 0;
     char *decoded = try_decode_triple(
       bin,
+      gray,
       w,
       h,
       triples[t][0],

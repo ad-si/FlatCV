@@ -8,25 +8,4 @@
 # Remove a line when flatcv learns to decode that image — the test will
 # flag it as an unexpectedly-fixed entry so this file stays in sync.
 
-# Level 9: occlusion patches obscure data modules beyond what flatcv's
-# Reed-Solomon recovery currently handles.
-level_9/0000_d8X0lOFCam2Q.png
-level_9/0003_SMjxXfpkFf.png
-level_9/0004_KGfoBsYzjivf.png
-level_9/0005_PbXtkwN0ZCNj.png
-level_9/0006_Nw7iNKFHUOFF.png
-level_9/0008_dfBzlTM5L.png
-level_9/0009_URLXmH.png
-level_9/0010_ogpVA3my.png
-level_9/0011_ALvPPYuF.png
-level_9/0012_nGoAhWuhD.png
-level_9/0013_xmvm.png
-level_9/0014_FoO8ibgVd1.png
-level_9/0015_b8b7JP.png
-level_9/0017_k5jV.png
-level_9/0019_fvuz.png
-level_9/0020_CtKV.png
-level_9/0022_dmpW.png
-level_9/0024_rF5.png
-level_9/0027_W8j3zooUVnE.png
-level_9/0028_N0Z2lApl5.png
+# (No known failures.)
