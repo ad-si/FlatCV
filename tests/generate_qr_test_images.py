@@ -128,6 +128,84 @@ def bg_noise(img: Image.Image) -> None:
     _paste_array(img, arr)
 
 
+def _value_noise(
+    w: int, h: int, base_cells: int, octaves: int, persistence: float = 0.5
+) -> np.ndarray:
+    """Multi-octave value noise — low-res random grids bilinearly upsampled
+    and summed at decreasing amplitude. Returns a (h, w) float32 array in
+    [0, 1]. Cheap stand-in for Perlin: no gradients, just smoothed values."""
+    out = np.zeros((h, w), dtype=np.float32)
+    amp = 1.0
+    total = 0.0
+    cells = max(2, base_cells)
+    for _ in range(octaves):
+        grid = _NP_RNG.random((cells, cells), dtype=np.float32)
+        layer = np.asarray(
+            Image.fromarray((grid * 255.0).astype(np.uint8)).resize(
+                (w, h), Image.BILINEAR
+            ),
+            dtype=np.float32,
+        ) / 255.0
+        out += layer * amp
+        total += amp
+        amp *= persistence
+        cells *= 2
+    return out / total
+
+
+def bg_photo_like(img: Image.Image) -> None:
+    """Large-scale value noise across three channels plus a random base tint —
+    broad smooth gradients with organic blotches, reminiscent of out-of-focus
+    photo backdrops (foliage, fabric, concrete)."""
+    w, h = img.width, img.height
+    base_cells = random.randint(3, 8)
+    octaves = random.randint(2, 4)
+    base = np.array(
+        [random.randint(70, 200) for _ in range(3)], dtype=np.float32
+    )
+    variance = random.uniform(50.0, 120.0)
+    layers = [
+        _value_noise(w, h, base_cells=base_cells, octaves=octaves)
+        for _ in range(3)
+    ]
+    arr = np.stack(
+        [base[c] + (layers[c] - 0.5) * variance for c in range(3)], axis=-1
+    )
+    arr = np.clip(arr, 0, 255).astype(np.uint8)
+    _paste_array(img, arr)
+
+
+def apply_clutter(img: Image.Image) -> None:
+    """Overlay rectangular colour patches and concentric-square decoys to
+    stress finder-pattern discrimination. Decoys mimic the 7:5:3 module
+    ratio of real QR finder patterns so a naive detector will latch onto
+    them. Mutates img in place."""
+    draw = ImageDraw.Draw(img)
+    w, h = img.width, img.height
+
+    n_rects = random.randint(8, 20)
+    for _ in range(n_rects):
+        rw = random.randint(20, max(21, w // 5))
+        rh = random.randint(20, max(21, h // 5))
+        x = random.randint(0, max(0, w - rw))
+        y = random.randint(0, max(0, h - rh))
+        color = tuple(random.randint(0, 255) for _ in range(3))
+        draw.rectangle([x, y, x + rw, y + rh], fill=color)
+
+    n_decoys = random.randint(2, 5)
+    for _ in range(n_decoys):
+        s = random.randint(15, 45)
+        cx = random.randint(s, max(s + 1, w - s))
+        cy = random.randint(s, max(s + 1, h - s))
+        s2 = max(1, int(round(s * 5 / 7)))
+        s3 = max(1, int(round(s * 3 / 7)))
+        draw.rectangle([cx - s, cy - s, cx + s, cy + s], fill=(0, 0, 0))
+        draw.rectangle(
+            [cx - s2, cy - s2, cx + s2, cy + s2], fill=(255, 255, 255)
+        )
+        draw.rectangle([cx - s3, cy - s3, cx + s3, cy + s3], fill=(0, 0, 0))
+
+
 def bg_radial(img: Image.Image) -> None:
     cx, cy = img.width / 2, img.height / 2
     max_dist = math.hypot(cx, cy)
@@ -647,14 +725,31 @@ def _render_level(level: int, text: str) -> Image.Image:
         blur_angle = random.uniform(0.0, 360.0)
         return apply_motion_blur(img, length, blur_angle)
 
-    # Level 9: occlusion patches on the QR data area, finders preserved.
+    if level == 9:
+        # Occlusion patches on the QR data area, finders preserved.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        box_size = 8
+        border = 4
+        qr = make_qr_rgba(
+            text, box_size=box_size, border=border, white_bg=white_bg
+        )
+        qr = apply_qr_occlusion(qr, border=border, box_size=box_size)
+        return _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+
+    # Level 10: photo-like value-noise background plus rectangular clutter
+    # and concentric-square decoys that mimic finder patterns.
     w, h = random.choice(SIZES)
     bg = Image.new("RGB", (w, h))
-    random.choice(BACKGROUNDS)(bg)
-    box_size = 8
-    border = 4
-    qr = make_qr_rgba(text, box_size=box_size, border=border, white_bg=white_bg)
-    qr = apply_qr_occlusion(qr, border=border, box_size=box_size)
+    bg_photo_like(bg)
+    apply_clutter(bg)
+    qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
     return _place_simple(
         bg,
         qr,
@@ -864,9 +959,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--levels",
         type=str,
-        default="1,2,3,4,5,6,7,8,9",
+        default="1,2,3,4,5,6,7,8,9,10",
         help="Comma-separated list of levels to generate "
-        "(default: 1,2,3,4,5,6,7,8,9).",
+        "(default: 1,2,3,4,5,6,7,8,9,10).",
     )
     p.add_argument("--seed", type=int, default=42)
     p.add_argument(

@@ -405,6 +405,7 @@ static int test_difficulty_images(void) {
     "level_7",
     "level_8",
     "level_9",
+    "level_10",
   };
   const size_t num_levels = sizeof(levels) / sizeof(levels[0]);
 
