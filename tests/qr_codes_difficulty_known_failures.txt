@@ -8,4 +8,30 @@
 # Remove a line when flatcv learns to decode that image — the test will
 # flag it as an unexpectedly-fixed entry so this file stays in sync.
 
-# (No known failures.)
+# level_13: flatcv's binariser currently assumes dark-on-light modules, so
+# inverted/coloured-palette QRs that zxing-cpp decodes are missed.
+level_13/0001_TEMsjpH8.png
+level_13/0002_CxA.png
+level_13/0005_fxDX6jCOy.png
+level_13/0006_xju1UyJbOB.png
+level_13/0007_wvfAvWeF.png
+level_13/0009_cmLc.png
+level_13/0010_xGyk1mWMqvm.png
+level_13/0012_UuDzMWk6F.png
+level_13/0013_CyUK9kg.png
+level_13/0014_APbtXc5.png
+level_13/0016_bQr93mp.png
+level_13/0018_7wPDCWI3.png
+level_13/0019_HgK.png
+level_13/0020_U1ZxJ7zH.png
+level_13/0022_LcRFcFuwbqSE.png
+level_13/0023_IffpU1T.png
+level_13/0024_eGlDrSKyZ7.png
+level_13/0025_91emE.png
+level_13/0027_G6p674ihb.png
+level_13/0029_ZnmQEEEngl.png
+
+# level_14: compounded real-world stressors (perspective + blur + noise +
+# JPEG + uneven lighting) that push past flatcv's current margin even
+# though individual stressors are handled.
+level_14/0023_Tf3i7.png

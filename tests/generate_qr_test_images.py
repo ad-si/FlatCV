@@ -327,11 +327,14 @@ def make_qr_rgba(
     box_size: int = 10,
     border: int = 4,
     white_bg: bool = True,
+    dark_color: tuple[int, int, int] = (0, 0, 0),
+    light_color: tuple[int, int, int] = (255, 255, 255),
 ) -> Image.Image:
-    """QR as RGBA. If white_bg is True the quiet zone is opaque white and
-    rotates together with the QR modules; if False the white pixels are
-    converted to transparent so the photo background shows through between
-    the dark modules (no white square frame at all)."""
+    """QR as RGBA. dark_color/light_color set the module palette (defaults
+    black-on-white). If white_bg is True the light-coloured quiet zone is
+    opaque and rotates with the modules; if False the light pixels are
+    stripped to transparent so the photo background shows through between
+    the dark modules (no rectangular frame)."""
     qr = qrcode.QRCode(
         error_correction=qrcode.constants.ERROR_CORRECT_M,
         box_size=box_size,
@@ -339,13 +342,16 @@ def make_qr_rgba(
     )
     qr.add_data(text)
     qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
+    img = qr.make_image(
+        fill_color=dark_color, back_color=light_color
+    ).convert("RGBA")
     if not white_bg:
-        pixels = img.load()
-        for y in range(img.height):
-            for x in range(img.width):
-                if pixels[x, y][:3] == (255, 255, 255):
-                    pixels[x, y] = (0, 0, 0, 0)
+        arr = np.asarray(img).copy()
+        mask = np.all(
+            arr[..., :3] == np.array(light_color, dtype=np.uint8), axis=-1
+        )
+        arr[mask] = (0, 0, 0, 0)
+        img = Image.fromarray(arr, "RGBA")
     return img
 
 
@@ -507,6 +513,30 @@ def apply_jpeg(img: Image.Image, quality: int) -> Image.Image:
     return Image.open(buf).convert("RGB")
 
 
+def apply_defocus_blur(img: Image.Image, radius: float) -> Image.Image:
+    """Disk (bokeh) blur — uniform averaging within a circular kernel.
+    Distinct from Gaussian: flat response inside the disk, hard falloff at
+    the edge. Models an out-of-focus camera lens."""
+    arr = np.asarray(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+    r = int(math.ceil(radius))
+    ys, xs = np.ogrid[-r : r + 1, -r : r + 1]
+    mask = (xs * xs + ys * ys) <= radius * radius
+    offsets = [
+        (int(y), int(x))
+        for y in range(-r, r + 1)
+        for x in range(-r, r + 1)
+        if mask[y + r, x + r]
+    ]
+    pad = r
+    padded = np.pad(arr, ((pad, pad), (pad, pad), (0, 0)), mode="edge")
+    out = np.zeros_like(arr)
+    for oy, ox in offsets:
+        out += padded[pad - oy : pad - oy + h, pad - ox : pad - ox + w, :]
+    out /= float(len(offsets))
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
+
+
 def apply_motion_blur(
     img: Image.Image, length: int, angle_deg: float
 ) -> Image.Image:
@@ -528,6 +558,159 @@ def apply_motion_blur(
         oy = int(round(t * dy))
         out += padded[pad - oy : pad - oy + h, pad - ox : pad - ox + w, :]
     out /= float(length)
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
+
+
+def apply_chromatic_aberration(
+    img: Image.Image, max_shift: float
+) -> Image.Image:
+    """Shift R channel radially outward and B channel radially inward by up
+    to max_shift pixels at the frame corners. Simulates the radial chromatic
+    aberration of a cheap lens."""
+    arr = np.asarray(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+    cy, cx = h / 2.0, w / 2.0
+    ys = np.arange(h, dtype=np.float32)[:, None]
+    xs = np.arange(w, dtype=np.float32)[None, :]
+    dx = xs - cx
+    dy = ys - cy
+    r = np.hypot(dx, dy)
+    max_r = math.hypot(cx, cy) or 1.0
+    frac = r / max_r
+    safe_r = np.maximum(r, 1e-3)
+    ux = dx / safe_r
+    uy = dy / safe_r
+    shift = max_shift * frac
+
+    def sample(ch: np.ndarray, sx: np.ndarray, sy: np.ndarray) -> np.ndarray:
+        x0 = np.clip(np.floor(sx).astype(np.int32), 0, w - 1)
+        x1 = np.clip(x0 + 1, 0, w - 1)
+        y0 = np.clip(np.floor(sy).astype(np.int32), 0, h - 1)
+        y1 = np.clip(y0 + 1, 0, h - 1)
+        fx = (sx - x0).astype(np.float32)
+        fy = (sy - y0).astype(np.float32)
+        a = ch[y0, x0] * (1 - fx) + ch[y0, x1] * fx
+        b = ch[y1, x0] * (1 - fx) + ch[y1, x1] * fx
+        return a * (1 - fy) + b * fy
+
+    out = arr.copy()
+    out[..., 0] = sample(arr[..., 0], xs - shift * ux, ys - shift * uy)
+    out[..., 2] = sample(arr[..., 2], xs + shift * ux, ys + shift * uy)
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
+
+
+def apply_specular_glare(img: Image.Image, area_frac: float) -> Image.Image:
+    """Additive elliptical highlight occupying roughly area_frac of the
+    frame. Core saturates to pure white, halo falls off smoothly. Distinct
+    from apply_illumination's specular (smaller, bigger lift, hard core)."""
+    arr = np.asarray(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+    aspect = random.uniform(0.4, 2.5)
+    target_area = area_frac * w * h
+    a = math.sqrt(target_area / math.pi * aspect)
+    b = target_area / (math.pi * a) if a > 0 else 1.0
+    a = max(a, 4.0)
+    b = max(b, 4.0)
+    cx = random.uniform(a, max(a + 1.0, w - a))
+    cy = random.uniform(b, max(b + 1.0, h - b))
+    ys = np.arange(h, dtype=np.float32)[:, None]
+    xs = np.arange(w, dtype=np.float32)[None, :]
+    r = np.hypot((xs - cx) / a, (ys - cy) / b)
+    core = np.clip(1.0 - r, 0.0, 1.0)
+    halo = np.exp(-r * r * 1.5)
+    mask = core * 1.0 + halo * 0.35
+    arr = arr + mask[..., None] * 320.0
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB")
+
+
+def apply_impulse_noise(img: Image.Image, prob: float) -> Image.Image:
+    """Salt-and-pepper: each pixel flipped to pure black or white with the
+    given total probability (half salt, half pepper). Harder than Gaussian
+    noise for threshold-based detectors since the flips are extreme values."""
+    arr = np.asarray(img, dtype=np.uint8).copy()
+    h, w = arr.shape[:2]
+    r = _NP_RNG.random((h, w), dtype=np.float32)
+    salt = r < prob / 2.0
+    pepper = (r >= prob / 2.0) & (r < prob)
+    arr[salt] = (255, 255, 255)
+    arr[pepper] = (0, 0, 0)
+    return Image.fromarray(arr, "RGB")
+
+
+def apply_row_shear(img: Image.Image, magnitude: float) -> Image.Image:
+    """Horizontal shear: row y shifts by magnitude*(y - h/2) px. Models
+    rolling-shutter skew from horizontal camera or subject motion. Unlike
+    perspective this is non-planar — the rows stay horizontal but slide."""
+    arr = np.asarray(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+    ys = np.arange(h, dtype=np.float32)
+    shifts = magnitude * (ys - h / 2.0)
+    xs = np.arange(w, dtype=np.float32)
+    src_x = xs[None, :] - shifts[:, None]
+    x0 = np.clip(np.floor(src_x).astype(np.int32), 0, w - 1)
+    x1 = np.clip(x0 + 1, 0, w - 1)
+    fx = (src_x - x0).astype(np.float32)[..., None]
+    row_idx = np.arange(h, dtype=np.int32)[:, None]
+    out = arr[row_idx, x0, :] * (1.0 - fx) + arr[row_idx, x1, :] * fx
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
+
+
+def apply_physical_damage(img: Image.Image) -> Image.Image:
+    """Simulate torn/creased printed paper: a couple of fold shadow bands
+    (multiplicative darkening strips) plus small circular holes with thin
+    dark borders."""
+    out = np.asarray(img, dtype=np.float32).copy()
+    h, w = out.shape[:2]
+    n_folds = random.randint(1, 2)
+    for _ in range(n_folds):
+        band = random.randint(2, 6)
+        intensity = random.uniform(0.35, 0.55)
+        if random.random() < 0.5:
+            y = random.randint(h // 5, 4 * h // 5)
+            out[max(0, y - band) : min(h, y + band + 1), :, :] *= 1.0 - intensity
+        else:
+            x = random.randint(w // 5, 4 * w // 5)
+            out[:, max(0, x - band) : min(w, x + band + 1), :] *= 1.0 - intensity
+    ys = np.arange(h, dtype=np.float32)[:, None]
+    xs = np.arange(w, dtype=np.float32)[None, :]
+    n_holes = random.randint(2, 4)
+    for _ in range(n_holes):
+        r = random.randint(4, 12)
+        cx = random.randint(r + 2, max(r + 3, w - r - 2))
+        cy = random.randint(r + 2, max(r + 3, h - r - 2))
+        dist = np.hypot(xs - cx, ys - cy)
+        out[dist <= r] = (255.0, 255.0, 255.0)
+        out[(dist > r) & (dist <= r + 1.5)] = (30.0, 30.0, 30.0)
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
+
+
+def apply_cylindrical_warp(
+    img: Image.Image, angle_max: float, axis: str = "v"
+) -> Image.Image:
+    """Warp as if the image were wrapped around a cylinder viewed from
+    outside. axis='v' wraps around a vertical cylinder (columns compress
+    toward left/right edges), 'h' wraps around a horizontal cylinder (rows
+    compress toward top/bottom). angle_max (radians) sets the visible arc;
+    0 = flat, ~π/2 = hemicircle."""
+    arr = np.asarray(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+    if angle_max < 1e-4:
+        return img.copy()
+    sin_max = math.sin(angle_max)
+    if axis == "v":
+        t = np.linspace(-1.0, 1.0, w, dtype=np.float32)
+        src = (np.sin(t * angle_max) / sin_max + 1.0) * 0.5 * (w - 1)
+        x0 = np.clip(np.floor(src).astype(np.int32), 0, w - 1)
+        x1 = np.clip(x0 + 1, 0, w - 1)
+        fx = (src - x0).astype(np.float32)[None, :, None]
+        out = arr[:, x0, :] * (1.0 - fx) + arr[:, x1, :] * fx
+    else:
+        t = np.linspace(-1.0, 1.0, h, dtype=np.float32)
+        src = (np.sin(t * angle_max) / sin_max + 1.0) * 0.5 * (h - 1)
+        y0 = np.clip(np.floor(src).astype(np.int32), 0, h - 1)
+        y1 = np.clip(y0 + 1, 0, h - 1)
+        fy = (src - y0).astype(np.float32)[:, None, None]
+        out = arr[y0, :, :] * (1.0 - fy) + arr[y1, :, :] * fy
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
 
 
@@ -605,7 +788,7 @@ def apply_qr_occlusion(
 
 
 def _render_level(level: int, text: str) -> Image.Image:
-    """Render one QR image at the given difficulty level (1-5)."""
+    """Render one QR image at the given difficulty level (1-20)."""
     # Randomly decide whether the QR gets an opaque white quiet zone
     # (that rotates with the modules) or a transparent quiet zone (so the
     # photo background shows directly between the dark modules).
@@ -743,19 +926,218 @@ def _render_level(level: int, text: str) -> Image.Image:
             angle=random.uniform(0, 360),
         )
 
-    # Level 10: photo-like value-noise background plus rectangular clutter
-    # and concentric-square decoys that mimic finder patterns.
+    if level == 10:
+        # Photo-like value-noise background plus rectangular clutter and
+        # concentric-square decoys that mimic finder patterns.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        bg_photo_like(bg)
+        apply_clutter(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        return _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+
+    if level == 11:
+        # Defocus (disk) blur over a level-3-style render. Kernel shape
+        # distinct from Gaussian (level_4) and directional (level_8).
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        return apply_defocus_blur(img, radius=random.uniform(3.0, 7.0))
+
+    if level == 12:
+        # Cylindrical warp. Non-planar geometry — the image is wrapped
+        # around a virtual cylinder so edges are compressed relative to
+        # center. Distinct from level_5's planar perspective transform.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        angle_max = random.uniform(0.5, 1.0)
+        axis = random.choice(["v", "h"])
+        return apply_cylindrical_warp(img, angle_max=angle_max, axis=axis)
+
+    if level == 13:
+        # Inverted or coloured QR modules. Spec-legal palettes that detectors
+        # often miss: white-on-black, navy-on-cream, etc. Stresses
+        # binarisation polarity assumptions.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        mode = random.choice(["inverted", "colored", "colored_inverted"])
+        if mode == "inverted":
+            dark = (255, 255, 255)
+            light = (0, 0, 0)
+        elif mode == "colored":
+            dark = tuple(random.randint(0, 90) for _ in range(3))
+            light = tuple(random.randint(190, 255) for _ in range(3))
+        else:
+            dark = tuple(random.randint(190, 255) for _ in range(3))
+            light = tuple(random.randint(0, 90) for _ in range(3))
+        qr = make_qr_rgba(
+            text,
+            box_size=8,
+            white_bg=white_bg,
+            dark_color=dark,
+            light_color=light,
+        )
+        return _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+
+    if level == 14:
+        # Combined real-world. Small QR + perspective warp + random subset
+        # of {blur, noise, JPEG, uneven lighting} applied in capture-chain
+        # order. Models a phone photograph of a printed QR: several moderate
+        # degradations compounding, rather than one aggressive stressor.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.22, 0.35),
+            angle=random.uniform(0, 360),
+        )
+        img = perspective_warp(img, magnitude=random.uniform(0.04, 0.09))
+        blur_kind = random.choice([None, "gauss", "defocus", "motion"])
+        others = random.sample(
+            ["noise", "jpeg", "illum"], k=random.randint(1, 2)
+        )
+        if "illum" in others:
+            img = apply_illumination(img)
+        if blur_kind == "defocus":
+            img = apply_defocus_blur(img, radius=random.uniform(1.5, 3.5))
+        elif blur_kind == "motion":
+            img = apply_motion_blur(
+                img,
+                length=random.randint(3, 7),
+                angle_deg=random.uniform(0, 360),
+            )
+        elif blur_kind == "gauss":
+            img = img.filter(
+                ImageFilter.GaussianBlur(radius=random.uniform(0.4, 1.0))
+            )
+        if "noise" in others:
+            img = add_gaussian_noise(img, sigma=random.uniform(3.0, 7.0))
+        if "jpeg" in others:
+            img = apply_jpeg(img, quality=random.randint(30, 55))
+        return img
+
+    if level == 15:
+        # Chromatic aberration: radial R/B channel offset simulating cheap
+        # lens dispersion. Stresses grayscale-conversion assumptions.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        return apply_chromatic_aberration(img, max_shift=random.uniform(2.0, 5.0))
+
+    if level == 16:
+        # Specular glare / reflection: large additive highlight that
+        # saturates a portion of the QR. Distinct from level_6 illumination:
+        # modules in the hot region are fully clipped, not just dimmed.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        return apply_specular_glare(img, area_frac=random.uniform(0.05, 0.18))
+
+    if level == 17:
+        # Impulse (salt-and-pepper) noise: fraction of pixels flipped to
+        # pure black or white. Harder than Gaussian for threshold-based
+        # detectors because flips are out-of-distribution.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        return apply_impulse_noise(img, prob=random.uniform(0.005, 0.03))
+
+    if level == 18:
+        # Tiny / distant QR: occupies 8-15% of the frame. Finder-ring
+        # detection stressed at low pixel counts — a finder center only
+        # spans a handful of pixels.
+        w, h = random.choice([(800, 600), (1024, 768), (1280, 960), (1920, 1080)])
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        return _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.08, 0.15),
+            angle=random.uniform(0, 360),
+        )
+
+    if level == 19:
+        # Rolling-shutter shear: horizontal shift proportional to row index.
+        # Non-planar — distinct from level_5's global perspective.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        magnitude = random.uniform(0.05, 0.18) * random.choice([-1.0, 1.0])
+        return apply_row_shear(img, magnitude=magnitude)
+
+    # Level 20: physical damage. Paper fold shadows + punched holes on a
+    # level-3-style render. Distinct from level_9 opaque patches: folds
+    # multiplicatively darken strips and holes leave white voids with
+    # thin dark rims, not random-coloured shapes.
     w, h = random.choice(SIZES)
     bg = Image.new("RGB", (w, h))
-    bg_photo_like(bg)
-    apply_clutter(bg)
+    random.choice(BACKGROUNDS)(bg)
     qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-    return _place_simple(
+    img = _place_simple(
         bg,
         qr,
         scale=random.uniform(0.35, 0.55),
         angle=random.uniform(0, 360),
     )
+    return apply_physical_damage(img)
 
 
 def _zxing_decodes(path: Path, expected: str) -> bool:
@@ -959,9 +1341,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--levels",
         type=str,
-        default="1,2,3,4,5,6,7,8,9,10",
+        default="1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20",
         help="Comma-separated list of levels to generate "
-        "(default: 1,2,3,4,5,6,7,8,9,10).",
+        "(default: 1..20).",
     )
     p.add_argument("--seed", type=int, default=42)
     p.add_argument(
