@@ -25,6 +25,7 @@ the refreshed manifest, then every subsequent regeneration is decoder-free.
 """
 
 import argparse
+import io
 import json
 import math
 import random
@@ -373,6 +374,158 @@ def _place_simple(
     return out.convert("RGB")
 
 
+def apply_illumination(img: Image.Image) -> Image.Image:
+    """Composite one of {vignette, spotlight, linear ramp, specular} onto img.
+
+    Brightness delta spans 40-70% across the image. Vignette/spotlight/linear
+    are multiplicative falloffs that fool global Otsu; specular is additive
+    highlight that locally saturates the background.
+    """
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+    h, w = arr.shape[:2]
+    effect = random.choice(["vignette", "spotlight", "linear", "specular"])
+    strength = random.uniform(0.55, 0.85)
+    xs = np.arange(w, dtype=np.float32)
+    ys = np.arange(h, dtype=np.float32)
+    if effect == "vignette":
+        cx, cy = w / 2.0, h / 2.0
+        max_dist = math.hypot(cx, cy)
+        dist = np.hypot(xs[None, :] - cx, ys[:, None] - cy) / max_dist
+        mask = 1.0 - strength * np.clip(dist, 0.0, 1.0) ** 2
+        arr = arr * mask[..., None]
+    elif effect == "spotlight":
+        cx = random.uniform(0.2, 0.8) * w
+        cy = random.uniform(0.2, 0.8) * h
+        radius = min(w, h) * random.uniform(0.25, 0.45)
+        dist = np.hypot(xs[None, :] - cx, ys[:, None] - cy) / radius
+        mask = 1.0 - strength * np.clip(dist, 0.0, 1.0) ** 2
+        arr = arr * mask[..., None]
+    elif effect == "linear":
+        angle = random.uniform(0.0, 2.0 * math.pi)
+        dx = math.cos(angle)
+        dy = math.sin(angle)
+        t = (xs[None, :] / max(w - 1, 1)) * dx + (ys[:, None] / max(h - 1, 1)) * dy
+        span = float(t.max() - t.min()) or 1.0
+        t_norm = (t - t.min()) / span
+        mask = 1.0 - strength * t_norm
+        arr = arr * mask[..., None]
+    else:
+        cx = random.uniform(0.15, 0.85) * w
+        cy = random.uniform(0.15, 0.85) * h
+        radius = min(w, h) * random.uniform(0.08, 0.2)
+        dist = np.hypot(xs[None, :] - cx, ys[:, None] - cy) / radius
+        highlight = strength * np.exp(-(dist ** 2))
+        arr = arr + highlight[..., None]
+    arr = np.clip(arr * 255.0, 0, 255).astype(np.uint8)
+    return Image.fromarray(arr, "RGB")
+
+
+def apply_jpeg(img: Image.Image, quality: int) -> Image.Image:
+    """Round-trip through JPEG encode/decode to introduce 8x8 block ringing
+    and chroma subsampling haze."""
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    buf.seek(0)
+    return Image.open(buf).convert("RGB")
+
+
+def apply_motion_blur(
+    img: Image.Image, length: int, angle_deg: float
+) -> Image.Image:
+    """Directional blur via sum of edge-padded shifts along a line. Sparse
+    kernel (only `length` nonzero cells), so numpy shifts are fast enough."""
+    arr = np.asarray(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+    angle = math.radians(angle_deg)
+    dx = math.cos(angle)
+    dy = math.sin(angle)
+    pad = length // 2 + 1
+    padded = np.pad(
+        arr, ((pad, pad), (pad, pad), (0, 0)), mode="edge"
+    )
+    out = np.zeros_like(arr)
+    for i in range(length):
+        t = i - (length - 1) / 2.0
+        ox = int(round(t * dx))
+        oy = int(round(t * dy))
+        out += padded[pad - oy : pad - oy + h, pad - ox : pad - ox + w, :]
+    out /= float(length)
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
+
+
+def apply_qr_occlusion(
+    qr_rgba: Image.Image, border: int, box_size: int
+) -> Image.Image:
+    """Paint opaque patches on the QR data area, skipping the three finder
+    corners (with a one-module inner quiet-zone margin). Patches are applied
+    to the QR image in its local coordinate system BEFORE rotation/placement
+    so finder positions are exact regardless of downstream transforms."""
+    total_modules = qr_rgba.size[0] // box_size
+    modules = total_modules - 2 * border
+    if modules < 21:
+        return qr_rgba
+    inner_lo = border * box_size
+    inner_hi = (border + modules) * box_size
+    finder_end = (border + 8) * box_size
+    finder_start_br_x = (border + modules - 8) * box_size
+    finder_start_br_y = finder_start_br_x
+    exclusions = [
+        (inner_lo, inner_lo, finder_end, finder_end),
+        (finder_start_br_x, inner_lo, inner_hi, finder_end),
+        (inner_lo, finder_start_br_y, finder_end, inner_hi),
+    ]
+
+    data_area = float((modules * box_size) ** 2)
+    target_area = random.uniform(0.02, 0.10) * data_area
+
+    out = qr_rgba.copy()
+    draw = ImageDraw.Draw(out)
+    used_area = 0.0
+    attempts = 0
+    placed = 0
+    while used_area < target_area and attempts < 40:
+        attempts += 1
+        shape = random.choice(["rect", "ellipse"])
+        pw = random.randint(box_size * 2, box_size * 6)
+        ph = random.randint(box_size * 2, box_size * 6)
+        cx = random.randint(inner_lo, inner_hi)
+        cy = random.randint(inner_lo, inner_hi)
+        x0, y0 = cx - pw // 2, cy - ph // 2
+        x1, y1 = x0 + pw, y0 + ph
+        hits_finder = False
+        for ex in exclusions:
+            if x1 > ex[0] and x0 < ex[2] and y1 > ex[1] and y0 < ex[3]:
+                hits_finder = True
+                break
+        if hits_finder:
+            continue
+        color = (
+            random.randint(0, 255),
+            random.randint(0, 255),
+            random.randint(0, 255),
+            255,
+        )
+        box = [x0, y0, x1, y1]
+        if shape == "rect":
+            draw.rectangle(box, fill=color)
+        else:
+            draw.ellipse(box, fill=color)
+        used_area += pw * ph
+        placed += 1
+    if placed == 0:
+        # Guarantee at least one patch so the level isn't a silent no-op
+        # when random attempts keep clipping finders.
+        pw = box_size * 3
+        ph = box_size * 3
+        cx = (inner_lo + inner_hi) // 2
+        cy = (inner_lo + inner_hi) // 2
+        draw.rectangle(
+            [cx - pw // 2, cy - ph // 2, cx + pw // 2, cy + ph // 2],
+            fill=(0, 0, 0, 255),
+        )
+    return out
+
+
 def _render_level(level: int, text: str) -> Image.Image:
     """Render one QR image at the given difficulty level (1-5)."""
     # Randomly decide whether the QR gets an opaque white quiet zone
@@ -429,22 +582,85 @@ def _render_level(level: int, text: str) -> Image.Image:
         img = add_gaussian_noise(img, sigma=random.uniform(6.0, 12.0))
         return img
 
-    # Level 5: very hard — perspective warp, low contrast, blur, small size.
-    w, h = random.choice([(640, 480), (800, 600), (1024, 768)])
+    if level == 5:
+        # Very hard: perspective warp, low contrast, blur, small size.
+        w, h = random.choice([(640, 480), (800, 600), (1024, 768)])
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, border=4, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.25, 0.35),
+            angle=random.uniform(0, 360),
+        )
+        img = perspective_warp(img, magnitude=random.uniform(0.06, 0.14))
+        img = img.filter(
+            ImageFilter.GaussianBlur(radius=random.uniform(1.0, 1.8))
+        )
+        img = reduce_contrast(img, factor=random.uniform(0.55, 0.75))
+        img = add_gaussian_noise(img, sigma=random.uniform(4.0, 9.0))
+        return img
+
+    if level == 6:
+        # Uneven illumination on a level-3-style render.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        return apply_illumination(img)
+
+    if level == 7:
+        # JPEG compression artefacts over a level-3-style render.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        quality = random.randint(5, 20)
+        return apply_jpeg(img, quality)
+
+    if level == 8:
+        # Directional motion blur over a level-3-style render.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
+        img = _place_simple(
+            bg,
+            qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        length = random.randint(5, 12)
+        blur_angle = random.uniform(0.0, 360.0)
+        return apply_motion_blur(img, length, blur_angle)
+
+    # Level 9: occlusion patches on the QR data area, finders preserved.
+    w, h = random.choice(SIZES)
     bg = Image.new("RGB", (w, h))
     random.choice(BACKGROUNDS)(bg)
-    qr = make_qr_rgba(text, box_size=8, border=4, white_bg=white_bg)
-    img = _place_simple(
+    box_size = 8
+    border = 4
+    qr = make_qr_rgba(text, box_size=box_size, border=border, white_bg=white_bg)
+    qr = apply_qr_occlusion(qr, border=border, box_size=box_size)
+    return _place_simple(
         bg,
         qr,
-        scale=random.uniform(0.25, 0.35),
+        scale=random.uniform(0.35, 0.55),
         angle=random.uniform(0, 360),
     )
-    img = perspective_warp(img, magnitude=random.uniform(0.06, 0.14))
-    img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(1.0, 1.8)))
-    img = reduce_contrast(img, factor=random.uniform(0.55, 0.75))
-    img = add_gaussian_noise(img, sigma=random.uniform(4.0, 9.0))
-    return img
 
 
 def _zxing_decodes(path: Path, expected: str) -> bool:
@@ -648,8 +864,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--levels",
         type=str,
-        default="1,2,3,4,5",
-        help="Comma-separated list of levels to generate (default: 1,2,3,4,5).",
+        default="1,2,3,4,5,6,7,8,9",
+        help="Comma-separated list of levels to generate "
+        "(default: 1,2,3,4,5,6,7,8,9).",
     )
     p.add_argument("--seed", type=int, default=42)
     p.add_argument(

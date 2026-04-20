@@ -395,8 +395,17 @@ static int run_difficulty_level(
 static int test_difficulty_images(void) {
   const char *root_dir = "tests/qr_codes_difficulty";
   const char *kfl_path = "tests/qr_codes_difficulty_known_failures.txt";
-  const char *levels[] =
-    {"level_1", "level_2", "level_3", "level_4", "level_5"};
+  const char *levels[] = {
+    "level_1",
+    "level_2",
+    "level_3",
+    "level_4",
+    "level_5",
+    "level_6",
+    "level_7",
+    "level_8",
+    "level_9",
+  };
   const size_t num_levels = sizeof(levels) / sizeof(levels[0]);
 
   printf("Test: Difficulty-tiered QR images (%s)...\n", root_dir);
