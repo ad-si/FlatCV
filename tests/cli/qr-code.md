@@ -37,14 +37,15 @@ Applying operation: qr
 
 ### Draw Detected QR Codes
 
-Draw disks at the four boundary corners (green) and the three
-finder pattern centers (red).
+Draw the QR code border (green) connecting the four boundary corners
+and disks at the three finder pattern centers (red).
+Marker sizes are scaled to the QR code's module size.
 
 ```scrut
-$ ./flatcv imgs/qr_hello.jpeg draw_qr imgs/qr_hello_annotated.png
+$ ./flatcv imgs/qr_hello.jpeg qr_draw imgs/qr_hello_annotated.png
 Loaded image: 928x928 with 1 channels
 Executing pipeline with 1 operations:
-Applying operation: draw_qr
+Applying operation: qr_draw
   → Completed in \d+.\d+ ms \(output: 928x928\) (regex)
 Final output dimensions: 928x928
 Successfully saved processed image to 'imgs/qr_hello_annotated.png'

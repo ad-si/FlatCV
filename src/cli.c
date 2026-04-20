@@ -104,7 +104,7 @@ void print32_t_usage(const char *program_name) {
     "  border <hex_color> <border_width> - Add colored border around image\n"
   );
   printf("  qr              - Decode QR codes and output as JSON\n");
-  printf("  draw_qr         - Decode QR codes and draw corners + finders\n");
+  printf("  qr_draw         - Decode QR codes and draw border + finders\n");
   printf("  erode <radius>  - Binary erosion with disk structuring element\n");
   printf("  dilate <radius> - Binary dilation with disk structuring element\n");
   printf("  close <radius>  - Binary closing (dilation then erosion)\n");
@@ -1027,7 +1027,7 @@ uint8_t *apply_operation(
     }
     return result;
   }
-  else if (strcmp(operation, "draw_qr") == 0) {
+  else if (strcmp(operation, "qr_draw") == 0) {
     uint8_t *grayscale_data =
       fcv_rgba_to_grayscale(*width, *height, input_data);
     if (!grayscale_data) {
@@ -1044,53 +1044,51 @@ uint8_t *apply_operation(
     }
     memcpy(result, input_data, img_length_byte);
 
-    const double corner_radius = fmin(*width, *height) * 0.015;
-    const double finder_radius = fmin(*width, *height) * 0.020;
     const char *green = "00C800";
     const char *red = "C80000";
 
     for (size_t i = 0; i < qrs.count; i++) {
       FCVQRCode *qr = &qrs.codes[i];
-      fcv_draw_disk(
-        *width,
-        *height,
-        4,
-        green,
-        corner_radius,
+      double module = qr->module_size > 0 ? qr->module_size : 1.0;
+      double finder_radius = module * 1.5;
+      double border_thickness = fmax(1.0, module * 0.25);
+
+      double xs[4] = {
         qr->corners.tl_x,
-        qr->corners.tl_y,
-        result
-      );
-      fcv_draw_disk(
-        *width,
-        *height,
-        4,
-        green,
-        corner_radius,
         qr->corners.tr_x,
-        qr->corners.tr_y,
-        result
-      );
-      fcv_draw_disk(
-        *width,
-        *height,
-        4,
-        green,
-        corner_radius,
         qr->corners.br_x,
-        qr->corners.br_y,
-        result
-      );
-      fcv_draw_disk(
-        *width,
-        *height,
-        4,
-        green,
-        corner_radius,
         qr->corners.bl_x,
+      };
+      double ys[4] = {
+        qr->corners.tl_y,
+        qr->corners.tr_y,
+        qr->corners.br_y,
         qr->corners.bl_y,
-        result
-      );
+      };
+      for (int e = 0; e < 4; e++) {
+        int e2 = (e + 1) % 4;
+        double dx = xs[e2] - xs[e];
+        double dy = ys[e2] - ys[e];
+        double length = hypot(dx, dy);
+        int steps = (int)ceil(length);
+        if (steps < 1) {
+          steps = 1;
+        }
+        for (int s = 0; s <= steps; s++) {
+          double t = (double)s / (double)steps;
+          fcv_draw_disk(
+            *width,
+            *height,
+            4,
+            green,
+            border_thickness,
+            xs[e] + t * dx,
+            ys[e] + t * dy,
+            result
+          );
+        }
+      }
+
       for (int f = 0; f < 3; f++) {
         fcv_draw_disk(
           *width,
