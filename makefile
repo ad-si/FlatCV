@@ -47,7 +47,7 @@ test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 
 	@if [ ! -d tests/qr_codes_difficulty ] \
 		|| [ -z "$$(ls -A tests/qr_codes_difficulty 2>/dev/null)" ]; then \
-		echo "Generating difficulty-tiered QR test images (one-time, pyzxing-validated)..."; \
+		echo "Regenerating difficulty corpus from manifest..."; \
 		uv run tests/generate_qr_test_images.py --difficulty --per-level 30 --seed 42; \
 	fi
 

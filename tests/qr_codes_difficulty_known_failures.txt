@@ -1,6 +1,6 @@
 # Images in tests/qr_codes_difficulty/ that flatcv currently fails to decode.
-# pyzxing has already validated these are decodable, so each line here is
-# a bug or missing capability in flatcv's QR pipeline that we want to fix.
+# Each line is a bug or missing capability in flatcv's QR pipeline that we
+# want to fix.
 #
 # Format: one path per line, relative to tests/qr_codes_difficulty/.
 # Lines starting with `#` and blank lines are ignored.
