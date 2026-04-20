@@ -262,6 +262,154 @@ static uint8_t *binarize_sauvola(uint8_t const *gray, int w, int h) {
   return bin;
 }
 
+/* ---- Hybrid binarization (zxing-cpp port) ----
+   Port of zxing-cpp's HybridBinarizer (core/src/HybridBinarizer.cpp, NEW
+   algorithm). Works in 8x8 blocks and computes a per-block threshold of
+   (min+max)/2 only when the dynamic range exceeds 24; low-contrast blocks
+   are marked "unknown" and inherit their threshold from a 5x5 smoothing
+   over the *known* neighbours, followed by raster flood-fill of any
+   surviving zeros. This is substantially more robust than binarize_adaptive
+   on low-contrast pastel palettes: flatcv's adaptive falls back to the
+   global Otsu threshold whenever local std<24, which misclassifies entire
+   interior regions; zxing's scheme instead propagates an edge-of-QR
+   threshold inward.
+   Output: 0 = dark, 255 = light. Returns NULL if image smaller than the
+   5x5 window (40 px) — caller should fall back to global Otsu. */
+#define HB_BLOCK_SIZE 8
+#define HB_WINDOW_BLOCKS 5
+#define HB_WINDOW_SIZE (HB_BLOCK_SIZE * HB_WINDOW_BLOCKS)
+#define HB_MIN_DYNAMIC_RANGE 24
+
+static uint8_t *binarize_hybrid(uint8_t const *gray, int w, int h) {
+  if (w < HB_WINDOW_SIZE || h < HB_WINDOW_SIZE) {
+    return NULL;
+  }
+  int sub_w = (w + HB_BLOCK_SIZE - 1) / HB_BLOCK_SIZE;
+  int sub_h = (h + HB_BLOCK_SIZE - 1) / HB_BLOCK_SIZE;
+  size_t sub_n = (size_t)sub_w * (size_t)sub_h;
+  uint8_t *raw = malloc(sub_n);
+  uint8_t *smoothed = malloc(sub_n);
+  uint8_t *bin = malloc((size_t)w * (size_t)h);
+  if (!raw || !smoothed || !bin) {
+    free(raw);
+    free(smoothed);
+    free(bin);
+    return NULL;
+  }
+
+  /* Per-block threshold: (max+min)/2 if range exceeds min_dynamic_range,
+     else 0 (unknown — filled in by smoothing). Last row/col of blocks is
+     clamped so the 8x8 window stays fully inside the image. */
+  for (int by = 0; by < sub_h; by++) {
+    int y0 = by * HB_BLOCK_SIZE;
+    if (y0 > h - HB_BLOCK_SIZE) {
+      y0 = h - HB_BLOCK_SIZE;
+    }
+    for (int bx = 0; bx < sub_w; bx++) {
+      int x0 = bx * HB_BLOCK_SIZE;
+      if (x0 > w - HB_BLOCK_SIZE) {
+        x0 = w - HB_BLOCK_SIZE;
+      }
+      uint8_t mn = 255, mx = 0;
+      for (int yy = 0; yy < HB_BLOCK_SIZE; yy++) {
+        uint8_t const *row = gray + (size_t)(y0 + yy) * (size_t)w + x0;
+        for (int xx = 0; xx < HB_BLOCK_SIZE; xx++) {
+          uint8_t v = row[xx];
+          if (v < mn) {
+            mn = v;
+          }
+          if (v > mx) {
+            mx = v;
+          }
+        }
+      }
+      raw[(size_t)by * sub_w + bx] =
+        (mx - mn > HB_MIN_DYNAMIC_RANGE) ? (uint8_t)(((int)mx + mn) / 2) : 0;
+    }
+  }
+
+  /* 5x5 gaussian-like smoothing over non-zero thresholds (center counted
+     twice). Low-contrast blocks with no contrasty neighbour remain 0. */
+  const int R = HB_WINDOW_BLOCKS / 2;
+  for (int by = 0; by < sub_h; by++) {
+    for (int bx = 0; bx < sub_w; bx++) {
+      int left = bx;
+      if (left < R) {
+        left = R;
+      }
+      else if (left > sub_w - R - 1) {
+        left = sub_w - R - 1;
+      }
+      int top = by;
+      if (top < R) {
+        top = R;
+      }
+      else if (top > sub_h - R - 1) {
+        top = sub_h - R - 1;
+      }
+      int center = raw[(size_t)by * sub_w + bx];
+      int sum = center * 2;
+      int n = (center > 0) ? 2 : 0;
+      for (int dy = -R; dy <= R; dy++) {
+        for (int dx = -R; dx <= R; dx++) {
+          int t = raw[(size_t)(top + dy) * sub_w + (left + dx)];
+          sum += t;
+          if (t > 0) {
+            n++;
+          }
+        }
+      }
+      smoothed[(size_t)by * sub_w + bx] = (n > 0) ? (uint8_t)(sum / n) : 0;
+    }
+  }
+  free(raw);
+
+  /* Raster flood-fill of any remaining zero-threshold blocks. Propagates
+     the nearest-preceding non-zero threshold forward; runs of trailing
+     zeros inherit from the last non-zero value seen. */
+  int last = -1;
+  for (size_t i = 0; i < sub_n; i++) {
+    if (smoothed[i]) {
+      if ((int)i != last + 1) {
+        uint8_t fill = smoothed[i];
+        for (int j = last + 1; j < (int)i; j++) {
+          smoothed[j] = fill;
+        }
+      }
+      last = (int)i;
+    }
+  }
+  if (last < (int)sub_n - 1) {
+    uint8_t fill = (last >= 0) ? smoothed[last] : 128;
+    for (int j = last + 1; j < (int)sub_n; j++) {
+      smoothed[j] = fill;
+    }
+  }
+
+  /* Apply per-block threshold to every pixel. Pixels in the rightmost/
+     bottom partial block simply use that block's threshold — block-index
+     lookup via integer division is fine even when (w % BLOCK_SIZE) != 0
+     because sub_w/sub_h were computed with ceil(). */
+  for (int y = 0; y < h; y++) {
+    int by = y / HB_BLOCK_SIZE;
+    if (by >= sub_h) {
+      by = sub_h - 1;
+    }
+    uint8_t const *row = gray + (size_t)y * w;
+    uint8_t *out = bin + (size_t)y * w;
+    for (int x = 0; x < w; x++) {
+      int bx = x / HB_BLOCK_SIZE;
+      if (bx >= sub_w) {
+        bx = sub_w - 1;
+      }
+      uint8_t t = smoothed[(size_t)by * sub_w + bx];
+      out[x] = (row[x] <= t) ? 0 : 255;
+    }
+  }
+  free(smoothed);
+  return bin;
+}
+
 /* ---- Unsharp mask on grayscale ----
    3-tap separable Gaussian blur, then sharp = clamp(2*g - blurred). The
    small kernel matches level_4/5 blur radii (0.8-1.8 px). Returns a freshly
@@ -382,6 +530,38 @@ static uint8_t *upsample_nx_bilinear(uint8_t const *gray, int w, int h, int n) {
         v = 255.0;
       }
       out[y * w2 + x] = (uint8_t)(v + 0.5);
+    }
+  }
+  return out;
+}
+
+/* ---- 2x grayscale downsample (box average) ----
+   Each output pixel is the mean of a 2x2 input block. Mirrors zxing-cpp's
+   LumImagePyramid step. Anti-aliased QR-edge pixels get averaged with
+   interior pixels, producing new intermediate luma values within an 8x8
+   block that raise its dynamic range above the hybrid binariser's
+   MIN_DYNAMIC_RANGE=24 threshold. Essential for pastel palettes where
+   module-vs-background contrast at full resolution is below that gate
+   everywhere in the image. */
+static uint8_t *downsample_2x_box(uint8_t const *gray, int w, int h) {
+  if (w < 2 || h < 2) {
+    return NULL;
+  }
+  int nw = w / 2;
+  int nh = h / 2;
+  uint8_t *out = malloc((size_t)nw * (size_t)nh);
+  if (!out) {
+    return NULL;
+  }
+  for (int y = 0; y < nh; y++) {
+    int sy = y * 2;
+    uint8_t const *r0 = gray + (size_t)sy * w;
+    uint8_t const *r1 = gray + (size_t)(sy + 1) * w;
+    uint8_t *dst = out + (size_t)y * nw;
+    for (int x = 0; x < nw; x++) {
+      int sx = x * 2;
+      int sum = r0[sx] + r0[sx + 1] + r1[sx] + r1[sx + 1];
+      dst[x] = (uint8_t)(sum >> 2);
     }
   }
   return out;
@@ -3425,7 +3605,30 @@ static void run_all_attempts(
     free(bin);
   }
 
-  /* Attempt 2: adaptive on original. */
+  /* Attempt 2: zxing-cpp hybrid on original. Sparse-threshold per 8x8 block
+     plus 5x5 neighbour smoothing — low-contrast interior blocks inherit a
+     threshold from contrasty edge blocks instead of falling back to a
+     whole-image Otsu. Primary recovery path for faded / pastel palettes. */
+  if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5)) {
+    bin = binarize_hybrid(gray_pixels, w, h);
+    if (bin) {
+      try_pipeline(
+        bin,
+        gray_pixels,
+        w,
+        h,
+        best_decoded,
+        best_fmt_dist,
+        best_rs_cost,
+        best_corners,
+        best_finders,
+        best_module_size
+      );
+      free(bin);
+    }
+  }
+
+  /* Attempt 3: adaptive on original. */
   if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5)) {
     bin = binarize_adaptive(gray_pixels, w, h);
     if (bin) {
@@ -3680,6 +3883,110 @@ static void run_all_attempts(
         }
       }
       free(med);
+    }
+  }
+
+  /* Attempt 7: 2x box-average downsample + Otsu, then hybrid. Mirrors
+     zxing-cpp's LumImagePyramid: at full resolution some images (notably
+     level_13's pastel coloured-inverted QR on a checkered bg) have every
+     8x8 block's dynamic range below MIN_DYNAMIC_RANGE=24, so hybrid's
+     sparse-threshold grid is empty and flood-fills to zero. Downsampling
+     by 2 averages anti-aliased QR-edge pixels into new intermediate luma
+     values, raising enough blocks above the threshold for hybrid to seed
+     from. Winning coordinates are scaled back by 2x. Gated on the same
+     "no confident decode yet" predicate so already-decoded images skip
+     the work. */
+  if (!small_image &&
+      !(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5)) {
+    uint8_t *down = downsample_2x_box(gray_pixels, w, h);
+    if (down) {
+      int dw = w / 2;
+      int dh = h / 2;
+      char *best_decoded_dn = NULL;
+      Corners best_corners_dn = {0};
+      Point2D best_finders_dn[3] = {{0, 0}, {0, 0}, {0, 0}};
+      double best_module_size_dn = 0;
+      int best_fmt_dist_dn = 16;
+      int best_rs_cost_dn = 100000;
+
+      bin = binarize_global_otsu(down, dw, dh);
+      if (bin) {
+        try_pipeline(
+          bin,
+          down,
+          dw,
+          dh,
+          &best_decoded_dn,
+          &best_fmt_dist_dn,
+          &best_rs_cost_dn,
+          &best_corners_dn,
+          best_finders_dn,
+          &best_module_size_dn
+        );
+        free(bin);
+      }
+      if (!(best_decoded_dn && best_fmt_dist_dn <= 1)) {
+        bin = binarize_hybrid(down, dw, dh);
+        if (bin) {
+          try_pipeline(
+            bin,
+            down,
+            dw,
+            dh,
+            &best_decoded_dn,
+            &best_fmt_dist_dn,
+            &best_rs_cost_dn,
+            &best_corners_dn,
+            best_finders_dn,
+            &best_module_size_dn
+          );
+          free(bin);
+        }
+      }
+      free(down);
+
+      /* Promote the downsampled result with the same ranking logic the
+         upsample attempt uses; scale spatial outputs back up by 2. */
+      if (best_decoded_dn) {
+        int replace = 0;
+        int prev_len = (*best_decoded) ? (int)strlen(*best_decoded) : -1;
+        int new_len = (int)strlen(best_decoded_dn);
+        if (!*best_decoded) {
+          replace = 1;
+        }
+        else if (best_fmt_dist_dn < *best_fmt_dist) {
+          replace = 1;
+        }
+        else if (best_fmt_dist_dn == *best_fmt_dist && new_len > prev_len) {
+          replace = 1;
+        }
+        else if (best_fmt_dist_dn == *best_fmt_dist && new_len == prev_len &&
+                 best_rs_cost_dn < *best_rs_cost) {
+          replace = 1;
+        }
+        if (replace) {
+          free(*best_decoded);
+          *best_decoded = best_decoded_dn;
+          *best_fmt_dist = best_fmt_dist_dn;
+          *best_rs_cost = best_rs_cost_dn;
+          best_corners->tl_x = best_corners_dn.tl_x * 2.0;
+          best_corners->tl_y = best_corners_dn.tl_y * 2.0;
+          best_corners->tr_x = best_corners_dn.tr_x * 2.0;
+          best_corners->tr_y = best_corners_dn.tr_y * 2.0;
+          best_corners->br_x = best_corners_dn.br_x * 2.0;
+          best_corners->br_y = best_corners_dn.br_y * 2.0;
+          best_corners->bl_x = best_corners_dn.bl_x * 2.0;
+          best_corners->bl_y = best_corners_dn.bl_y * 2.0;
+          for (int i = 0; i < 3; i++) {
+            best_finders[i].x = best_finders_dn[i].x * 2.0;
+            best_finders[i].y = best_finders_dn[i].y * 2.0;
+          }
+          *best_module_size = best_module_size_dn * 2.0;
+        }
+        else {
+          free(best_decoded_dn);
+        }
+      }
     }
   }
 }

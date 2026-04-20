@@ -13,13 +13,3 @@
 # flag it as an unexpectedly-fixed entry so this file stays in sync.
 
 # --- Positive misses -------------------------------------------------------
-
-# level_13: tiny coloured-inverted QR on a checkered background. The grayscale
-# collapse of the pastel palette leaves the QR nearly invisible and the
-# checker fires false finder ratios; neither polarity retry fixes it.
-level_13/0023_IffpU1T.png
-
-# level_14: compounded real-world stressors (perspective + blur + noise +
-# JPEG + uneven lighting) that push past flatcv's current margin even
-# though individual stressors are handled.
-level_14/0023_Tf3i7.png
