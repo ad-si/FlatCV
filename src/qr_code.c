@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -169,6 +170,270 @@ static uint8_t *binarize_adaptive(uint8_t const *gray, int w, int h) {
   free(ii_sum);
   free(ii_sq);
   return bin;
+}
+
+/* ---- Sauvola binarization ----
+   T = mean * (1 + k * (std / R - 1)), k=0.34, R=128. Scales the threshold
+   by local std, which catches faded/low-contrast modules that the fixed
+   min_std fallback in binarize_adaptive misclassifies. Block deliberately
+   smaller than binarize_adaptive's so it stays responsive when modules are
+   only 2-3 px wide. */
+static uint8_t *binarize_sauvola(uint8_t const *gray, int w, int h) {
+  if (w <= 0 || h <= 0) {
+    return NULL;
+  }
+  size_t n = (size_t)w * (size_t)h;
+  uint8_t *bin = malloc(n);
+  if (!bin) {
+    return NULL;
+  }
+  size_t iw = (size_t)w + 1;
+  uint64_t *ii_sum = calloc(iw * (size_t)(h + 1), sizeof(uint64_t));
+  uint64_t *ii_sq = calloc(iw * (size_t)(h + 1), sizeof(uint64_t));
+  if (!ii_sum || !ii_sq) {
+    free(bin);
+    free(ii_sum);
+    free(ii_sq);
+    return NULL;
+  }
+  for (int y = 0; y < h; y++) {
+    uint64_t row_sum = 0;
+    uint64_t row_sq = 0;
+    for (int x = 0; x < w; x++) {
+      uint8_t v = gray[y * w + x];
+      row_sum += v;
+      row_sq += (uint64_t)v * v;
+      size_t idx = (size_t)(y + 1) * iw + (size_t)(x + 1);
+      ii_sum[idx] = ii_sum[idx - iw] + row_sum;
+      ii_sq[idx] = ii_sq[idx - iw] + row_sq;
+    }
+  }
+  int block = (w < h ? w : h) / 12;
+  if (block < 11) {
+    block = 11;
+  }
+  if (block > 81) {
+    block = 81;
+  }
+  if ((block & 1) == 0) {
+    block++;
+  }
+  int half = block / 2;
+  const double k = 0.34;
+  const double R = 128.0;
+  for (int y = 0; y < h; y++) {
+    int y0 = y - half;
+    if (y0 < 0) {
+      y0 = 0;
+    }
+    int y1 = y + half;
+    if (y1 >= h) {
+      y1 = h - 1;
+    }
+    for (int x = 0; x < w; x++) {
+      int x0 = x - half;
+      if (x0 < 0) {
+        x0 = 0;
+      }
+      int x1 = x + half;
+      if (x1 >= w) {
+        x1 = w - 1;
+      }
+      double count = (double)((y1 - y0 + 1) * (x1 - x0 + 1));
+      size_t a = (size_t)(y1 + 1) * iw + (size_t)(x1 + 1);
+      size_t b = (size_t)y0 * iw + (size_t)(x1 + 1);
+      size_t c = (size_t)(y1 + 1) * iw + (size_t)x0;
+      size_t d = (size_t)y0 * iw + (size_t)x0;
+      double sum = (double)(ii_sum[a] - ii_sum[b] - ii_sum[c] + ii_sum[d]);
+      double sqsum = (double)(ii_sq[a] - ii_sq[b] - ii_sq[c] + ii_sq[d]);
+      double mean = sum / count;
+      double var = sqsum / count - mean * mean;
+      if (var < 0.0) {
+        var = 0.0;
+      }
+      double std = sqrt(var);
+      double thresh = mean * (1.0 + k * (std / R - 1.0));
+      uint8_t gv = gray[y * w + x];
+      bin[y * w + x] = ((double)gv < thresh) ? 0 : 255;
+    }
+  }
+  free(ii_sum);
+  free(ii_sq);
+  return bin;
+}
+
+/* ---- Unsharp mask on grayscale ----
+   3-tap separable Gaussian blur, then sharp = clamp(2*g - blurred). The
+   small kernel matches level_4/5 blur radii (0.8-1.8 px). Returns a freshly
+   allocated grayscale buffer. */
+static uint8_t *unsharp_mask_gray(uint8_t const *gray, int w, int h) {
+  if (w <= 2 || h <= 2) {
+    return NULL;
+  }
+  size_t n = (size_t)w * (size_t)h;
+  uint8_t *blurred = malloc(n);
+  uint8_t *tmp = malloc(n);
+  uint8_t *sharp = malloc(n);
+  if (!blurred || !tmp || !sharp) {
+    free(blurred);
+    free(tmp);
+    free(sharp);
+    return NULL;
+  }
+  /* Horizontal pass [1 2 1] / 4 into tmp. */
+  for (int y = 0; y < h; y++) {
+    uint8_t const *row = gray + (size_t)y * w;
+    uint8_t *out_row = tmp + (size_t)y * w;
+    out_row[0] = row[0];
+    out_row[w - 1] = row[w - 1];
+    for (int x = 1; x < w - 1; x++) {
+      int v = row[x - 1] + 2 * row[x] + row[x + 1];
+      out_row[x] = (uint8_t)(v >> 2);
+    }
+  }
+  /* Vertical pass [1 2 1] / 4 from tmp into blurred. */
+  for (int x = 0; x < w; x++) {
+    blurred[x] = tmp[x];
+    blurred[(size_t)(h - 1) * w + x] = tmp[(size_t)(h - 1) * w + x];
+  }
+  for (int y = 1; y < h - 1; y++) {
+    for (int x = 0; x < w; x++) {
+      int v = tmp[(size_t)(y - 1) * w + x] + 2 * tmp[(size_t)y * w + x] +
+              tmp[(size_t)(y + 1) * w + x];
+      blurred[(size_t)y * w + x] = (uint8_t)(v >> 2);
+    }
+  }
+  /* sharp = clamp(2*gray - blurred). */
+  for (size_t i = 0; i < n; i++) {
+    int v = 2 * (int)gray[i] - (int)blurred[i];
+    if (v < 0) {
+      v = 0;
+    }
+    if (v > 255) {
+      v = 255;
+    }
+    sharp[i] = (uint8_t)v;
+  }
+  free(blurred);
+  free(tmp);
+  return sharp;
+}
+
+/* ---- N-x bilinear upsample on grayscale ----
+   Returns a freshly allocated (N*w x N*h) buffer. Larger N gives bigger
+   effective module sizes (helping finder ratio checks and subpixel
+   refinement) at quadratic memory + time cost. */
+static uint8_t *upsample_nx_bilinear(uint8_t const *gray, int w, int h, int n) {
+  if (w <= 0 || h <= 0 || n < 2) {
+    return NULL;
+  }
+  int w2 = w * n;
+  int h2 = h * n;
+  double inv = 1.0 / (double)n;
+  uint8_t *out = malloc((size_t)w2 * (size_t)h2);
+  if (!out) {
+    return NULL;
+  }
+  for (int y = 0; y < h2; y++) {
+    double sy = ((double)y + 0.5) * inv - 0.5;
+    int y0 = (int)floor(sy);
+    int y1 = y0 + 1;
+    double fy = sy - y0;
+    if (y0 < 0) {
+      y0 = 0;
+    }
+    if (y1 < 0) {
+      y1 = 0;
+    }
+    if (y0 > h - 1) {
+      y0 = h - 1;
+    }
+    if (y1 > h - 1) {
+      y1 = h - 1;
+    }
+    for (int x = 0; x < w2; x++) {
+      double sx = ((double)x + 0.5) * inv - 0.5;
+      int x0 = (int)floor(sx);
+      int x1 = x0 + 1;
+      double fx = sx - x0;
+      if (x0 < 0) {
+        x0 = 0;
+      }
+      if (x1 < 0) {
+        x1 = 0;
+      }
+      if (x0 > w - 1) {
+        x0 = w - 1;
+      }
+      if (x1 > w - 1) {
+        x1 = w - 1;
+      }
+      double v00 = gray[y0 * w + x0];
+      double v01 = gray[y0 * w + x1];
+      double v10 = gray[y1 * w + x0];
+      double v11 = gray[y1 * w + x1];
+      double v0 = v00 * (1.0 - fx) + v01 * fx;
+      double v1 = v10 * (1.0 - fx) + v11 * fx;
+      double v = v0 * (1.0 - fy) + v1 * fy;
+      if (v < 0.0) {
+        v = 0.0;
+      }
+      if (v > 255.0) {
+        v = 255.0;
+      }
+      out[y * w2 + x] = (uint8_t)(v + 0.5);
+    }
+  }
+  return out;
+}
+
+/* ---- 3x3 grayscale median filter ----
+   Removes salt-and-pepper noise without softening edges (unlike Gaussian
+   blur). Targets level_5's heavy random noise (sigma 4-9) that injects
+   isolated black/white pixels into otherwise-uniform module interiors. */
+static uint8_t *median_filter_3x3(uint8_t const *gray, int w, int h) {
+  if (w <= 2 || h <= 2) {
+    return NULL;
+  }
+  uint8_t *out = malloc((size_t)w * h);
+  if (!out) {
+    return NULL;
+  }
+  /* Copy the 1-pixel border unchanged. */
+  for (int x = 0; x < w; x++) {
+    out[x] = gray[x];
+    out[(size_t)(h - 1) * w + x] = gray[(size_t)(h - 1) * w + x];
+  }
+  for (int y = 1; y < h - 1; y++) {
+    out[y * w] = gray[y * w];
+    out[y * w + (w - 1)] = gray[y * w + (w - 1)];
+  }
+  for (int y = 1; y < h - 1; y++) {
+    for (int x = 1; x < w - 1; x++) {
+      uint8_t v[9];
+      v[0] = gray[(y - 1) * w + (x - 1)];
+      v[1] = gray[(y - 1) * w + x];
+      v[2] = gray[(y - 1) * w + (x + 1)];
+      v[3] = gray[y * w + (x - 1)];
+      v[4] = gray[y * w + x];
+      v[5] = gray[y * w + (x + 1)];
+      v[6] = gray[(y + 1) * w + (x - 1)];
+      v[7] = gray[(y + 1) * w + x];
+      v[8] = gray[(y + 1) * w + (x + 1)];
+      /* Insertion sort to find the median (5th element of 9). */
+      for (int i = 1; i < 9; i++) {
+        uint8_t tmp = v[i];
+        int j = i - 1;
+        while (j >= 0 && v[j] > tmp) {
+          v[j + 1] = v[j];
+          j--;
+        }
+        v[j + 1] = tmp;
+      }
+      out[y * w + x] = v[4];
+    }
+  }
+  return out;
 }
 
 /* ---- Pixel access ---- */
@@ -1066,12 +1331,57 @@ static int find_alignment_pattern(
    tolerate minor grid misalignment. The affine-equivalent case (no
    perspective) is expressible as a homography where the 4th point is the
    parallelogram completion, so a separate affine path isn't needed. */
-static uint8_t *sample_grid_homography(
+/* Bilinear sample of the binary image at fractional pixel (fx, fy). Returns
+   the 0..255 weighted blend of the four neighbouring pixels' dark-ness. */
+static int bilinear_dark(uint8_t const *px, int w, int h, float fx, float fy) {
+  int x0 = (int)floorf(fx);
+  int y0 = (int)floorf(fy);
+  int x1 = x0 + 1;
+  int y1 = y0 + 1;
+  float dx = fx - x0;
+  float dy = fy - y0;
+  if (x0 < 0) {
+    x0 = 0;
+  }
+  if (y0 < 0) {
+    y0 = 0;
+  }
+  if (x1 < 0) {
+    x1 = 0;
+  }
+  if (y1 < 0) {
+    y1 = 0;
+  }
+  if (x0 >= w) {
+    x0 = w - 1;
+  }
+  if (y0 >= h) {
+    y0 = h - 1;
+  }
+  if (x1 >= w) {
+    x1 = w - 1;
+  }
+  if (y1 >= h) {
+    y1 = h - 1;
+  }
+  int v00 = px[y0 * w + x0] < 128 ? 1 : 0;
+  int v01 = px[y0 * w + x1] < 128 ? 1 : 0;
+  int v10 = px[y1 * w + x0] < 128 ? 1 : 0;
+  int v11 = px[y1 * w + x1] < 128 ? 1 : 0;
+  float v0 = v00 * (1.0f - dx) + v01 * dx;
+  float v1 = v10 * (1.0f - dx) + v11 * dx;
+  return (v0 * (1.0f - dy) + v1 * dy) >= 0.5f;
+}
+
+static uint8_t *sample_grid_homography_offset_mode(
   uint8_t const *px,
   int w,
   int h,
   const double H[9],
-  int qr_size
+  int qr_size,
+  double off_x,
+  double off_y,
+  int use_bilinear
 ) {
   uint8_t *grid = calloc(qr_size * qr_size, 1);
   if (!grid) {
@@ -1089,10 +1399,23 @@ static uint8_t *sample_grid_homography(
       int votes = 0;
       for (int o = 0; o < 5; o++) {
         float fx, fy;
-        apply_homography(H, c + offs[o][0], r + offs[o][1], &fx, &fy);
-        int ix = (int)(fx + 0.5f);
-        int iy = (int)(fy + 0.5f);
-        if (is_dark(px, w, h, ix, iy)) {
+        apply_homography(
+          H,
+          c + offs[o][0] + off_x,
+          r + offs[o][1] + off_y,
+          &fx,
+          &fy
+        );
+        int dark;
+        if (use_bilinear) {
+          dark = bilinear_dark(px, w, h, fx, fy);
+        }
+        else {
+          int ix = (int)(fx + 0.5f);
+          int iy = (int)(fy + 0.5f);
+          dark = is_dark(px, w, h, ix, iy);
+        }
+        if (dark) {
           votes++;
         }
       }
@@ -1780,12 +2103,16 @@ static int rs_decode_block(uint8_t *msg, int nk, int nroots) {
    buffers, runs RS decode on each block, and writes the corrected data
    codewords to `out`. Returns the total number of data codewords, or 0 on
    structural failure. Individual block RS failures are tolerated: the
-   (uncorrected) bytes are still written so the payload decoder can try. */
+   (uncorrected) bytes are still written so the payload decoder can try.
+   If out_rs_cost is non-NULL, writes the total RS error-correction cost:
+   sum of bits corrected across all blocks, plus a heavy penalty per
+   uncorrectable block. Lower values mean a more confident decode. */
 static int deinterleave(
   uint8_t const *raw,
   int raw_len,
   const ECInfo *info,
-  uint8_t *out
+  uint8_t *out,
+  int *out_rs_cost
 ) {
   int total_blocks = info->g1_blocks + info->g2_blocks;
   if (total_blocks == 0 || total_blocks > 100) {
@@ -1845,8 +2172,21 @@ static int deinterleave(
     }
   }
 
+  int rs_cost = 0;
   for (int b = 0; b < total_blocks; b++) {
-    rs_decode_block(blocks[b], dlen[b], ec_cw);
+    int corr = rs_decode_block(blocks[b], dlen[b], ec_cw);
+    if (corr < 0) {
+      /* Uncorrectable block: every EC symbol effectively spent without
+         success. Penalise heavily so this decode loses ties to one whose
+         blocks all decoded cleanly. */
+      rs_cost += ec_cw * 8 + 1000;
+    }
+    else {
+      rs_cost += corr;
+    }
+  }
+  if (out_rs_cost) {
+    *out_rs_cost = rs_cost;
   }
 
   int out_pos = 0;
@@ -1890,7 +2230,30 @@ static char *decode_payload(uint8_t const *data, int len, int ver) {
   }
 
   int count = read_bits(data, len, &pos, cc_bits);
-  if (count <= 0 || count > 4296) {
+  /* Reject impossible counts: must be positive and must fit in the data bits
+     remaining after the mode + count header. A bit-flip in the high bit of
+     the count field can otherwise produce massively-inflated counts that
+     consume padding bytes as fake content (numeric mode is especially prone
+     — corrupted padding bytes decode as long runs of '0' digits). */
+  int avail_bits = len * 8 - 4 - cc_bits;
+  if (avail_bits < 0) {
+    free(NULL);
+    return NULL;
+  }
+  int max_count;
+  if (mode == 1) { /* Numeric: 10 bits per 3 digits */
+    max_count = (avail_bits * 3) / 10;
+  }
+  else if (mode == 2) { /* Alphanumeric: 11 bits per 2 chars */
+    max_count = (avail_bits * 2) / 11;
+  }
+  else if (mode == 4) { /* Byte: 8 bits per char */
+    max_count = avail_bits / 8;
+  }
+  else { /* Kanji: 13 bits per char */
+    max_count = avail_bits / 13;
+  }
+  if (count <= 0 || count > max_count) {
     return NULL;
   }
 
@@ -1946,9 +2309,16 @@ static char *decode_payload(uint8_t const *data, int len, int ver) {
 }
 
 /* Decode a sampled grid into a payload string. Returns NULL on failure.
-   Writes the format-code Hamming distance to *out_fmt_dist if non-NULL. */
-static char *
-decode_grid(uint8_t *grid, int qr_size, int version, int *out_fmt_dist) {
+   Writes the format-code Hamming distance to *out_fmt_dist if non-NULL.
+   Writes the Reed-Solomon correction cost (lower = more confident) to
+   *out_rs_cost if non-NULL. */
+static char *decode_grid(
+  uint8_t *grid,
+  int qr_size,
+  int version,
+  int *out_fmt_dist,
+  int *out_rs_cost
+) {
   int ec_level, mask_pattern;
   int fmt_dist = 16;
   if (decode_format(grid, qr_size, &ec_level, &mask_pattern, &fmt_dist) < 0) {
@@ -1956,6 +2326,9 @@ decode_grid(uint8_t *grid, int qr_size, int version, int *out_fmt_dist) {
   }
   if (out_fmt_dist) {
     *out_fmt_dist = fmt_dist;
+  }
+  if (out_rs_cost) {
+    *out_rs_cost = 100000;
   }
   int max_bits = qr_size * qr_size;
   uint8_t *data_bits = malloc(max_bits);
@@ -1976,6 +2349,7 @@ decode_grid(uint8_t *grid, int qr_size, int version, int *out_fmt_dist) {
   int data_cw_count = nraw;
   uint8_t *data_bytes = raw_bytes;
   uint8_t *deint_buf = NULL;
+  int rs_cost = 100000;
   if (version >= 1 && version <= 40 && ec_level >= 0 && ec_level <= 3) {
     const ECInfo *info = &EC_TABLE[version - 1][ec_level];
     int total_data =
@@ -1983,7 +2357,8 @@ decode_grid(uint8_t *grid, int qr_size, int version, int *out_fmt_dist) {
     if (total_data > 0 && total_data <= nraw) {
       deint_buf = malloc(total_data + 1);
       if (deint_buf) {
-        data_cw_count = deinterleave(raw_bytes, nraw, info, deint_buf);
+        data_cw_count =
+          deinterleave(raw_bytes, nraw, info, deint_buf, &rs_cost);
         data_bytes = deint_buf;
       }
       else {
@@ -2004,7 +2379,189 @@ decode_grid(uint8_t *grid, int qr_size, int version, int *out_fmt_dist) {
       }
     }
   }
+  if (decoded && out_rs_cost) {
+    *out_rs_cost = rs_cost;
+  }
   return decoded;
+}
+
+/* ---- Decode the grid under a homography, then perturb the sample offset
+   to hunt for a stronger decode ----
+   The 5-point voting in sample_grid_homography_offset_mode is robust to small
+   grid drift inside a single module, but if the WHOLE sampling grid is shifted
+   by a fraction of a module (typical when finder centers carry sub-module error
+   under blur or perspective), entire rows or columns get misread the same
+   way. A 1-bit error in the byte-mode count field is the most damaging
+   failure mode — it can truncate an 11-character decode to 3 characters
+   while still passing the format BCH cleanly. Re-sampling at small (dx, dy)
+   shifts in module space and keeping the best decode catches these
+   off-by-fraction grid misalignments. */
+static char *decode_with_perturbation(
+  uint8_t const *pixels,
+  int width,
+  int height,
+  const double H[9],
+  int qr_size,
+  int version,
+  int *out_fmt_dist,
+  int *out_rs_cost
+) {
+  /* Sample all 9 offsets (canonical + 8 perturbations) and collect the
+     decodes with their format-distance scores. We then apply two acceptance
+     paths: (a) if canonical succeeds, allow a strictly-longer perturbation
+     that has the canonical result as a prefix to replace it (the byte-mode
+     count-truncation recovery — "c3Q" -> "c3QrgLROiE5"). (b) if canonical
+     fails, only accept a perturbation result that two or more perturbations
+     agree on (a consensus decode), because lone perturbation decodes from
+     triples whose canonical homography fails are almost always wrong same-
+     length samples that other triples would decode correctly. */
+#define PERT_N 10
+  /* Sample plan: 8 NN perturbations + 2 canonical samples (NN + bilinear).
+     Bilinear is only used at the canonical (0,0) offset — its purpose is
+     specifically to recover from the byte-mode count-truncation pattern
+     where NN nearest-pixel rounding clips the high bit of the count field.
+     Off-canonical bilinear samples introduce too many same-length wrong
+     decodes that distort the consensus vote in path (b). */
+  static const double offs[PERT_N][2] = {
+    {0.00, 0.00},
+    {0.00, 0.00}, /* p=0 NN canonical, p=1 bilinear canonical */
+    {0.30, 0.00},
+    {-0.30, 0.00},
+    {0.00, 0.30},
+    {0.00, -0.30},
+    {0.30, 0.30},
+    {-0.30, 0.30},
+    {0.30, -0.30},
+    {-0.30, -0.30},
+  };
+  char *decodes[PERT_N] = {0};
+  int fds[PERT_N];
+  int rs_costs[PERT_N];
+  size_t lens[PERT_N] = {0};
+  for (int i = 0; i < PERT_N; i++) {
+    fds[i] = 16;
+    rs_costs[i] = 100000;
+  }
+  for (int p = 0; p < PERT_N; p++) {
+    int use_bilinear = (p == 1);
+    uint8_t *g = sample_grid_homography_offset_mode(
+      pixels,
+      width,
+      height,
+      H,
+      qr_size,
+      offs[p][0],
+      offs[p][1],
+      use_bilinear
+    );
+    if (!g) {
+      continue;
+    }
+    char *d = decode_grid(g, qr_size, version, &fds[p], &rs_costs[p]);
+    free(g);
+    if (d) {
+      decodes[p] = d;
+      lens[p] = strlen(d);
+    }
+    /* Early exit if the NN canonical (p=0) is already a long, perfect
+       decode with no RS corrections — nothing can credibly improve on it. */
+    if (p == 0 && d && fds[0] == 0 && lens[0] >= 8 && rs_costs[0] == 0) {
+      break;
+    }
+  }
+
+  char *best = NULL;
+  int best_fd = 16;
+  int best_rs_out = 100000;
+
+  if (decodes[0]) {
+    /* Path (a): canonical succeeded. Replace either with (i) a strictly
+       longer decode that has the canonical as a prefix (the byte-mode
+       count-truncation recovery), or (ii) a same-length decode whose
+       Reed-Solomon correction cost is strictly lower (RS needed fewer
+       fixes, which is a strong signal that the perturbation hit cleaner
+       data bits even when format BCH ties at fmt_dist=0). */
+    best = decodes[0];
+    best_fd = fds[0];
+    int best_rs = rs_costs[0];
+    decodes[0] = NULL;
+    for (int p = 1; p < PERT_N; p++) {
+      if (!decodes[p]) {
+        continue;
+      }
+      int replace = 0;
+      if (lens[p] > strlen(best) &&
+          strncmp(decodes[p], best, strlen(best)) == 0) {
+        replace = 1;
+      }
+      else if (lens[p] == strlen(best) && rs_costs[p] < best_rs) {
+        replace = 1;
+      }
+      if (replace) {
+        free(best);
+        best = decodes[p];
+        best_fd = fds[p];
+        best_rs = rs_costs[p];
+        decodes[p] = NULL;
+      }
+    }
+    best_rs_out = best_rs;
+  }
+  else {
+    /* Path (b): canonical failed. Pick the perturbation decode that the
+       most other perturbations agree on, requiring at least two
+       agreements total. Tie-break: longer string, then lower fmt_dist.
+       Without consensus, return NULL so other triples can be tried. */
+    int best_idx = -1;
+    int best_count = 0;
+    for (int i = 1; i < PERT_N; i++) {
+      if (!decodes[i]) {
+        continue;
+      }
+      int count = 0;
+      for (int j = 1; j < PERT_N; j++) {
+        if (decodes[j] && strcmp(decodes[i], decodes[j]) == 0) {
+          count++;
+        }
+      }
+      int better = 0;
+      if (count > best_count) {
+        better = 1;
+      }
+      else if (count == best_count && best_idx >= 0) {
+        if (lens[i] > lens[best_idx]) {
+          better = 1;
+        }
+        else if (lens[i] == lens[best_idx] && fds[i] < fds[best_idx]) {
+          better = 1;
+        }
+      }
+      if (better) {
+        best_count = count;
+        best_idx = i;
+      }
+    }
+    if (best_idx >= 0 && best_count >= 2) {
+      best = decodes[best_idx];
+      best_fd = fds[best_idx];
+      best_rs_out = rs_costs[best_idx];
+      decodes[best_idx] = NULL;
+    }
+  }
+
+  for (int p = 0; p < PERT_N; p++) {
+    free(decodes[p]);
+  }
+#undef PERT_N
+  if (best) {
+    if (out_fmt_dist) {
+      *out_fmt_dist = best_fd;
+    }
+    if (out_rs_cost) {
+      *out_rs_cost = best_rs_out;
+    }
+  }
+  return best;
 }
 
 /* ---- Try to decode a single QR code from a triple ---- */
@@ -2017,6 +2574,7 @@ static char *try_decode_triple(
   FinderPattern tr,
   FinderPattern bl,
   int *out_fmt_dist,
+  int *out_rs_cost,
   Corners *out_corners,
   Point2D out_finders[3],
   double *out_module_size
@@ -2043,6 +2601,7 @@ static char *try_decode_triple(
      parallelogram-BR assumption that affine sampling relies on. For v1 (no
      alignment) we fall back to the parallelogram BR. */
   int fmt_dist = 16;
+  int rs_cost = 100000;
   char *decoded = NULL;
 
   if (version >= 2) {
@@ -2082,15 +2641,22 @@ static char *try_decode_triple(
           {{tl.x, tl.y}, {tr.x, tr.y}, {found_ax, found_ay}, {bl.x, bl.y}};
         double H[9];
         if (compute_homography(src, dst, H)) {
-          uint8_t *g =
-            sample_grid_homography(pixels, width, height, H, qr_size);
-          if (g) {
-            int fd = 16;
-            decoded = decode_grid(g, qr_size, version, &fd);
-            free(g);
-            if (decoded) {
-              fmt_dist = fd;
-            }
+          int fd = 16;
+          int rc = 100000;
+          char *d = decode_with_perturbation(
+            pixels,
+            width,
+            height,
+            H,
+            qr_size,
+            version,
+            &fd,
+            &rc
+          );
+          if (d) {
+            decoded = d;
+            fmt_dist = fd;
+            rs_cost = rc;
           }
         }
       }
@@ -2111,14 +2677,22 @@ static char *try_decode_triple(
     double dst[4][2] = {{tl.x, tl.y}, {tr.x, tr.y}, {br_x, br_y}, {bl.x, bl.y}};
     double H[9];
     if (compute_homography(src, dst, H)) {
-      uint8_t *g = sample_grid_homography(pixels, width, height, H, qr_size);
-      if (g) {
-        int fd = 16;
-        decoded = decode_grid(g, qr_size, version, &fd);
-        free(g);
-        if (decoded) {
-          fmt_dist = fd;
-        }
+      int fd = 16;
+      int rc = 100000;
+      char *d = decode_with_perturbation(
+        pixels,
+        width,
+        height,
+        H,
+        qr_size,
+        version,
+        &fd,
+        &rc
+      );
+      if (d) {
+        decoded = d;
+        fmt_dist = fd;
+        rs_cost = rc;
       }
     }
   }
@@ -2128,6 +2702,9 @@ static char *try_decode_triple(
   }
   if (out_fmt_dist) {
     *out_fmt_dist = fmt_dist;
+  }
+  if (out_rs_cost) {
+    *out_rs_cost = rs_cost;
   }
 
   {
@@ -2183,6 +2760,7 @@ static void try_pipeline(
   int h,
   char **best_decoded,
   int *best_fmt_dist,
+  int *best_rs_cost,
   Corners *best_corners,
   Point2D best_finders[3],
   double *best_module_size
@@ -2201,6 +2779,7 @@ static void try_pipeline(
 
   for (int t = 0; t < n_triples; t++) {
     int fmt_dist = 16;
+    int rs_cost = 100000;
     Corners corners = {0};
     Point2D finders[3];
     double module_size = 0;
@@ -2212,14 +2791,18 @@ static void try_pipeline(
       triples[t][1],
       triples[t][2],
       &fmt_dist,
+      &rs_cost,
       &corners,
       finders,
       &module_size
     );
     if (decoded) {
-      /* Composite score: lower fmt_dist wins, tie-break on decoded length
-         (longer decodes mean a larger byte-mode count field survived, i.e.
-         the length field wasn't corrupted by a one-bit error). */
+      /* Composite score: lower fmt_dist wins, tie-break first on decoded
+         length (longer decodes mean a larger byte-mode count field
+         survived), then on Reed-Solomon cost (lower = the data block
+         decoded with fewer error corrections, which discriminates between
+         two "Mz4Y9X" candidates where one has clean RS and the other is
+         RS-uncorrectable but happens to share the same fmt_dist). */
       int dlen = (int)strlen(decoded);
       int replace = 0;
       if (fmt_dist < *best_fmt_dist) {
@@ -2230,11 +2813,15 @@ static void try_pipeline(
         if (dlen > prev_len) {
           replace = 1;
         }
+        else if (dlen == prev_len && rs_cost < *best_rs_cost) {
+          replace = 1;
+        }
       }
       if (replace) {
         free(*best_decoded);
         *best_decoded = decoded;
         *best_fmt_dist = fmt_dist;
+        *best_rs_cost = rs_cost;
         *best_corners = corners;
         for (int i = 0; i < 3; i++) {
           best_finders[i] = finders[i];
@@ -2277,40 +2864,286 @@ FCVQRCodeResult fcv_decode_qr_codes(
   Point2D best_finders[3] = {{0, 0}, {0, 0}, {0, 0}};
   double best_module_size = 0;
   int best_fmt_dist = 16;
+  int best_rs_cost = 100000;
 
-  /* Run both a global Otsu and a local-adaptive binarization, keep the best
-     decode. Otsu handles clean high-contrast images; adaptive handles e-ink
-     displays and photos with uneven illumination or low local contrast. */
-  uint8_t *bin_otsu = binarize_global_otsu(gray_pixels, w, h);
-  if (bin_otsu) {
+  /* Pipeline runs a sequence of binarization attempts on progressively more
+     aggressive preprocessing. try_pipeline keeps the lowest-fmt_dist decode,
+     so additional attempts only ever improve the result. Order is
+     cheapest-first; we short-circuit once we have a high-confidence decode
+     (fmt_dist <= 1, i.e. format BCH error correction matched cleanly). */
+
+  /* Attempt 1: Otsu on original. */
+  uint8_t *bin = binarize_global_otsu(gray_pixels, w, h);
+  if (bin) {
     try_pipeline(
-      bin_otsu,
+      bin,
       gray_pixels,
       w,
       h,
       &best_decoded,
       &best_fmt_dist,
+      &best_rs_cost,
       &best_corners,
       best_finders,
       &best_module_size
     );
-    free(bin_otsu);
+    free(bin);
   }
 
-  uint8_t *bin_adapt = binarize_adaptive(gray_pixels, w, h);
-  if (bin_adapt) {
-    try_pipeline(
-      bin_adapt,
-      gray_pixels,
-      w,
-      h,
-      &best_decoded,
-      &best_fmt_dist,
-      &best_corners,
-      best_finders,
-      &best_module_size
-    );
-    free(bin_adapt);
+  /* Attempt 2: adaptive on original. */
+  if (!(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+    bin = binarize_adaptive(gray_pixels, w, h);
+    if (bin) {
+      try_pipeline(
+        bin,
+        gray_pixels,
+        w,
+        h,
+        &best_decoded,
+        &best_fmt_dist,
+        &best_rs_cost,
+        &best_corners,
+        best_finders,
+        &best_module_size
+      );
+      free(bin);
+    }
+  }
+
+  /* The remaining attempts (Sauvola, unsharp, upsample) target large,
+     visually-degraded photographs. On tiny synthetic buffers they are more
+     likely to hallucinate a decode from noise than to recover a real QR
+     — anything smaller than ~100 px on the short side cannot plausibly
+     hold a decodable v1 QR (≥ ~5 px/module × 21 modules + quiet zone). */
+  int small_image = (w < 100 || h < 100);
+
+  /* Attempt 3: Sauvola on original. Targets faded / low-contrast modules
+     where adaptive's fixed min_std fallback misclassifies. */
+  if (!small_image &&
+      !(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+    bin = binarize_sauvola(gray_pixels, w, h);
+    if (bin) {
+      try_pipeline(
+        bin,
+        gray_pixels,
+        w,
+        h,
+        &best_decoded,
+        &best_fmt_dist,
+        &best_rs_cost,
+        &best_corners,
+        best_finders,
+        &best_module_size
+      );
+      free(bin);
+    }
+  }
+
+  /* Attempt 4: unsharp mask + Otsu, then unsharp mask + adaptive. Targets
+     blurred QRs (level_4/5 generators add Gaussian blur radius up to 1.8). */
+  if (!small_image &&
+      !(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+    uint8_t *sharp = unsharp_mask_gray(gray_pixels, w, h);
+    if (sharp) {
+      bin = binarize_global_otsu(sharp, w, h);
+      if (bin) {
+        try_pipeline(
+          bin,
+          sharp,
+          w,
+          h,
+          &best_decoded,
+          &best_fmt_dist,
+          &best_rs_cost,
+          &best_corners,
+          best_finders,
+          &best_module_size
+        );
+        free(bin);
+      }
+      if (!(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+        bin = binarize_adaptive(sharp, w, h);
+        if (bin) {
+          try_pipeline(
+            bin,
+            sharp,
+            w,
+            h,
+            &best_decoded,
+            &best_fmt_dist,
+            &best_rs_cost,
+            &best_corners,
+            best_finders,
+            &best_module_size
+          );
+          free(bin);
+        }
+      }
+      free(sharp);
+    }
+  }
+
+  /* Attempt 5: 2x bilinear upsample + Otsu, then upsample + adaptive.
+     Targets tiny QRs whose modules are too small for finder ratio checks
+     at native resolution. Coordinates from any winning upsampled decode are
+     scaled back by 1/n before returning. Attempt 5b (3x) follows when 2x
+     still doesn't yield a confident decode; helpful for QRs with mod < 3 px
+     where even doubled modules remain on the edge of the ratio tolerance. */
+  for (int n_try = 2; n_try <= 3; n_try++) {
+    if (small_image) {
+      break;
+    }
+    /* Skip the upscaled passes when we already have a long, perfect-format
+       decode at the native scale; otherwise always try, because a tiny QR
+       (modules < 4 px) cannot reliably decode at native resolution and a
+       length-5 wrong decode (e.g. "Mz4Y9c" with fd=0 + uncorrectable RS)
+       must not block 3x exploration that may surface "Mz4Y9a". */
+    if (best_decoded && best_fmt_dist == 0 && strlen(best_decoded) >= 10) {
+      break;
+    }
+    int wn = w * n_try;
+    int hn = h * n_try;
+    uint8_t *grayn = upsample_nx_bilinear(gray_pixels, w, h, n_try);
+    if (!grayn) {
+      continue;
+    }
+    char *best_decoded_up = NULL;
+    Corners best_corners_up = {0};
+    Point2D best_finders_up[3] = {{0, 0}, {0, 0}, {0, 0}};
+    double best_module_size_up = 0;
+    int best_fmt_dist_up = 16;
+    int best_rs_cost_up = 100000;
+
+    bin = binarize_global_otsu(grayn, wn, hn);
+    if (bin) {
+      try_pipeline(
+        bin,
+        grayn,
+        wn,
+        hn,
+        &best_decoded_up,
+        &best_fmt_dist_up,
+        &best_rs_cost_up,
+        &best_corners_up,
+        best_finders_up,
+        &best_module_size_up
+      );
+      free(bin);
+    }
+    if (!(best_decoded_up && best_fmt_dist_up <= 1)) {
+      bin = binarize_adaptive(grayn, wn, hn);
+      if (bin) {
+        try_pipeline(
+          bin,
+          grayn,
+          wn,
+          hn,
+          &best_decoded_up,
+          &best_fmt_dist_up,
+          &best_rs_cost_up,
+          &best_corners_up,
+          best_finders_up,
+          &best_module_size_up
+        );
+        free(bin);
+      }
+    }
+    free(grayn);
+
+    /* Promote the upsampled result if it improves on what we already have:
+       lower fmt_dist wins, tie-break on longer decode length, then on
+       lower RS cost. Mirrors the scoring inside try_pipeline. Scale
+       spatial outputs back to native coordinates by 1/n. */
+    if (best_decoded_up) {
+      int replace = 0;
+      int prev_len = (best_decoded) ? (int)strlen(best_decoded) : -1;
+      int new_len = (int)strlen(best_decoded_up);
+      if (!best_decoded) {
+        replace = 1;
+      }
+      else if (best_fmt_dist_up < best_fmt_dist) {
+        replace = 1;
+      }
+      else if (best_fmt_dist_up == best_fmt_dist && new_len > prev_len) {
+        replace = 1;
+      }
+      else if (best_fmt_dist_up == best_fmt_dist && new_len == prev_len &&
+               best_rs_cost_up < best_rs_cost) {
+        replace = 1;
+      }
+      if (replace) {
+        double inv = 1.0 / (double)n_try;
+        free(best_decoded);
+        best_decoded = best_decoded_up;
+        best_fmt_dist = best_fmt_dist_up;
+        best_rs_cost = best_rs_cost_up;
+        best_corners.tl_x = best_corners_up.tl_x * inv;
+        best_corners.tl_y = best_corners_up.tl_y * inv;
+        best_corners.tr_x = best_corners_up.tr_x * inv;
+        best_corners.tr_y = best_corners_up.tr_y * inv;
+        best_corners.br_x = best_corners_up.br_x * inv;
+        best_corners.br_y = best_corners_up.br_y * inv;
+        best_corners.bl_x = best_corners_up.bl_x * inv;
+        best_corners.bl_y = best_corners_up.bl_y * inv;
+        for (int i = 0; i < 3; i++) {
+          best_finders[i].x = best_finders_up[i].x * inv;
+          best_finders[i].y = best_finders_up[i].y * inv;
+        }
+        best_module_size = best_module_size_up * inv;
+      }
+      else {
+        free(best_decoded_up);
+      }
+    }
+  }
+
+  /* Attempt 6: 3x3 median filter + Otsu, then median + adaptive. Median
+     denoising preserves edges while removing salt-and-pepper noise that
+     defeats both finder-ratio checks and module-center voting. Especially
+     helpful for level_5 images (sigma 4-9 noise + low contrast). Runs
+     when nothing decoded OR the existing decode is suspiciously short
+     (a count-field truncation of byte mode); a long decode from earlier
+     is trusted and we don't risk displacing it. */
+  int existing_short = best_decoded && strlen(best_decoded) < 8;
+  if (!small_image && (!best_decoded || existing_short)) {
+    uint8_t *med = median_filter_3x3(gray_pixels, w, h);
+    if (med) {
+      bin = binarize_global_otsu(med, w, h);
+      if (bin) {
+        try_pipeline(
+          bin,
+          med,
+          w,
+          h,
+          &best_decoded,
+          &best_fmt_dist,
+          &best_rs_cost,
+          &best_corners,
+          best_finders,
+          &best_module_size
+        );
+        free(bin);
+      }
+      if (!(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
+        bin = binarize_adaptive(med, w, h);
+        if (bin) {
+          try_pipeline(
+            bin,
+            med,
+            w,
+            h,
+            &best_decoded,
+            &best_fmt_dist,
+            &best_rs_cost,
+            &best_corners,
+            best_finders,
+            &best_module_size
+          );
+          free(bin);
+        }
+      }
+      free(med);
+    }
   }
 
   if (best_decoded) {

@@ -7,19 +7,3 @@
 #
 # Remove a line when flatcv learns to decode that image — the test will
 # flag it as an unexpectedly-fixed entry so this file stays in sync.
-
-level_4/0003_xzu6d.png
-level_4/0005_PFq2.png
-level_4/0016_UpFgr.png
-level_4/0017_DhQk5r3vn.png
-
-level_5/0001_RqTXhW.png
-level_5/0007_Mz4Y9a.png
-level_5/0008_ebtXnkppygKQ.png
-level_5/0012_7Id93z.png
-level_5/0015_3wjxC.png
-level_5/0021_3bL12r.png
-level_5/0022_z6sT.png
-level_5/0023_AP4.png
-level_5/0026_kUPnD.png
-level_5/0029_LptAD6uHJMV.png
