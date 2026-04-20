@@ -787,29 +787,76 @@ def apply_qr_occlusion(
     return out
 
 
-def _render_level(level: int, text: str) -> Image.Image:
-    """Render one QR image at the given difficulty level (1-20)."""
+def _place_if_included(
+    bg: Image.Image,
+    qr: Image.Image | None,
+    *,
+    include_qr: bool,
+    scale: float,
+    angle: float,
+) -> Image.Image:
+    """Place a pre-built `qr` onto bg, or — when include_qr is False —
+    return bg as an RGB image untouched. The caller owns QR construction so
+    any RNG the QR build path consumes stays ordered identically to the
+    pre-refactor code; this helper only gates the placement step."""
+    if not include_qr:
+        return bg.convert("RGB")
+    return _place_simple(bg, qr, scale=scale, angle=angle)
+
+
+def _render_level(
+    level: int, text: str, include_qr: bool = True
+) -> Image.Image:
+    """Render one image at the given difficulty level (1-20).
+
+    When include_qr is False, every background choice and post-placement
+    augmentation still runs, but the QR itself is omitted — producing a
+    negative sample that shares the level's visual style. The `text`
+    argument is ignored in that case.
+    """
     # Randomly decide whether the QR gets an opaque white quiet zone
     # (that rotates with the modules) or a transparent quiet zone (so the
-    # photo background shows directly between the dark modules).
+    # photo background shows directly between the dark modules). Consumed
+    # even on the negative path so RNG consumption stays aligned across
+    # the two modes when both are seeded identically.
     white_bg = random.random() < 0.5
+
+    def _build_qr(
+        box_size: int = 8,
+        border: int = 4,
+        dark: tuple[int, int, int] = (0, 0, 0),
+        light: tuple[int, int, int] = (255, 255, 255),
+    ) -> Image.Image | None:
+        if not include_qr:
+            return None
+        return make_qr_rgba(
+            text,
+            box_size=box_size,
+            border=border,
+            white_bg=white_bg,
+            dark_color=dark,
+            light_color=light,
+        )
 
     if level == 1:
         # Trivial: large QR, white background, axis aligned.
         w, h = random.choice([(400, 400), (512, 512), (640, 480)])
         bg = Image.new("RGB", (w, h), (255, 255, 255))
-        qr = make_qr_rgba(text, box_size=10, white_bg=white_bg)
-        return _place_simple(bg, qr, scale=random.uniform(0.55, 0.8), angle=0.0)
+        qr = _build_qr(box_size=10)
+        return _place_if_included(
+            bg, qr, include_qr=include_qr,
+            scale=random.uniform(0.55, 0.8),
+            angle=0.0,
+        )
 
     if level == 2:
         # Easy: solid color bg, small rotation.
         w, h = random.choice([(480, 480), (640, 480), (800, 600)])
         bg = Image.new("RGB", (w, h))
         bg_solid(bg)
-        qr = make_qr_rgba(text, box_size=10, white_bg=white_bg)
-        return _place_simple(
-            bg,
-            qr,
+        qr = _build_qr(box_size=10)
+        return _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.4, 0.65),
             angle=random.uniform(-15, 15),
         )
@@ -819,10 +866,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        return _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        return _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -832,10 +878,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.25, 0.4),
             angle=random.uniform(0, 360),
         )
@@ -848,10 +893,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice([(640, 480), (800, 600), (1024, 768)])
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, border=4, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr(border=4)
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.25, 0.35),
             angle=random.uniform(0, 360),
         )
@@ -868,10 +912,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -882,10 +925,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -897,10 +939,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -915,13 +956,13 @@ def _render_level(level: int, text: str) -> Image.Image:
         random.choice(BACKGROUNDS)(bg)
         box_size = 8
         border = 4
-        qr = make_qr_rgba(
-            text, box_size=box_size, border=border, white_bg=white_bg
-        )
-        qr = apply_qr_occlusion(qr, border=border, box_size=box_size)
-        return _place_simple(
-            bg,
-            qr,
+        qr = _build_qr(box_size=box_size, border=border)
+        if qr is not None:
+            # Occlusion RNG must run BEFORE scale/angle (it did pre-refactor),
+            # so apply it here in the caller instead of inside the helper.
+            qr = apply_qr_occlusion(qr, border=border, box_size=box_size)
+        return _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -933,10 +974,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         bg = Image.new("RGB", (w, h))
         bg_photo_like(bg)
         apply_clutter(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        return _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        return _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -947,10 +987,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -963,10 +1002,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -991,16 +1029,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         else:
             dark = tuple(random.randint(190, 255) for _ in range(3))
             light = tuple(random.randint(0, 90) for _ in range(3))
-        qr = make_qr_rgba(
-            text,
-            box_size=8,
-            white_bg=white_bg,
-            dark_color=dark,
-            light_color=light,
-        )
-        return _place_simple(
-            bg,
-            qr,
+        qr = _build_qr(dark=dark, light=light)
+        return _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -1013,10 +1044,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.22, 0.35),
             angle=random.uniform(0, 360),
         )
@@ -1051,10 +1081,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -1067,10 +1096,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -1083,10 +1111,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -1099,10 +1126,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice([(800, 600), (1024, 768), (1280, 960), (1920, 1080)])
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        return _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        return _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.08, 0.15),
             angle=random.uniform(0, 360),
         )
@@ -1113,10 +1139,9 @@ def _render_level(level: int, text: str) -> Image.Image:
         w, h = random.choice(SIZES)
         bg = Image.new("RGB", (w, h))
         random.choice(BACKGROUNDS)(bg)
-        qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-        img = _place_simple(
-            bg,
-            qr,
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
             scale=random.uniform(0.35, 0.55),
             angle=random.uniform(0, 360),
         )
@@ -1130,10 +1155,9 @@ def _render_level(level: int, text: str) -> Image.Image:
     w, h = random.choice(SIZES)
     bg = Image.new("RGB", (w, h))
     random.choice(BACKGROUNDS)(bg)
-    qr = make_qr_rgba(text, box_size=8, white_bg=white_bg)
-    img = _place_simple(
-        bg,
-        qr,
+    qr = _build_qr()
+    img = _place_if_included(
+        bg, qr, include_qr=include_qr,
         scale=random.uniform(0.35, 0.55),
         angle=random.uniform(0, 360),
     )
@@ -1156,11 +1180,53 @@ def _zxing_decodes(path: Path, expected: str) -> bool:
 
 
 def _clear_level_dir(output_dir: Path, level: int) -> Path:
+    """Wipe every positive sample (index_text.png) in the level dir. Leaves
+    noqr-*.png alone so the negative pass can rewrite them independently."""
     level_dir = output_dir / f"level_{level}"
     level_dir.mkdir(parents=True, exist_ok=True)
     for old in level_dir.glob("*.png"):
+        if old.name.startswith("noqr-"):
+            continue
         old.unlink()
     return level_dir
+
+
+def _clear_level_negatives(output_dir: Path, level: int) -> Path:
+    level_dir = output_dir / f"level_{level}"
+    level_dir.mkdir(parents=True, exist_ok=True)
+    for old in level_dir.glob("noqr-*.png"):
+        old.unlink()
+    return level_dir
+
+
+# Seed offset for the no-QR generator. Keeps the negatives' RNG stream
+# independent from the manifest-driven positive stream so the two paths
+# can be regenerated in either order without cross-contamination.
+_NEGATIVE_SEED_OFFSET = 1_000_003
+
+
+def _generate_negatives(
+    seed: int,
+    per_level: int,
+    levels: list[int],
+    output_dir: Path,
+) -> None:
+    """Produce `per_level` no-QR images per level that share each level's
+    background style and post-placement augmentations. Filenames use a
+    `noqr-NNNN.png` pattern (no underscore) so the existing positive-sample
+    filename parsers skip them naturally."""
+    if per_level <= 0:
+        return
+    for level in levels:
+        # Per-level derived seed: deterministic across runs and distinct
+        # between levels, so negatives regenerate byte-identically without
+        # a manifest of their own.
+        _seed_rngs(seed + _NEGATIVE_SEED_OFFSET + level)
+        level_dir = _clear_level_negatives(output_dir, level)
+        for idx in range(per_level):
+            img = _render_level(level, text="", include_qr=False)
+            img.save(level_dir / f"noqr-{idx:04d}.png")
+        print(f"Level {level}: {per_level} no-qr negatives -> {level_dir}")
 
 
 def _validate_difficulty(
@@ -1293,8 +1359,13 @@ def generate_difficulty(
     output_dir: Path,
     validate: bool = False,
     max_attempts: int = 8,
+    negatives_per_level: int = 30,
 ) -> None:
-    """Dispatch: validate with zxing-cpp (and write manifest) or replay."""
+    """Dispatch: validate with zxing-cpp (and write manifest) or replay.
+
+    After the positive pass, also generate `negatives_per_level` no-QR
+    images per level (set to 0 to disable).
+    """
     if validate:
         _seed_rngs(seed)
         manifest = _validate_difficulty(
@@ -1305,6 +1376,7 @@ def generate_difficulty(
             json.dump(manifest, f, indent=2)
             f.write("\n")
         print(f"\nWrote validation manifest to {MANIFEST_PATH}")
+        _generate_negatives(seed, negatives_per_level, levels, output_dir)
         return
     if not MANIFEST_PATH.exists():
         raise RuntimeError(
@@ -1317,6 +1389,9 @@ def generate_difficulty(
     # regardless of what --seed was passed on the command line.
     _seed_rngs(manifest["seed"])
     _replay_difficulty(levels, output_dir, manifest)
+    _generate_negatives(
+        manifest["seed"], negatives_per_level, levels, output_dir
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -1336,7 +1411,14 @@ def parse_args() -> argparse.Namespace:
         "--per-level",
         type=int,
         default=30,
-        help="Images per difficulty level (default: 30).",
+        help="QR images per difficulty level (default: 30).",
+    )
+    p.add_argument(
+        "--negatives-per-level",
+        type=int,
+        default=30,
+        help="No-QR images per difficulty level (default: 30). "
+        "Saved as noqr-NNNN.png. Set to 0 to disable.",
     )
     p.add_argument(
         "--levels",
@@ -1368,6 +1450,7 @@ if __name__ == "__main__":
             levels,
             DIFFICULTY_DIR,
             validate=args.validate,
+            negatives_per_level=args.negatives_per_level,
         )
         print(f"\nDone. Difficulty dataset in {DIFFICULTY_DIR}/")
     else:

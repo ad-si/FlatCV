@@ -321,7 +321,9 @@ static int run_difficulty_level(
     return 0;
   }
 
-  memset(stats, 0, sizeof(*stats));
+  /* Caller zeroes `stats`; this function (and the negatives pass that
+   * follows it) accumulates into the same counters so positive and
+   * no-QR results combine into a single per-level total. */
   struct dirent *entry;
   while ((entry = readdir(dir)) != NULL) {
     const char *name = entry->d_name;
@@ -392,6 +394,83 @@ static int run_difficulty_level(
   return 0;
 }
 
+static int run_difficulty_level_negatives(
+  const char *root_dir,
+  const char *level_name,
+  KnownFailureList *kfl,
+  LevelStats *stats
+) {
+  /* Iterate the noqr-*.png negatives for the level. A negative passes
+   * iff the decoder returns zero codes; any decode is a false positive. */
+  char dir_path[512];
+  snprintf(dir_path, sizeof(dir_path), "%s/%s", root_dir, level_name);
+
+  DIR *dir = opendir(dir_path);
+  if (!dir) {
+    return 0;
+  }
+
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != NULL) {
+    const char *name = entry->d_name;
+    size_t name_len = strlen(name);
+    if (name_len < 10 || strncmp(name, "noqr-", 5) != 0 ||
+        strcmp(name + name_len - 4, ".png") != 0) {
+      continue;
+    }
+
+    char relpath[512];
+    snprintf(relpath, sizeof(relpath), "%s/%s", level_name, name);
+
+    char full_path[768];
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, name);
+
+    int width, height, channels;
+    uint8_t *img = stbi_load(full_path, &width, &height, &channels, 1);
+    if (!img) {
+      stats->total++;
+      stats->failed_new++;
+      printf("  %s: LOAD FAIL\n", relpath);
+      continue;
+    }
+
+    FCVQRCodeResult result = fcv_decode_qr_codes(width, height, img);
+    stats->total++;
+
+    int is_known = known_failure_check(kfl, relpath);
+    if (result.count == 0) {
+      stats->passed++;
+      if (is_known) {
+        stats->fixed++;
+        printf("  %s: FIXED (remove from known_failures.txt)\n", relpath);
+      }
+    }
+    else {
+      if (is_known) {
+        stats->failed_expected++;
+      }
+      else {
+        stats->failed_new++;
+        printf(
+          "  %s: FALSE POSITIVE — decoded %zu code(s)",
+          relpath,
+          result.count
+        );
+        if (result.codes[0].text) {
+          printf(", got \"%s\"", result.codes[0].text);
+        }
+        printf("\n");
+      }
+    }
+
+    fcv_free_qr_result(result);
+    stbi_image_free(img);
+  }
+
+  closedir(dir);
+  return 0;
+}
+
 static int test_difficulty_images(void) {
   const char *root_dir = "tests/qr_codes_difficulty";
   const char *kfl_path = "tests/qr_codes_difficulty_known_failures.txt";
@@ -424,7 +503,9 @@ static int test_difficulty_images(void) {
 
   for (size_t i = 0; i < num_levels; i++) {
     LevelStats ls;
+    memset(&ls, 0, sizeof(ls));
     run_difficulty_level(root_dir, levels[i], &kfl, &ls);
+    run_difficulty_level_negatives(root_dir, levels[i], &kfl, &ls);
     totals.total += ls.total;
     totals.passed += ls.passed;
     totals.failed_expected += ls.failed_expected;

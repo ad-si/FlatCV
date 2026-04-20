@@ -1,4 +1,8 @@
-# Images in tests/qr_codes_difficulty/ that flatcv currently fails to decode.
+# Images in tests/qr_codes_difficulty/ that flatcv currently mishandles.
+# Two failure modes are tracked:
+#   - positive miss:  `NNNN_text.png` — flatcv fails to decode the QR.
+#   - false positive: `noqr-NNNN.png` — flatcv hallucinates a QR in an
+#                     image that contains no QR at all.
 # Each line is a bug or missing capability in flatcv's QR pipeline that we
 # want to fix.
 #
@@ -7,6 +11,8 @@
 #
 # Remove a line when flatcv learns to decode that image — the test will
 # flag it as an unexpectedly-fixed entry so this file stays in sync.
+
+# --- Positive misses -------------------------------------------------------
 
 # level_13: tiny coloured-inverted QR on a checkered background. The grayscale
 # collapse of the pastel palette leaves the QR nearly invisible and the
@@ -17,3 +23,156 @@ level_13/0023_IffpU1T.png
 # JPEG + uneven lighting) that push past flatcv's current margin even
 # though individual stressors are handled.
 level_14/0023_Tf3i7.png
+
+# --- False positives on no-QR images ---------------------------------------
+# Noise, blur, perspective warp, and clutter fool the finder-pattern scanner
+# into locking onto spurious 1:1:3:1:1 run patterns; Reed–Solomon then masks
+# the garbage into a syntactically valid message. Concentrated in levels
+# 4, 5, and 14 where the aggressive degradations generate the most
+# finder-like artefacts.
+level_3/noqr-0001.png
+level_3/noqr-0002.png
+level_3/noqr-0004.png
+level_3/noqr-0005.png
+level_3/noqr-0006.png
+level_3/noqr-0012.png
+level_3/noqr-0013.png
+level_3/noqr-0015.png
+level_3/noqr-0022.png
+level_4/noqr-0000.png
+level_4/noqr-0001.png
+level_4/noqr-0002.png
+level_4/noqr-0003.png
+level_4/noqr-0004.png
+level_4/noqr-0005.png
+level_4/noqr-0006.png
+level_4/noqr-0007.png
+level_4/noqr-0008.png
+level_4/noqr-0009.png
+level_4/noqr-0010.png
+level_4/noqr-0011.png
+level_4/noqr-0012.png
+level_4/noqr-0013.png
+level_4/noqr-0014.png
+level_4/noqr-0015.png
+level_4/noqr-0016.png
+level_4/noqr-0018.png
+level_4/noqr-0019.png
+level_4/noqr-0020.png
+level_4/noqr-0021.png
+level_4/noqr-0022.png
+level_4/noqr-0023.png
+level_4/noqr-0024.png
+level_4/noqr-0025.png
+level_4/noqr-0026.png
+level_4/noqr-0027.png
+level_4/noqr-0028.png
+level_4/noqr-0029.png
+level_5/noqr-0000.png
+level_5/noqr-0001.png
+level_5/noqr-0002.png
+level_5/noqr-0003.png
+level_5/noqr-0004.png
+level_5/noqr-0005.png
+level_5/noqr-0006.png
+level_5/noqr-0007.png
+level_5/noqr-0008.png
+level_5/noqr-0009.png
+level_5/noqr-0010.png
+level_5/noqr-0011.png
+level_5/noqr-0012.png
+level_5/noqr-0013.png
+level_5/noqr-0014.png
+level_5/noqr-0015.png
+level_5/noqr-0016.png
+level_5/noqr-0017.png
+level_5/noqr-0018.png
+level_5/noqr-0020.png
+level_5/noqr-0021.png
+level_5/noqr-0022.png
+level_5/noqr-0023.png
+level_5/noqr-0024.png
+level_5/noqr-0025.png
+level_5/noqr-0026.png
+level_5/noqr-0027.png
+level_5/noqr-0028.png
+level_5/noqr-0029.png
+level_6/noqr-0011.png
+level_6/noqr-0015.png
+level_6/noqr-0020.png
+level_7/noqr-0005.png
+level_7/noqr-0011.png
+level_8/noqr-0004.png
+level_8/noqr-0008.png
+level_8/noqr-0010.png
+level_8/noqr-0011.png
+level_8/noqr-0012.png
+level_8/noqr-0019.png
+level_8/noqr-0020.png
+level_8/noqr-0023.png
+level_8/noqr-0028.png
+level_9/noqr-0001.png
+level_9/noqr-0009.png
+level_9/noqr-0020.png
+level_9/noqr-0026.png
+level_10/noqr-0000.png
+level_11/noqr-0006.png
+level_11/noqr-0009.png
+level_11/noqr-0015.png
+level_12/noqr-0001.png
+level_12/noqr-0002.png
+level_12/noqr-0009.png
+level_12/noqr-0013.png
+level_12/noqr-0016.png
+level_12/noqr-0019.png
+level_12/noqr-0020.png
+level_12/noqr-0022.png
+level_12/noqr-0027.png
+level_13/noqr-0003.png
+level_13/noqr-0015.png
+level_13/noqr-0019.png
+level_13/noqr-0022.png
+level_13/noqr-0024.png
+level_13/noqr-0026.png
+level_14/noqr-0000.png
+level_14/noqr-0001.png
+level_14/noqr-0002.png
+level_14/noqr-0004.png
+level_14/noqr-0008.png
+level_14/noqr-0009.png
+level_14/noqr-0011.png
+level_14/noqr-0012.png
+level_14/noqr-0016.png
+level_14/noqr-0018.png
+level_14/noqr-0021.png
+level_14/noqr-0028.png
+level_15/noqr-0001.png
+level_15/noqr-0010.png
+level_15/noqr-0014.png
+level_15/noqr-0017.png
+level_15/noqr-0019.png
+level_15/noqr-0022.png
+level_15/noqr-0023.png
+level_15/noqr-0024.png
+level_15/noqr-0027.png
+level_16/noqr-0006.png
+level_16/noqr-0015.png
+level_16/noqr-0016.png
+level_16/noqr-0018.png
+level_16/noqr-0023.png
+level_16/noqr-0027.png
+level_17/noqr-0013.png
+level_17/noqr-0017.png
+level_18/noqr-0000.png
+level_18/noqr-0007.png
+level_18/noqr-0010.png
+level_18/noqr-0011.png
+level_18/noqr-0019.png
+level_18/noqr-0020.png
+level_18/noqr-0028.png
+level_19/noqr-0009.png
+level_19/noqr-0014.png
+level_19/noqr-0019.png
+level_19/noqr-0027.png
+level_20/noqr-0021.png
+level_20/noqr-0024.png
