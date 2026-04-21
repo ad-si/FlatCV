@@ -1148,20 +1148,52 @@ def _render_level(
         magnitude = random.uniform(0.05, 0.18) * random.choice([-1.0, 1.0])
         return apply_row_shear(img, magnitude=magnitude)
 
-    # Level 20: physical damage. Paper fold shadows + punched holes on a
-    # level-3-style render. Distinct from level_9 opaque patches: folds
-    # multiplicatively darken strips and holes leave white voids with
-    # thin dark rims, not random-coloured shapes.
-    w, h = random.choice(SIZES)
+    if level == 20:
+        # Level 20: physical damage. Paper fold shadows + punched holes on a
+        # level-3-style render. Distinct from level_9 opaque patches: folds
+        # multiplicatively darken strips and holes leave white voids with
+        # thin dark rims, not random-coloured shapes.
+        w, h = random.choice(SIZES)
+        bg = Image.new("RGB", (w, h))
+        random.choice(BACKGROUNDS)(bg)
+        qr = _build_qr()
+        img = _place_if_included(
+            bg, qr, include_qr=include_qr,
+            scale=random.uniform(0.35, 0.55),
+            angle=random.uniform(0, 360),
+        )
+        return apply_physical_damage(img)
+
+    # Level 21: curled-paper receipt. Two-axis paper curl (linear
+    # homographies can't rectify a non-planar surface) stacked with
+    # concentric-square clutter (wide-run false-positive finders crowd
+    # out the real triple unless select_and_rank clusters by module
+    # size). Reproduces the failure mode that commit 581fdc0 fixed —
+    # the five curled-paper improvements only become load-bearing when
+    # curl and clutter appear together.
+    # ECI payloads are intentionally not covered here — the `qrcode`
+    # Python library doesn't emit ECI indicators; regression coverage
+    # for that code path relies on real photo fixtures.
+    w, h = random.choice([(640, 480), (800, 600), (1024, 768)])
     bg = Image.new("RGB", (w, h))
-    random.choice(BACKGROUNDS)(bg)
+    bg_photo_like(bg)
+    apply_clutter(bg)
     qr = _build_qr()
     img = _place_if_included(
         bg, qr, include_qr=include_qr,
-        scale=random.uniform(0.35, 0.55),
+        scale=random.uniform(0.4, 0.55),
         angle=random.uniform(0, 360),
     )
-    return apply_physical_damage(img)
+    primary_axis = random.choice(["v", "h"])
+    img = apply_cylindrical_warp(
+        img, angle_max=random.uniform(0.7, 1.0), axis=primary_axis
+    )
+    img = apply_cylindrical_warp(
+        img,
+        angle_max=random.uniform(0.3, 0.5),
+        axis="h" if primary_axis == "v" else "v",
+    )
+    return img
 
 
 def _zxing_decodes(path: Path, expected: str) -> bool:
@@ -1423,9 +1455,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--levels",
         type=str,
-        default="1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20",
+        default="1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21",
         help="Comma-separated list of levels to generate "
-        "(default: 1..20).",
+        "(default: 1..21).",
     )
     p.add_argument("--seed", type=int, default=42)
     p.add_argument(
