@@ -1150,7 +1150,81 @@ static void identify_triple(
   }
 }
 
+/* ---- Timing pattern verification ----
+   Walk the candidate timing row between two finder centers, offset 3
+   modules perpendicular toward the third finder (finder center is at
+   module row 3, timing pattern at module row 6). A real QR timing row
+   shows alternating dark/light modules at module-size pitch; incidental
+   1:1:3:1:1 "finder" triples in random data do not. Returns transitions
+   per step in [0,1]; ≥ 0.75 reliably indicates a timing pattern (random
+   data averages 0.5 with 95% CI up to ~0.67). */
+static float timing_score_pair(
+  uint8_t const *px,
+  int w,
+  int h,
+  FinderPattern a,
+  FinderPattern b,
+  FinderPattern c_toward
+) {
+  float ms = (a.module_size + b.module_size) / 2.0f;
+  if (ms < 1.0f) {
+    return 0;
+  }
+  float ux = b.x - a.x, uy = b.y - a.y;
+  float u_len = sqrtf(ux * ux + uy * uy);
+  if (u_len < 10.0f * ms) {
+    return 0;
+  }
+  ux /= u_len;
+  uy /= u_len;
+  float perp_x = -uy, perp_y = ux;
+  float to_c_x = c_toward.x - a.x, to_c_y = c_toward.y - a.y;
+  if (perp_x * to_c_x + perp_y * to_c_y < 0) {
+    perp_x = -perp_x;
+    perp_y = -perp_y;
+  }
+  /* Finder center is the center of module (3,3); timing pattern runs along
+     the center of module (·,6). Offset from finder-center line to timing
+     line is 6 − 3 = 3 modules. */
+  float offset_x = 3.0f * ms * perp_x;
+  float offset_y = 3.0f * ms * perp_y;
+  float sx = a.x + 4.0f * ms * ux + offset_x;
+  float sy = a.y + 4.0f * ms * uy + offset_y;
+  float ex = b.x - 4.0f * ms * ux + offset_x;
+  float ey = b.y - 4.0f * ms * uy + offset_y;
+  float walk_len = sqrtf((ex - sx) * (ex - sx) + (ey - sy) * (ey - sy));
+  int n_steps = (int)(walk_len / ms + 0.5f);
+  if (n_steps < 6 || n_steps > 165) {
+    return 0;
+  }
+  int prev_dark = -1;
+  int transitions = 0;
+  int samples = 0;
+  for (int i = 0; i <= n_steps; i++) {
+    float t = (float)i / (float)n_steps;
+    float fx = sx + t * (ex - sx);
+    float fy = sy + t * (ey - sy);
+    int ix = (int)(fx + 0.5f), iy = (int)(fy + 0.5f);
+    if (ix < 0 || ix >= w || iy < 0 || iy >= h) {
+      continue;
+    }
+    int dark = is_dark(px, w, h, ix, iy);
+    samples++;
+    if (prev_dark != -1 && dark != prev_dark) {
+      transitions++;
+    }
+    prev_dark = dark;
+  }
+  if (samples < 5) {
+    return 0;
+  }
+  return (float)transitions / (float)(samples - 1);
+}
+
 static int select_and_rank(
+  uint8_t const *px,
+  int w,
+  int h,
   FinderPattern *fps,
   int nfp,
   FinderPattern triples[][3],
@@ -1299,6 +1373,28 @@ static int select_and_rank(
            get rejected hard. Discount hyp_err so moderate perspective
            distortion doesn't kill the true triple. */
         float score = side_ratio - ms_var * 5.0f - hyp_err * 1.0f + scale_bonus;
+
+        /* Timing-pattern bonus: real finder triples have two pairs whose
+           inter-finder line runs along a QR timing row of alternating
+           dark/light modules. False-positive triples in dense document/
+           receipt text rarely hit this, so the bonus of +1 per timing
+           pair lets perspective-distorted real triples outrank clean but
+           incidental right-triangle triples. Gate on threshold 0.75 —
+           random data ratio is ≤ 0.67 with 95% confidence. */
+        int timing_pairs = 0;
+        float t_ij = timing_score_pair(px, w, h, fps[i], fps[j], fps[k]);
+        float t_ik = timing_score_pair(px, w, h, fps[i], fps[k], fps[j]);
+        float t_jk = timing_score_pair(px, w, h, fps[j], fps[k], fps[i]);
+        if (t_ij >= 0.75f) {
+          timing_pairs++;
+        }
+        if (t_ik >= 0.75f) {
+          timing_pairs++;
+        }
+        if (t_jk >= 0.75f) {
+          timing_pairs++;
+        }
+        score += (float)timing_pairs;
 
         if (ns < max_scored) {
           scored[ns++] = (Scored){score, i, j, k};
@@ -4731,7 +4827,7 @@ static void try_pipeline(
   }
 
   FinderPattern triples[MAX_TRIPLES][3];
-  int n_triples = select_and_rank(fps, nfp, triples, MAX_TRIPLES);
+  int n_triples = select_and_rank(bin, w, h, fps, nfp, triples, MAX_TRIPLES);
 
   for (int t = 0; t < n_triples; t++) {
     int fmt_dist = 16;
