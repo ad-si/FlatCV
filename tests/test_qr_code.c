@@ -922,12 +922,13 @@ static int test_photo_images(void) {
 
   closedir(dir);
   printf(
-    "  Photo results: %d/%d passed, %d failed (informational)\n",
+    "  Photo results: %d/%d passed, %d failed\n",
     passed,
     total,
     failed
   );
-  return 0;
+  test_failures += failed;
+  return failed;
 }
 
 static void print_usage(const char *prog) {
