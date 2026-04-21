@@ -1281,6 +1281,15 @@ static int select_and_rank(
            sides/ms ratios; saturate the bonus at 14 so real finders outrank
            them without giving oversized triples unbounded advantage. */
         float modules_between = (ms_avg > 0) ? sides[0] / ms_avg : 0;
+        /* QR spec: finder-center distance = (qr_size − 7) × module_size, with
+           qr_size ∈ [21, 177]. So the longer leg cannot plausibly exceed
+           ~170 modules; leave ~10% slack for perspective and scan noise. A
+           triple spanning an entire receipt/page at some spurious module size
+           blows past this even when its module sizes happen to cluster. */
+        float modules_between_long = (ms_avg > 0) ? sides[1] / ms_avg : 0;
+        if (modules_between_long > 190.0f) {
+          continue;
+        }
         float scale_bonus = modules_between / 14.0f;
         if (scale_bonus > 1.0f) {
           scale_bonus = 1.0f;
