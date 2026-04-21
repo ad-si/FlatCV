@@ -1160,13 +1160,43 @@ static int select_and_rank(
     return 0;
   }
 
-  /* Sort candidates by module_size descending. Real finders tend to have
-     larger module sizes than incidental 1:1:3:1:1 patterns in data modules,
-     so this brings them to the front of the search window. */
+  /* Count ms-cluster partners for each candidate: how many other candidates
+     have module_size within 15% of mine. Real finder triples are three
+     near-identical-ms blobs; scoring-by-ms alone lets wide-run false
+     positives in dense data regions push the real triple out of the
+     search window on cluttered images (e.g. receipt QR next to a
+     barcode). Clustered candidates get promoted so the triple survives. */
+  int cluster_count[MAX_CANDIDATES];
+  for (int i = 0; i < nfp; i++) {
+    int count = 0;
+    for (int j = 0; j < nfp; j++) {
+      if (j == i) {
+        continue;
+      }
+      float m = (fps[i].module_size > 0.001f) ? fps[i].module_size : 0.001f;
+      float ratio = fabsf(fps[i].module_size - fps[j].module_size) / m;
+      if (ratio < 0.15f) {
+        count++;
+      }
+    }
+    cluster_count[i] = count;
+  }
+
+  /* Selection sort by (clustered desc, module_size desc). Candidates with
+     ≥ 2 ms-partners come first; within each group, larger ms wins. */
   for (int i = 0; i < nfp - 1; i++) {
     int best = i;
     for (int j = i + 1; j < nfp; j++) {
-      if (fps[j].module_size > fps[best].module_size) {
+      int j_cl = cluster_count[j] >= 2;
+      int b_cl = cluster_count[best] >= 2;
+      int replace = 0;
+      if (j_cl && !b_cl) {
+        replace = 1;
+      }
+      else if (j_cl == b_cl && fps[j].module_size > fps[best].module_size) {
+        replace = 1;
+      }
+      if (replace) {
         best = j;
       }
     }
@@ -1174,6 +1204,9 @@ static int select_and_rank(
       FinderPattern tmp = fps[i];
       fps[i] = fps[best];
       fps[best] = tmp;
+      int tc = cluster_count[i];
+      cluster_count[i] = cluster_count[best];
+      cluster_count[best] = tc;
     }
   }
 
@@ -1191,7 +1224,25 @@ static int select_and_rank(
   }
   int ns = 0;
 
-  int limit = (nfp > 30) ? 30 : nfp;
+  /* Consider all clustered candidates (capped at 80 for O(n³) budget), or at
+     least 30 if few candidates cluster — preserves original behaviour on
+     noise-only scenes while accommodating crowded ones. */
+  int num_clustered = 0;
+  for (int i = 0; i < nfp; i++) {
+    if (cluster_count[i] >= 2) {
+      num_clustered++;
+    }
+  }
+  int limit = num_clustered;
+  if (limit < 30) {
+    limit = 30;
+  }
+  if (limit > nfp) {
+    limit = nfp;
+  }
+  if (limit > 80) {
+    limit = 80;
+  }
   for (int i = 0; i < limit; i++) {
     for (int j = i + 1; j < limit; j++) {
       for (int k = j + 1; k < limit; k++) {
@@ -1385,6 +1436,808 @@ static void apply_homography(
   *out_y = (float)((H[3] * mx + H[4] * my + H[5]) / w);
 }
 
+/* Solve the linear system Mh = v where M is 8x8 symmetric (A^T A) and v is
+   8x1 (A^T b), by Gaussian elimination with partial pivoting. Writes the
+   result into the first 8 slots of H and sets H[8] = 1. Returns 1 on
+   success, 0 on singular / ill-conditioned input. */
+static int solve_8x8(double M[8][8], const double v[8], double H[9]) {
+  double A[8][9];
+  for (int i = 0; i < 8; i++) {
+    for (int j = 0; j < 8; j++) {
+      A[i][j] = M[i][j];
+    }
+    A[i][8] = v[i];
+  }
+  for (int i = 0; i < 8; i++) {
+    int max_row = i;
+    double max_val = fabs(A[i][i]);
+    for (int k = i + 1; k < 8; k++) {
+      if (fabs(A[k][i]) > max_val) {
+        max_val = fabs(A[k][i]);
+        max_row = k;
+      }
+    }
+    if (max_val < 1e-12) {
+      return 0;
+    }
+    if (max_row != i) {
+      for (int j = 0; j <= 8; j++) {
+        double t = A[i][j];
+        A[i][j] = A[max_row][j];
+        A[max_row][j] = t;
+      }
+    }
+    for (int k = i + 1; k < 8; k++) {
+      double f = A[k][i] / A[i][i];
+      for (int j = i; j <= 8; j++) {
+        A[k][j] -= f * A[i][j];
+      }
+    }
+  }
+  for (int i = 7; i >= 0; i--) {
+    if (fabs(A[i][i]) < 1e-12) {
+      return 0;
+    }
+    double s = A[i][8];
+    for (int j = i + 1; j < 8; j++) {
+      s -= A[i][j] * H[j];
+    }
+    H[i] = s / A[i][i];
+    if (isnan(H[i]) || isinf(H[i])) {
+      return 0;
+    }
+  }
+  H[8] = 1.0;
+  return 1;
+}
+
+/* Solve an over-determined homography system from N≥4 correspondences via
+   normal equations: the 2N×8 constraint matrix A is folded into an 8×8
+   symmetric M = A^T A and an 8×1 vector v = A^T b, and the 8×8 system is
+   solved directly. No Hartley normalisation — QR decoding stays within a
+   few hundred pixels so the coordinate magnitudes don't blow out double
+   precision here. Returns 1 on success, 0 on singular input. */
+static int compute_homography_ls(
+  const double src[][2],
+  const double dst[][2],
+  int n,
+  double H[9]
+) {
+  if (n < 4) {
+    return 0;
+  }
+  double M[8][8];
+  double v[8];
+  memset(M, 0, sizeof(M));
+  memset(v, 0, sizeof(v));
+
+  for (int i = 0; i < n; i++) {
+    double X = src[i][0], Y = src[i][1];
+    double x = dst[i][0], y = dst[i][1];
+
+    /* x-equation row: [X, Y, 1, 0, 0, 0, -x*X, -x*Y] with RHS = x */
+    double rx[8] = {X, Y, 1, 0, 0, 0, -x * X, -x * Y};
+    for (int a = 0; a < 8; a++) {
+      for (int b = 0; b < 8; b++) {
+        M[a][b] += rx[a] * rx[b];
+      }
+      v[a] += rx[a] * x;
+    }
+
+    /* y-equation row: [0, 0, 0, X, Y, 1, -y*X, -y*Y] with RHS = y */
+    double ry[8] = {0, 0, 0, X, Y, 1, -y * X, -y * Y};
+    for (int a = 0; a < 8; a++) {
+      for (int b = 0; b < 8; b++) {
+        M[a][b] += ry[a] * ry[b];
+      }
+      v[a] += ry[a] * y;
+    }
+  }
+
+  return solve_8x8(M, v, H);
+}
+
+/* Solve an NxN linear system M x = v by Gaussian elimination with partial
+   pivoting. M is destroyed. Result written into x. Returns 1 on success,
+   0 on singular matrix. */
+static int solve_nxn(double *M, double *v, int n, double *x) {
+  /* Augment [M | v] into A: A is n × (n+1), row-major. */
+  int stride = n + 1;
+  double *A = (double *)malloc((size_t)n * (size_t)stride * sizeof(double));
+  if (!A) {
+    return 0;
+  }
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < n; j++) {
+      A[i * stride + j] = M[i * n + j];
+    }
+    A[i * stride + n] = v[i];
+  }
+  for (int i = 0; i < n; i++) {
+    int max_row = i;
+    double max_val = fabs(A[i * stride + i]);
+    for (int k = i + 1; k < n; k++) {
+      double av = fabs(A[k * stride + i]);
+      if (av > max_val) {
+        max_val = av;
+        max_row = k;
+      }
+    }
+    if (max_val < 1e-12) {
+      free(A);
+      return 0;
+    }
+    if (max_row != i) {
+      for (int j = 0; j <= n; j++) {
+        double t = A[i * stride + j];
+        A[i * stride + j] = A[max_row * stride + j];
+        A[max_row * stride + j] = t;
+      }
+    }
+    for (int k = i + 1; k < n; k++) {
+      double f = A[k * stride + i] / A[i * stride + i];
+      for (int j = i; j <= n; j++) {
+        A[k * stride + j] -= f * A[i * stride + j];
+      }
+    }
+  }
+  for (int i = n - 1; i >= 0; i--) {
+    if (fabs(A[i * stride + i]) < 1e-12) {
+      free(A);
+      return 0;
+    }
+    double s = A[i * stride + n];
+    for (int j = i + 1; j < n; j++) {
+      s -= A[i * stride + j] * x[j];
+    }
+    x[i] = s / A[i * stride + i];
+    if (isnan(x[i]) || isinf(x[i])) {
+      free(A);
+      return 0;
+    }
+  }
+  free(A);
+  return 1;
+}
+
+/* Fit a quadratic warp (u, v) -> (x, y) using N correspondences. The warp
+   is a bivariate polynomial of degree 2 per output coordinate, i.e.
+       x(u,v) = a0 + a1·u + a2·v + a3·u·v + a4·u² + a5·v²
+       y(u,v) = b0 + b1·u + b2·v + b3·u·v + b4·u² + b5·v²
+   — 12 parameters fit via independent 6-unknown normal equations per
+   coordinate. Needs ≥ 6 observations and they must span a 2-D region
+   (all points on one line gives a singular matrix). Writes 12 floats
+   into coeffs: indices 0..5 are the x-coefficients in the order above,
+   6..11 are the y-coefficients. Returns 1 on success, 0 on failure.
+
+   A quadratic warp can model paper curl and moderate lens/fisheye
+   distortion that a single 8-parameter homography can't. It's not
+   perspective-correct for truly flat surfaces, but on real-world
+   photographs of QR codes on non-planar surfaces (receipts, folded
+   paper, curved displays) it typically gives sub-pixel accuracy where
+   the homography drifts by 1–2 modules across the data area. */
+static int fit_quadratic_warp(
+  const double src[][2],
+  const double dst[][2],
+  int n,
+  double coeffs[12]
+) {
+  if (n < 6) {
+    return 0;
+  }
+  double Mx[36], vx[6];
+  double My[36], vy[6];
+  memset(Mx, 0, sizeof(Mx));
+  memset(My, 0, sizeof(My));
+  memset(vx, 0, sizeof(vx));
+  memset(vy, 0, sizeof(vy));
+  for (int i = 0; i < n; i++) {
+    double u = src[i][0], v = src[i][1];
+    double x = dst[i][0], y = dst[i][1];
+    double row[6] = {1.0, u, v, u * v, u * u, v * v};
+    for (int a = 0; a < 6; a++) {
+      for (int b = 0; b < 6; b++) {
+        Mx[a * 6 + b] += row[a] * row[b];
+        My[a * 6 + b] += row[a] * row[b];
+      }
+      vx[a] += row[a] * x;
+      vy[a] += row[a] * y;
+    }
+  }
+  double cx[6] = {0}, cy[6] = {0};
+  if (!solve_nxn(Mx, vx, 6, cx) || !solve_nxn(My, vy, 6, cy)) {
+    return 0;
+  }
+  for (int i = 0; i < 6; i++) {
+    coeffs[i] = cx[i];
+    coeffs[i + 6] = cy[i];
+  }
+  return 1;
+}
+
+/* Apply a quadratic warp to map a (u, v) module-space point to a (px, py)
+   pixel-space point. Matches the coefficient layout of fit_quadratic_warp. */
+static void apply_quadratic_warp(
+  const double coeffs[12],
+  double u,
+  double v,
+  double *px,
+  double *py
+) {
+  *px = coeffs[0] + coeffs[1] * u + coeffs[2] * v + coeffs[3] * u * v +
+        coeffs[4] * u * u + coeffs[5] * v * v;
+  *py = coeffs[6] + coeffs[7] * u + coeffs[8] * v + coeffs[9] * u * v +
+        coeffs[10] * u * u + coeffs[11] * v * v;
+}
+
+/* Light-pixel analogue of find_dark_centroid_local — centroid of *light*
+   pixels in a local window. Used for known-light QR cells (e.g. the light
+   timing modules, the light 3x3 interior of the finder pattern) to add
+   anchor points between the dark modules the primary observer finds. */
+static int find_light_centroid_local(
+  uint8_t const *gray,
+  int w,
+  int h,
+  double px_pred,
+  double py_pred,
+  float search_r,
+  double *px_obs,
+  double *py_obs
+) {
+  int r = (int)(search_r + 0.5f);
+  if (r < 2) {
+    r = 2;
+  }
+  int cx = (int)(px_pred + 0.5);
+  int cy = (int)(py_pred + 0.5);
+  int x0 = cx - r;
+  int y0 = cy - r;
+  int x1 = cx + r;
+  int y1 = cy + r;
+  if (x0 < 0) {
+    x0 = 0;
+  }
+  if (y0 < 0) {
+    y0 = 0;
+  }
+  if (x1 >= w) {
+    x1 = w - 1;
+  }
+  if (y1 >= h) {
+    y1 = h - 1;
+  }
+  if (x1 - x0 < 2 || y1 - y0 < 2) {
+    return 0;
+  }
+  uint8_t lo = 255, hi = 0;
+  for (int y = y0; y <= y1; y++) {
+    for (int x = x0; x <= x1; x++) {
+      uint8_t g = gray[y * w + x];
+      if (g < lo) {
+        lo = g;
+      }
+      if (g > hi) {
+        hi = g;
+      }
+    }
+  }
+  if (hi - lo < 20) {
+    return 0;
+  }
+  int t = (lo + hi) / 2;
+  double sx = 0, sy = 0, sw = 0;
+  for (int y = y0; y <= y1; y++) {
+    for (int x = x0; x <= x1; x++) {
+      uint8_t g = gray[y * w + x];
+      if (g >= t) {
+        double weight = (double)(g - t);
+        sx += (double)x * weight;
+        sy += (double)y * weight;
+        sw += weight;
+      }
+    }
+  }
+  if (sw <= 0) {
+    return 0;
+  }
+  *px_obs = sx / sw;
+  *py_obs = sy / sw;
+  return 1;
+}
+
+/* Observe the pixel-space centroid of dark pixels in a local window around
+   a predicted position, using an adaptive local threshold. Used to ground-
+   truth the position of a known-dark QR module (timing pattern dark
+   module, alignment center, etc.) against the pixel buffer so we can
+   refine a homography that was built from far-apart control points.
+   Returns 1 on success; 0 if the window is uniform (low contrast ⇒
+   unreliable). */
+static int find_dark_centroid_local(
+  uint8_t const *gray,
+  int w,
+  int h,
+  double px_pred,
+  double py_pred,
+  float search_r,
+  double *px_obs,
+  double *py_obs
+) {
+  int r = (int)(search_r + 0.5f);
+  if (r < 2) {
+    r = 2;
+  }
+  int cx = (int)(px_pred + 0.5);
+  int cy = (int)(py_pred + 0.5);
+  int x0 = cx - r;
+  int y0 = cy - r;
+  int x1 = cx + r;
+  int y1 = cy + r;
+  if (x0 < 0) {
+    x0 = 0;
+  }
+  if (y0 < 0) {
+    y0 = 0;
+  }
+  if (x1 >= w) {
+    x1 = w - 1;
+  }
+  if (y1 >= h) {
+    y1 = h - 1;
+  }
+  if (x1 - x0 < 2 || y1 - y0 < 2) {
+    return 0;
+  }
+  uint8_t lo = 255, hi = 0;
+  for (int y = y0; y <= y1; y++) {
+    for (int x = x0; x <= x1; x++) {
+      uint8_t g = gray[y * w + x];
+      if (g < lo) {
+        lo = g;
+      }
+      if (g > hi) {
+        hi = g;
+      }
+    }
+  }
+  if (hi - lo < 20) {
+    return 0;
+  }
+  int t = (lo + hi) / 2;
+  double sx = 0, sy = 0, sw = 0;
+  for (int y = y0; y <= y1; y++) {
+    for (int x = x0; x <= x1; x++) {
+      uint8_t g = gray[y * w + x];
+      if (g < t) {
+        double weight = (double)(t - g);
+        sx += (double)x * weight;
+        sy += (double)y * weight;
+        sw += weight;
+      }
+    }
+  }
+  if (sw <= 0) {
+    return 0;
+  }
+  *px_obs = sx / sw;
+  *py_obs = sy / sw;
+  return 1;
+}
+
+/* Forward declarations — defined later alongside the homography decode path. */
+static char *decode_grid(
+  uint8_t *grid,
+  uint8_t const *conf,
+  int qr_size,
+  int version,
+  int *out_fmt_dist,
+  int *out_rs_cost
+);
+static float timing_error_rate(uint8_t const *grid, int qr_size);
+static float finder_error_rate(uint8_t const *grid, int qr_size);
+
+/* Sample the QR module grid using a quadratic warp instead of a homography.
+   Behaves like sample_grid_homography_offset_mode's non-bilinear path but
+   with a polynomial mapping that can bend to follow paper curl. The 5-
+   point sub-sample voting is preserved for tolerance against small
+   within-module drift. Returns a heap buffer of size qr_size*qr_size;
+   caller frees. */
+static uint8_t *sample_grid_quadratic(
+  uint8_t const *px,
+  int w,
+  int h,
+  const double coeffs[12],
+  int qr_size
+) {
+  int total = qr_size * qr_size;
+  uint8_t *grid = calloc(total, 1);
+  if (!grid) {
+    return NULL;
+  }
+  static const double offs[5][2] = {
+    {0.5, 0.5},
+    {0.35, 0.35},
+    {0.65, 0.35},
+    {0.35, 0.65},
+    {0.65, 0.65},
+  };
+  for (int r = 0; r < qr_size; r++) {
+    for (int c = 0; c < qr_size; c++) {
+      int votes = 0;
+      for (int o = 0; o < 5; o++) {
+        double px_d, py_d;
+        apply_quadratic_warp(
+          coeffs,
+          c + offs[o][0],
+          r + offs[o][1],
+          &px_d,
+          &py_d
+        );
+        int ix = (int)(px_d + 0.5);
+        int iy = (int)(py_d + 0.5);
+        if (is_dark(px, w, h, ix, iy)) {
+          votes++;
+        }
+      }
+      grid[r * qr_size + c] = (votes >= 3) ? 1 : 0;
+    }
+  }
+  return grid;
+}
+
+/* Fit a quadratic warp from 3 finder centers + alignment + all observable
+   timing-module centroids, then sample the grid with it and try to
+   decode. Returns a heap-allocated decoded string (caller frees) or
+   NULL if sampling/decode fails. */
+static char *try_decode_quadratic(
+  uint8_t const *bin,
+  uint8_t const *gray,
+  int w,
+  int h,
+  int qr_size,
+  int version,
+  FinderPattern tl,
+  FinderPattern tr,
+  FinderPattern bl,
+  int have_alignment,
+  double alignment_x,
+  double alignment_y,
+  const double H_init[9],
+  float ms,
+  int *out_fmt_dist,
+  int *out_rs_cost
+) {
+  enum { MAX_CORR = 80 };
+  double src[MAX_CORR][2];
+  double dst[MAX_CORR][2];
+  int n = 0;
+  src[n][0] = 3.5;
+  src[n][1] = 3.5;
+  dst[n][0] = tl.x;
+  dst[n][1] = tl.y;
+  n++;
+  src[n][0] = qr_size - 3.5;
+  src[n][1] = 3.5;
+  dst[n][0] = tr.x;
+  dst[n][1] = tr.y;
+  n++;
+  src[n][0] = 3.5;
+  src[n][1] = qr_size - 3.5;
+  dst[n][0] = bl.x;
+  dst[n][1] = bl.y;
+  n++;
+  if (have_alignment) {
+    src[n][0] = qr_size - 6.5;
+    src[n][1] = qr_size - 6.5;
+    dst[n][0] = alignment_x;
+    dst[n][1] = alignment_y;
+    n++;
+  }
+  float search_r = ms * 0.5f;
+  /* Horizontal timing pattern: dark at even cols, light at odd cols. Sample
+     both so the quadratic warp has fine-grained constraints along row 6. */
+  for (int col = 7; col <= qr_size - 8; col++) {
+    if (n >= MAX_CORR) {
+      break;
+    }
+    double mx = (double)col + 0.5;
+    double my = 6.5;
+    double pw = H_init[6] * mx + H_init[7] * my + H_init[8];
+    if (fabs(pw) < 1e-10) {
+      continue;
+    }
+    double px_pred = (H_init[0] * mx + H_init[1] * my + H_init[2]) / pw;
+    double py_pred = (H_init[3] * mx + H_init[4] * my + H_init[5]) / pw;
+    double px_obs, py_obs;
+    int ok_c;
+    if ((col % 2) == 0) {
+      ok_c = find_dark_centroid_local(
+        gray,
+        w,
+        h,
+        px_pred,
+        py_pred,
+        search_r,
+        &px_obs,
+        &py_obs
+      );
+    }
+    else {
+      ok_c = find_light_centroid_local(
+        gray,
+        w,
+        h,
+        px_pred,
+        py_pred,
+        search_r,
+        &px_obs,
+        &py_obs
+      );
+    }
+    if (ok_c) {
+      src[n][0] = mx;
+      src[n][1] = my;
+      dst[n][0] = px_obs;
+      dst[n][1] = py_obs;
+      n++;
+    }
+  }
+  for (int row = 7; row <= qr_size - 8; row++) {
+    if (n >= MAX_CORR) {
+      break;
+    }
+    double mx = 6.5;
+    double my = (double)row + 0.5;
+    double pw = H_init[6] * mx + H_init[7] * my + H_init[8];
+    if (fabs(pw) < 1e-10) {
+      continue;
+    }
+    double px_pred = (H_init[0] * mx + H_init[1] * my + H_init[2]) / pw;
+    double py_pred = (H_init[3] * mx + H_init[4] * my + H_init[5]) / pw;
+    double px_obs, py_obs;
+    int ok_c;
+    if ((row % 2) == 0) {
+      ok_c = find_dark_centroid_local(
+        gray,
+        w,
+        h,
+        px_pred,
+        py_pred,
+        search_r,
+        &px_obs,
+        &py_obs
+      );
+    }
+    else {
+      ok_c = find_light_centroid_local(
+        gray,
+        w,
+        h,
+        px_pred,
+        py_pred,
+        search_r,
+        &px_obs,
+        &py_obs
+      );
+    }
+    if (ok_c) {
+      src[n][0] = mx;
+      src[n][1] = my;
+      dst[n][0] = px_obs;
+      dst[n][1] = py_obs;
+      n++;
+    }
+  }
+  /* Alignment pattern anchors: sample the 8 known-light inner-ring cells
+     around the BR alignment center to pin the quadratic warp's BR quadrant
+     — without this the warp is only constrained by the single alignment
+     center in that region and extrapolates wildly into the data area. */
+  if (have_alignment) {
+    double ax = (double)qr_size - 6.5; /* alignment center in module coords */
+    double ay = (double)qr_size - 6.5;
+    static const double ring1[8][2] = {
+      {-1.0, -1.0},
+      {0.0, -1.0},
+      {1.0, -1.0},
+      {-1.0, 0.0},
+      {1.0, 0.0},
+      {-1.0, 1.0},
+      {0.0, 1.0},
+      {1.0, 1.0},
+    };
+    for (int i = 0; i < 8; i++) {
+      if (n >= MAX_CORR) {
+        break;
+      }
+      double mx = ax + ring1[i][0];
+      double my = ay + ring1[i][1];
+      double pw = H_init[6] * mx + H_init[7] * my + H_init[8];
+      if (fabs(pw) < 1e-10) {
+        continue;
+      }
+      double px_pred = (H_init[0] * mx + H_init[1] * my + H_init[2]) / pw;
+      double py_pred = (H_init[3] * mx + H_init[4] * my + H_init[5]) / pw;
+      double px_obs, py_obs;
+      if (find_light_centroid_local(
+            gray,
+            w,
+            h,
+            px_pred,
+            py_pred,
+            search_r,
+            &px_obs,
+            &py_obs
+          )) {
+        src[n][0] = mx;
+        src[n][1] = my;
+        dst[n][0] = px_obs;
+        dst[n][1] = py_obs;
+        n++;
+      }
+    }
+  }
+  /* Need at least 8 well-spread observations for a stable quadratic fit
+     (6 unknowns per axis + a bit of over-determination). */
+  if (n < 8) {
+    return NULL;
+  }
+  double coeffs[12];
+  if (!fit_quadratic_warp(src, dst, n, coeffs)) {
+    return NULL;
+  }
+  uint8_t *grid = sample_grid_quadratic(bin, w, h, coeffs, qr_size);
+  if (!grid) {
+    return NULL;
+  }
+  int fd = 16, rc = 100000;
+  char *d = decode_grid(grid, NULL, qr_size, version, &fd, &rc);
+  free(grid);
+  if (d) {
+    if (out_fmt_dist) {
+      *out_fmt_dist = fd;
+    }
+    if (out_rs_cost) {
+      *out_rs_cost = rc;
+    }
+  }
+  return d;
+}
+
+/* Refine a homography by observing pixel-space centroids of every dark
+   module in the two QR timing patterns and solving a least-squares fit
+   over the combined set of control points and timing observations. The
+   3 finder centers (and optional BR alignment) give the coarse shape;
+   the timing observations, which thread the QR's interior, constrain
+   the transform through the data area and correct the sub-module drift
+   that a 4-point homography can't resolve on curled or lens-distorted
+   captures (e.g. a receipt photographed at an angle). Returns 1 if the
+   refined H is valid and used ≥ 6 points total. Leaves H_out untouched
+   on failure. */
+static int refine_h_with_timing(
+  uint8_t const *gray,
+  int w,
+  int h,
+  const double H_init[9],
+  int qr_size,
+  float ms,
+  FinderPattern tl,
+  FinderPattern tr,
+  FinderPattern bl,
+  int have_alignment,
+  double alignment_x,
+  double alignment_y,
+  double H_out[9]
+) {
+  if (!gray || qr_size < 21) {
+    return 0;
+  }
+  enum { MAX_CORR = 80 };
+  double src[MAX_CORR][2];
+  double dst[MAX_CORR][2];
+  int n = 0;
+
+  /* 3 finder centers as anchoring control points. */
+  src[n][0] = 3.5;
+  src[n][1] = 3.5;
+  dst[n][0] = tl.x;
+  dst[n][1] = tl.y;
+  n++;
+  src[n][0] = qr_size - 3.5;
+  src[n][1] = 3.5;
+  dst[n][0] = tr.x;
+  dst[n][1] = tr.y;
+  n++;
+  src[n][0] = 3.5;
+  src[n][1] = qr_size - 3.5;
+  dst[n][0] = bl.x;
+  dst[n][1] = bl.y;
+  n++;
+
+  /* Optional alignment-pattern center for the BR corner. */
+  if (have_alignment) {
+    src[n][0] = qr_size - 6.5;
+    src[n][1] = qr_size - 6.5;
+    dst[n][0] = alignment_x;
+    dst[n][1] = alignment_y;
+    n++;
+  }
+
+  /* Timing pattern: module row 6 columns 8..qr_size-9, dark at even cols;
+     module col 6 rows 8..qr_size-9, dark at even rows. Sample the dark
+     modules' pixel-space centroids using the initial H as a guide and a
+     half-module search radius — the initial guess is within a module's
+     width of truth on realistic captures. */
+  float search_r = ms * 0.5f;
+  for (int col = 8; col <= qr_size - 9; col += 2) {
+    if (n >= MAX_CORR) {
+      break;
+    }
+    double mx = (double)col + 0.5;
+    double my = 6.5;
+    double pw = H_init[6] * mx + H_init[7] * my + H_init[8];
+    if (fabs(pw) < 1e-10) {
+      continue;
+    }
+    double px_pred = (H_init[0] * mx + H_init[1] * my + H_init[2]) / pw;
+    double py_pred = (H_init[3] * mx + H_init[4] * my + H_init[5]) / pw;
+    double px_obs, py_obs;
+    if (find_dark_centroid_local(
+          gray,
+          w,
+          h,
+          px_pred,
+          py_pred,
+          search_r,
+          &px_obs,
+          &py_obs
+        )) {
+      src[n][0] = mx;
+      src[n][1] = my;
+      dst[n][0] = px_obs;
+      dst[n][1] = py_obs;
+      n++;
+    }
+  }
+  for (int row = 8; row <= qr_size - 9; row += 2) {
+    if (n >= MAX_CORR) {
+      break;
+    }
+    double mx = 6.5;
+    double my = (double)row + 0.5;
+    double pw = H_init[6] * mx + H_init[7] * my + H_init[8];
+    if (fabs(pw) < 1e-10) {
+      continue;
+    }
+    double px_pred = (H_init[0] * mx + H_init[1] * my + H_init[2]) / pw;
+    double py_pred = (H_init[3] * mx + H_init[4] * my + H_init[5]) / pw;
+    double px_obs, py_obs;
+    if (find_dark_centroid_local(
+          gray,
+          w,
+          h,
+          px_pred,
+          py_pred,
+          search_r,
+          &px_obs,
+          &py_obs
+        )) {
+      src[n][0] = mx;
+      src[n][1] = my;
+      dst[n][0] = px_obs;
+      dst[n][1] = py_obs;
+      n++;
+    }
+  }
+
+  /* Need meaningfully more than the 4-point minimum for the least-squares
+     to actually do anything; if only the control points were observed
+     (all timing centroid calls failed — likely a low-contrast or obscured
+     QR) the refined H would equal the initial one. */
+  if (n < 6) {
+    return 0;
+  }
+  return compute_homography_ls(src, dst, n, H_out);
+}
+
 /* ---- Alignment pattern search ---- */
 
 /* Check if (cx, cy) looks like the center of a QR alignment pattern:
@@ -1412,6 +2265,8 @@ is_alignment_center(uint8_t const *px, int w, int h, int cx, int cy, float ms) {
   };
   int light_ok = 0;
   int dark_ring_ok = 0;
+  int beyond_light_ok = 0;
+  int beyond_checked = 0;
   for (int d = 0; d < 8; d++) {
     int lx = (int)(cx + ms * dirs[d][0] + 0.5f * (dirs[d][0] > 0 ? 1 : -1));
     int ly = (int)(cy + ms * dirs[d][1] + 0.5f * (dirs[d][1] > 0 ? 1 : -1));
@@ -1419,6 +2274,17 @@ is_alignment_center(uint8_t const *px, int w, int h, int cx, int cy, float ms) {
       (int)(cx + 2.0f * ms * dirs[d][0] + 0.5f * (dirs[d][0] > 0 ? 1 : -1));
     int ry =
       (int)(cy + 2.0f * ms * dirs[d][1] + 0.5f * (dirs[d][1] > 0 ? 1 : -1));
+    /* A real alignment pattern is exactly 5 modules wide: the outer dark
+       ring sits at radius 2·ms, so just beyond (2.8·ms) we must be out of
+       the pattern again. Data-module clusters that happen to expose a
+       dark center + light 1·ms + dark 2·ms often keep going dark past
+       radius 2, because they're embedded in a larger dense region —
+       require "light past the dark ring" in the majority of directions
+       to rule those out. */
+    int bx =
+      (int)(cx + 2.8f * ms * dirs[d][0] + 0.5f * (dirs[d][0] > 0 ? 1 : -1));
+    int by =
+      (int)(cy + 2.8f * ms * dirs[d][1] + 0.5f * (dirs[d][1] > 0 ? 1 : -1));
     if (lx < 0 || lx >= w || ly < 0 || ly >= h) {
       continue;
     }
@@ -1431,8 +2297,25 @@ is_alignment_center(uint8_t const *px, int w, int h, int cx, int cy, float ms) {
     if (is_dark(px, w, h, rx, ry)) {
       dark_ring_ok++;
     }
+    if (bx >= 0 && bx < w && by >= 0 && by < h) {
+      beyond_checked++;
+      if (!is_dark(px, w, h, bx, by)) {
+        beyond_light_ok++;
+      }
+    }
   }
-  return (light_ok >= 6 && dark_ring_ok >= 6);
+  if (light_ok < 6 || dark_ring_ok < 6) {
+    return 0;
+  }
+  /* Require ≥ 5 of 8 outer directions to be light beyond the dark ring.
+     5 (of 8) keeps a small margin for alignment patterns adjacent to a
+     single dark data module while still killing patterns embedded in
+     dark clusters. If we couldn't check enough directions (pattern near
+     image edge), pass through — the existing 2-ring check has to carry. */
+  if (beyond_checked >= 5 && beyond_light_ok < 5) {
+    return 0;
+  }
+  return 1;
 }
 
 static int find_alignment_pattern(
@@ -2886,6 +3769,46 @@ static char *decode_payload(uint8_t const *data, int len, int ver) {
     return NULL;
   }
 
+  /* ECI (Extended Channel Interpretation): consume the assignment number
+     bytes and continue with the next mode indicator. URL QRs commonly
+     begin with ECI 26 (UTF-8) or ECI 3 (ISO-8859-1) followed by byte
+     mode. We don't do any character-set re-encoding — all the ECIs we
+     care about produce payloads that are already valid UTF-8 or ASCII. */
+  if (mode == 7) {
+    int first = read_bits(data, len, &pos, 1);
+    if (first < 0) {
+      return NULL;
+    }
+    if (first == 0) {
+      /* 1-byte ECI (7 more bits, total 8) */
+      if (read_bits(data, len, &pos, 7) < 0) {
+        return NULL;
+      }
+    }
+    else {
+      int second = read_bits(data, len, &pos, 1);
+      if (second < 0) {
+        return NULL;
+      }
+      if (second == 0) {
+        /* 2-byte ECI (14 more bits, total 16) */
+        if (read_bits(data, len, &pos, 14) < 0) {
+          return NULL;
+        }
+      }
+      else {
+        /* 3-byte ECI (21 more bits, total 24) */
+        if (read_bits(data, len, &pos, 21) < 0) {
+          return NULL;
+        }
+      }
+    }
+    mode = read_bits(data, len, &pos, 4);
+    if (mode == 0) {
+      return NULL;
+    }
+  }
+
   int cc_bits;
   if (mode == 1) {
     cc_bits = (ver < 10) ? 10 : (ver < 27) ? 12 : 14;
@@ -2905,11 +3828,12 @@ static char *decode_payload(uint8_t const *data, int len, int ver) {
 
   int count = read_bits(data, len, &pos, cc_bits);
   /* Reject impossible counts: must be positive and must fit in the data bits
-     remaining after the mode + count header. A bit-flip in the high bit of
-     the count field can otherwise produce massively-inflated counts that
-     consume padding bytes as fake content (numeric mode is especially prone
-     — corrupted padding bytes decode as long runs of '0' digits). */
-  int avail_bits = len * 8 - 4 - cc_bits;
+     remaining after all header bits consumed so far (mode + optional ECI
+     header + count). A bit-flip in the high bit of the count field can
+     otherwise produce massively-inflated counts that consume padding bytes
+     as fake content (numeric mode is especially prone — corrupted padding
+     bytes decode as long runs of '0' digits). */
+  int avail_bits = len * 8 - pos;
   if (avail_bits < 0) {
     free(NULL);
     return NULL;
@@ -2994,22 +3918,27 @@ static char *decode_grid(
   int *out_fmt_dist,
   int *out_rs_cost
 ) {
-  /* Gate on the timing pattern before the expensive RS path runs. Triples
-     lifted from noise almost always flunk this (alternation is random).
-     Threshold 0.22 gives real QRs under moderate blur/perspective plenty of
-     headroom while nearly every hallucinated grid sits around 0.5. Larger
-     QRs have long timing runs so even random bits rarely land under 22% —
-     smaller v1 QRs with 5-module runs can still pass with 1 error (20%). */
-  if (timing_error_rate(grid, qr_size) > 0.22f) {
-    return NULL;
-  }
   /* Structural check on the three finder windows. Real QRs match the
      7x7 finder pattern at (0,0) / (0, qr_size-7) / (qr_size-7, 0) almost
      perfectly; hallucinated grids only match about half the 147 cells.
      The 0.15 cap leaves room for moderate homography drift and sampling
      jitter under blur/perspective while killing the small-module numeric
      FPs that slipped past the timing alternation. */
-  if (finder_error_rate(grid, qr_size) > 0.15f) {
+  float fer = finder_error_rate(grid, qr_size);
+  if (fer > 0.15f) {
+    return NULL;
+  }
+  /* Gate on the timing pattern before the expensive RS path runs. Triples
+     lifted from noise almost always flunk this (alternation is random).
+     Base threshold 0.22 gives real QRs under moderate blur/perspective
+     plenty of headroom while nearly every hallucinated grid sits around
+     0.5. When the three finder windows match their 7x7 template almost
+     perfectly (fer < 0.03) we're confident the triple is real — raise
+     the timing cap to 0.35 so photographs with paper curl or moderate
+     perspective drift don't get rejected on what is ultimately a grid-
+     sampling approximation error, not a false positive. */
+  float timing_cap = (fer < 0.03f) ? 0.35f : 0.22f;
+  if (timing_error_rate(grid, qr_size) > timing_cap) {
     return NULL;
   }
   int ec_level, mask_pattern;
@@ -3335,6 +4264,13 @@ static char *try_decode_triple(
   int rs_cost = 100000;
   char *decoded = NULL;
 
+  /* Track the best initial homography we have so timing-pattern refinement
+     has a starting point to predict module-centroid positions from. */
+  double H_primary[9];
+  int have_primary_H = 0;
+  int have_alignment = 0;
+  double alignment_x = 0, alignment_y = 0;
+
   if (version >= 2) {
     float sx0 = 3.5f, sy0 = 3.5f;
     float sx1 = qr_size - 3.5f, sy1 = 3.5f;
@@ -3367,11 +4303,16 @@ static char *try_decode_triple(
             &found_ax,
             &found_ay
           )) {
+        have_alignment = 1;
+        alignment_x = found_ax;
+        alignment_y = found_ay;
         double src[4][2] = {{sx0, sy0}, {sx1, sy1}, {amx, amy}, {sx2, sy2}};
         double dst[4][2] =
           {{tl.x, tl.y}, {tr.x, tr.y}, {found_ax, found_ay}, {bl.x, bl.y}};
         double H[9];
         if (compute_homography(src, dst, H)) {
+          memcpy(H_primary, H, sizeof(H));
+          have_primary_H = 1;
           int fd = 16;
           int rc = 100000;
           char *d = decode_with_perturbation(
@@ -3389,6 +4330,107 @@ static char *try_decode_triple(
             decoded = d;
             fmt_dist = fd;
             rs_cost = rc;
+          }
+        }
+        /* If the canonical alignment-based homography failed, sweep a
+           small grid of alignment-point perturbations and retry. Paper curl
+           and perspective foreshortening mean the real alignment pattern
+           can sit several pixels from where find_alignment_pattern snaps
+           to, while the homography is extremely sensitive to this 4th
+           point — a few pixels at the BR alignment translate to sub-module
+           drift across the data area, tripping the timing and finder
+           gates even when the three finder positions are pin-accurate.
+           Sweep radius scales with module size (the residual alignment
+           uncertainty is always a fraction of a module); 2x2 module
+           radius at half-module steps is cheap (25 samples) and covers
+           the drift seen on moderately curled photos. */
+        if (!decoded) {
+          float step = avg_m * 0.5f;
+          float radius = avg_m * 1.5f;
+          int n_steps = (int)(radius / step);
+          char *best_sweep = NULL;
+          int best_sweep_fd = 16;
+          int best_sweep_rc = 100000;
+          for (int dy = -n_steps; dy <= n_steps; dy++) {
+            for (int dx = -n_steps; dx <= n_steps; dx++) {
+              if (dx == 0 && dy == 0) {
+                continue; /* already tried */
+              }
+              double pert_dst[4][2] = {
+                {tl.x, tl.y},
+                {tr.x, tr.y},
+                {found_ax + dx * step, found_ay + dy * step},
+                {bl.x, bl.y}
+              };
+              double Hp[9];
+              if (!compute_homography(src, pert_dst, Hp)) {
+                continue;
+              }
+              int fd = 16;
+              int rc = 100000;
+              char *d = decode_with_perturbation(
+                pixels,
+                gray,
+                width,
+                height,
+                Hp,
+                qr_size,
+                version,
+                &fd,
+                &rc
+              );
+              if (!d) {
+                continue;
+              }
+              /* Take the lowest-cost decode across the whole sweep rather
+                 than stopping on the first hit — some perturbed alignments
+                 yield a consensus decode that is still garbage (random
+                 alphanumeric strings with fd=0 and rc=0 do occur when
+                 sampling happens to line up with a false-but-self-
+                 consistent grid). Prefer longer strings and lower RS
+                 cost so the best geometric fit wins. */
+              int replace = 0;
+              if (!best_sweep) {
+                replace = 1;
+              }
+              else if (fd < best_sweep_fd) {
+                replace = 1;
+              }
+              else if (fd == best_sweep_fd &&
+                       (int)strlen(d) > (int)strlen(best_sweep)) {
+                replace = 1;
+              }
+              else if (fd == best_sweep_fd &&
+                       (int)strlen(d) == (int)strlen(best_sweep) &&
+                       rc < best_sweep_rc) {
+                replace = 1;
+              }
+              if (replace) {
+                free(best_sweep);
+                best_sweep = d;
+                best_sweep_fd = fd;
+                best_sweep_rc = rc;
+              }
+              else {
+                free(d);
+              }
+            }
+          }
+          /* Only accept sweep results with a strong confidence signal:
+             perfect format BCH (fd = 0) and near-zero RS correction cost.
+             Random perturbations in a QR-free region can consensus-
+             decode as alphanumeric garbage with fd=0 but substantial RS
+             cost (≥ 100), so locking the rc threshold low rejects those.
+             Real decodes with the right alignment typically need zero
+             corrections; a small tolerance (≤ 5) lets through slightly
+             noisy captures without admitting hallucinated decodes. */
+          if (best_sweep && best_sweep_fd == 0 && best_sweep_rc <= 5) {
+            decoded = best_sweep;
+            fmt_dist = best_sweep_fd;
+            rs_cost = best_sweep_rc;
+          }
+          else {
+            free(best_sweep);
           }
         }
       }
@@ -3409,6 +4451,10 @@ static char *try_decode_triple(
     double dst[4][2] = {{tl.x, tl.y}, {tr.x, tr.y}, {br_x, br_y}, {bl.x, bl.y}};
     double H[9];
     if (compute_homography(src, dst, H)) {
+      if (!have_primary_H) {
+        memcpy(H_primary, H, sizeof(H));
+        have_primary_H = 1;
+      }
       int fd = 16;
       int rc = 100000;
       char *d = decode_with_perturbation(
@@ -3419,6 +4465,102 @@ static char *try_decode_triple(
         H,
         qr_size,
         version,
+        &fd,
+        &rc
+      );
+      if (d) {
+        decoded = d;
+        fmt_dist = fd;
+        rs_cost = rc;
+      }
+    }
+  }
+
+  /* Timing-pattern homography refinement. When a 4-point homography (from
+     alignment pattern or parallelogram BR) can't produce a clean decode,
+     the usual cause on photos with any perspective or paper curl is
+     sub-module drift in the QR's interior — the 4 control points anchor
+     the corners but nothing constrains the transform *between* them.
+     Observing pixel-space centroids of every known-dark timing module
+     gives us ≈ 2·(qr_size − 16) extra correspondences threading the
+     code's interior, and solving an over-determined DLT over the union
+     of control points + timing observations averages out the distortion
+     the 4-point fit can't model. Run it only after the canonical paths
+     have failed (it adds real cost: ~2·qr_size centroid searches + an
+     8×8 normal-equation solve + another 10-perturbation decode pass). */
+  if (!decoded && gray && have_primary_H && version >= 2) {
+    double H_cur[9];
+    memcpy(H_cur, H_primary, sizeof(H_cur));
+    /* Iterate refinement a few times — each pass re-predicts timing-
+       module positions through the currently best H, re-observes
+       centroids in the pixel buffer, and re-fits. Three rounds is
+       usually enough to converge; diminishing returns beyond that. */
+    for (int iter = 0; iter < 3 && !decoded; iter++) {
+      double H_ref[9];
+      if (!refine_h_with_timing(
+            gray,
+            width,
+            height,
+            H_cur,
+            qr_size,
+            avg_m,
+            tl,
+            tr,
+            bl,
+            have_alignment,
+            alignment_x,
+            alignment_y,
+            H_ref
+          )) {
+        break;
+      }
+      memcpy(H_cur, H_ref, sizeof(H_cur));
+      int fd = 16;
+      int rc = 100000;
+      char *d = decode_with_perturbation(
+        pixels,
+        gray,
+        width,
+        height,
+        H_ref,
+        qr_size,
+        version,
+        &fd,
+        &rc
+      );
+      if (d) {
+        decoded = d;
+        fmt_dist = fd;
+        rs_cost = rc;
+      }
+    }
+
+    /* Last-resort attempt: quadratic (polynomial) warp sampling. When
+       every homography we can build still fails to decode, the surface
+       itself isn't planar — typical case is a QR printed on a curled
+       receipt. Fit a bivariate degree-2 polynomial to 3 finders +
+       alignment + timing observations and sample the grid with it. The
+       quadratic warp can follow a cylindrical bend that no single
+       homography can model. Only used when the refined H's decode
+       failed, so the added cost is bounded to the hardest images. */
+    if (!decoded) {
+      int fd = 16;
+      int rc = 100000;
+      char *d = try_decode_quadratic(
+        pixels,
+        gray,
+        width,
+        height,
+        qr_size,
+        version,
+        tl,
+        tr,
+        bl,
+        have_alignment,
+        alignment_x,
+        alignment_y,
+        H_cur,
+        avg_m,
         &fd,
         &rc
       );
