@@ -194,6 +194,229 @@ static int test_generated_images(void) {
   return failed;
 }
 
+/* Parse `<text>_<x1>-<y1>_<x2>-<y2>_<x3>-<y3>_<x4>-<y4>.png` filenames from
+   qr_codes_generated into just the text prefix. Returns 0 on success, -1
+   if the shape doesn't match. */
+static int generated_text_from_filename(
+  const char *name,
+  size_t name_len,
+  char *out,
+  size_t out_size
+) {
+  if (name_len < 5 || strcmp(name + name_len - 4, ".png") != 0) {
+    return -1;
+  }
+  size_t stem_len = name_len - 4;
+  const char *stem_end = name + stem_len;
+  const char *text_end = stem_end;
+  for (int g = 0; g < 4; g++) {
+    const char *p = text_end;
+    while (p > name && *(p - 1) != '_') {
+      p--;
+    }
+    if (p <= name) {
+      return -1;
+    }
+    text_end = p - 1;
+  }
+  size_t text_len = (size_t)(text_end - name);
+  if (text_len == 0 || text_len >= out_size) {
+    return -1;
+  }
+  memcpy(out, name, text_len);
+  out[text_len] = '\0';
+  return 0;
+}
+
+static int cmp_strings(const void *a, const void *b) {
+  return strcmp(*(const char *const *)a, *(const char *const *)b);
+}
+
+/* Flips a single-channel image horizontally (left/right mirror) in place. */
+static void flip_gray_x_in_place(uint8_t *buf, int w, int h) {
+  for (int y = 0; y < h; y++) {
+    uint8_t *row = buf + (size_t)y * (size_t)w;
+    for (int x = 0, xr = w - 1; x < xr; x++, xr--) {
+      uint8_t tmp = row[x];
+      row[x] = row[xr];
+      row[xr] = tmp;
+    }
+  }
+}
+
+/* Flips a single-channel image vertically (top/bottom mirror) in place. */
+static void flip_gray_y_in_place(uint8_t *buf, int w, int h) {
+  for (int y = 0, yb = h - 1; y < yb; y++, yb--) {
+    uint8_t *row_t = buf + (size_t)y * (size_t)w;
+    uint8_t *row_b = buf + (size_t)yb * (size_t)w;
+    for (int x = 0; x < w; x++) {
+      uint8_t tmp = row_t[x];
+      row_t[x] = row_b[x];
+      row_b[x] = tmp;
+    }
+  }
+}
+
+typedef enum {
+  ORIENT_FLIP_X,  /* h-flip: chirality inverted → needs mirror retry */
+  ORIENT_FLIP_Y,  /* v-flip: chirality inverted → needs mirror retry */
+  ORIENT_FLIP_XY, /* h+v = 180° rotation: chirality preserved → no retry */
+} Orientation;
+
+static const char *orientation_name(Orientation o) {
+  switch (o) {
+  case ORIENT_FLIP_X:
+    return "flip_x";
+  case ORIENT_FLIP_Y:
+    return "flip_y";
+  case ORIENT_FLIP_XY:
+    return "flip_xy";
+  }
+  return "?";
+}
+
+static void apply_orientation(uint8_t *img, int w, int h, Orientation o) {
+  if (o == ORIENT_FLIP_X || o == ORIENT_FLIP_XY) {
+    flip_gray_x_in_place(img, w, h);
+  }
+  if (o == ORIENT_FLIP_Y || o == ORIENT_FLIP_XY) {
+    flip_gray_y_in_place(img, w, h);
+  }
+}
+
+/* Feeds orientation-transformed versions of a handful of qr_codes_generated
+   images into the decoder. flip_x and flip_y each invert chirality (finders
+   read as TL/BL/TR instead of TL/TR/BL), so both must traverse the mirror
+   retry path. flip_xy is a 180° rotation — chirality is preserved, so it
+   exercises the ordinary rotation-invariant decode path and guards against
+   the mirror retry introducing a regression there. Only a few images are
+   used per orientation — this is a sanity check, not a corpus sweep. */
+static int test_mirrored_qr_codes(void) {
+  const char *dir_path = "tests/qr_codes_generated";
+  const int sample_limit = 5;
+  const Orientation orientations[] = {
+    ORIENT_FLIP_X,
+    ORIENT_FLIP_Y,
+    ORIENT_FLIP_XY,
+  };
+  const size_t num_orients = sizeof(orientations) / sizeof(orientations[0]);
+
+  printf(
+    "Test: Mirrored QR images (first %d from %s × %zu orientations)...\n",
+    sample_limit,
+    dir_path,
+    num_orients
+  );
+
+  DIR *dir = opendir(dir_path);
+  if (!dir) {
+    printf("  SKIP: directory not found\n");
+    return 0;
+  }
+
+  /* Collect and sort matching filenames so the sample is deterministic
+     regardless of readdir order. */
+  char **names = NULL;
+  size_t count = 0, capacity = 0;
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != NULL) {
+    size_t len = strlen(entry->d_name);
+    if (len < 5 || strcmp(entry->d_name + len - 4, ".png") != 0) {
+      continue;
+    }
+    if (count == capacity) {
+      size_t new_cap = capacity == 0 ? 32 : capacity * 2;
+      char **n = realloc(names, new_cap * sizeof(*n));
+      if (!n) {
+        break;
+      }
+      names = n;
+      capacity = new_cap;
+    }
+    names[count++] = strdup(entry->d_name);
+  }
+  closedir(dir);
+  qsort(names, count, sizeof(*names), cmp_strings);
+
+  int passed = 0, failed = 0, total = 0;
+  size_t limit = count < (size_t)sample_limit ? count : (size_t)sample_limit;
+  for (size_t i = 0; i < limit; i++) {
+    const char *name = names[i];
+    char expected[256];
+    if (generated_text_from_filename(
+          name,
+          strlen(name),
+          expected,
+          sizeof(expected)
+        ) < 0) {
+      continue;
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s", dir_path, name);
+
+    for (size_t oi = 0; oi < num_orients; oi++) {
+      Orientation o = orientations[oi];
+
+      int width, height, channels;
+      uint8_t *img = stbi_load(path, &width, &height, &channels, 1);
+      if (!img) {
+        failed++;
+        total++;
+        printf("  FAIL %s [%s]: could not load\n", name, orientation_name(o));
+        continue;
+      }
+      apply_orientation(img, width, height, o);
+
+      FCVQRCodeResult result = fcv_decode_qr_codes(width, height, img);
+      total++;
+
+      int match = 0;
+      for (size_t j = 0; j < result.count; j++) {
+        if (result.codes[j].text &&
+            strcmp(result.codes[j].text, expected) == 0) {
+          match = 1;
+          break;
+        }
+      }
+      if (match) {
+        passed++;
+      }
+      else {
+        failed++;
+        printf(
+          "  FAIL %s [%s]: decoded %zu codes, expected \"%s\"",
+          name,
+          orientation_name(o),
+          result.count,
+          expected
+        );
+        if (result.count > 0 && result.codes[0].text) {
+          printf(", got \"%s\"", result.codes[0].text);
+        }
+        printf("\n");
+      }
+
+      fcv_free_qr_result(result);
+      stbi_image_free(img);
+    }
+  }
+
+  for (size_t i = 0; i < count; i++) {
+    free(names[i]);
+  }
+  free(names);
+
+  printf(
+    "  Mirrored results: %d/%d passed, %d failed\n",
+    passed,
+    total,
+    failed
+  );
+  test_failures += failed;
+  return failed;
+}
+
 typedef struct {
   char **entries;
   size_t count;
@@ -471,7 +694,10 @@ static int run_difficulty_level_negatives(
   return 0;
 }
 
-static int test_difficulty_images(void) {
+/* When `only_level` is non-NULL, only the named level is exercised (e.g.
+   "level_7"); all other levels are skipped. Useful for isolating where a
+   regression or slowdown lives. */
+static int test_difficulty_images_filtered(const char *only_level) {
   const char *root_dir = "tests/qr_codes_difficulty";
   const char *kfl_path = "tests/qr_codes_difficulty_known_failures.txt";
   const char *levels[] = {
@@ -502,6 +728,9 @@ static int test_difficulty_images(void) {
   int fixed_count = 0;
 
   for (size_t i = 0; i < num_levels; i++) {
+    if (only_level && strcmp(levels[i], only_level) != 0) {
+      continue;
+    }
     LevelStats ls;
     memset(&ls, 0, sizeof(ls));
     run_difficulty_level(root_dir, levels[i], &kfl, &ls);
@@ -559,6 +788,10 @@ static int test_difficulty_images(void) {
     return 1;
   }
   return 0;
+}
+
+static int test_difficulty_images(void) {
+  return test_difficulty_images_filtered(NULL);
 }
 
 static int test_photo_images(void) {
@@ -680,18 +913,68 @@ static int test_photo_images(void) {
   return 0;
 }
 
-int main(void) {
+static void print_usage(const char *prog) {
+  fprintf(
+    stderr,
+    "Usage: %s [suite ...]\n"
+    "  No args: run every suite.\n"
+    "  Suites:\n"
+    "    smoke        null/zero/solid/free-null sanity tests\n"
+    "    generated    tests/qr_codes_generated\n"
+    "    mirror       horizontally-flipped subset of generated\n"
+    "    difficulty   all tiers in tests/qr_codes_difficulty\n"
+    "    level_<N>    only that difficulty tier (e.g. level_7)\n"
+    "    photo        tests/qr_codes_photos\n",
+    prog
+  );
+}
+
+int main(int argc, char **argv) {
   printf("Running QR code test suite\n");
   printf("==========================\n");
 
   int any_failed = 0;
-  any_failed |= test_null_pixels();
-  any_failed |= test_zero_dimensions();
-  any_failed |= test_solid_images();
-  any_failed |= test_free_null_result();
-  any_failed |= test_generated_images();
-  any_failed |= test_difficulty_images();
-  any_failed |= test_photo_images();
+  if (argc <= 1) {
+    any_failed |= test_null_pixels();
+    any_failed |= test_zero_dimensions();
+    any_failed |= test_solid_images();
+    any_failed |= test_free_null_result();
+    any_failed |= test_generated_images();
+    any_failed |= test_mirrored_qr_codes();
+    any_failed |= test_difficulty_images();
+    any_failed |= test_photo_images();
+  }
+  else {
+    for (int i = 1; i < argc; i++) {
+      const char *sel = argv[i];
+      if (strcmp(sel, "smoke") == 0) {
+        any_failed |= test_null_pixels();
+        any_failed |= test_zero_dimensions();
+        any_failed |= test_solid_images();
+        any_failed |= test_free_null_result();
+      }
+      else if (strcmp(sel, "generated") == 0) {
+        any_failed |= test_generated_images();
+      }
+      else if (strcmp(sel, "mirror") == 0) {
+        any_failed |= test_mirrored_qr_codes();
+      }
+      else if (strcmp(sel, "difficulty") == 0) {
+        any_failed |= test_difficulty_images();
+      }
+      else if (strncmp(sel, "level_", 6) == 0) {
+        any_failed |= test_difficulty_images_filtered(sel);
+      }
+      else if (strcmp(sel, "photo") == 0) {
+        any_failed |= test_photo_images();
+      }
+      else {
+        fprintf(stderr, "Unknown suite: %s\n", sel);
+        print_usage(argv[0]);
+        return 2;
+      }
+    }
+  }
 
   printf("\n==========================\n");
   if (test_failures > 0 || any_failed) {

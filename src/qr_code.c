@@ -3906,11 +3906,12 @@ static char *decode_payload(uint8_t const *data, int len, int ver) {
   return result;
 }
 
-/* Decode a sampled grid into a payload string. Returns NULL on failure.
-   Writes the format-code Hamming distance to *out_fmt_dist if non-NULL.
-   Writes the Reed-Solomon correction cost (lower = more confident) to
+/* Decode a sampled grid into a payload string, assuming canonical
+   orientation (finders at TL / TR / BL). Returns NULL on failure. Writes
+   the format-code Hamming distance to *out_fmt_dist if non-NULL. Writes
+   the Reed-Solomon correction cost (lower = more confident) to
    *out_rs_cost if non-NULL. */
-static char *decode_grid(
+static char *decode_grid_oriented(
   uint8_t *grid,
   uint8_t const *conf,
   int qr_size,
@@ -4036,6 +4037,77 @@ static char *decode_grid(
     *out_rs_cost = rs_cost;
   }
   return decoded;
+}
+
+/* Transpose an n*n byte buffer (grid[i*n+j] -> out[j*n+i]). */
+static void transpose_grid_u8(uint8_t const *src, uint8_t *dst, int n) {
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < n; j++) {
+      dst[j * n + i] = src[i * n + j];
+    }
+  }
+}
+
+/* Decode a sampled grid, retrying with the matrix transposed when the
+   canonical orientation fails. A "mirrored" QR (ZXing terminology: the
+   symbol read as its own reflection, e.g. through a mirror or printed
+   wrong-way-round) appears with rows and columns swapped relative to the
+   spec. Finder and timing patterns are symmetric under transposition, so
+   those structural checks pass on both orientations, but decode_format
+   samples the wrong cells and the decode aborts. Transposing the grid
+   (and confidence buffer) puts the format, mask, alignment patterns, and
+   zigzag data reading back into canonical positions. Runs only after the
+   canonical decode returns NULL, so valid non-mirrored QRs never pay for
+   the retry and cannot be displaced by a spurious mirror decode. */
+static char *decode_grid(
+  uint8_t *grid,
+  uint8_t const *conf,
+  int qr_size,
+  int version,
+  int *out_fmt_dist,
+  int *out_rs_cost
+) {
+  char *d = decode_grid_oriented(
+    grid,
+    conf,
+    qr_size,
+    version,
+    out_fmt_dist,
+    out_rs_cost
+  );
+  if (d) {
+    return d;
+  }
+
+  int n = qr_size * qr_size;
+  uint8_t *tgrid = malloc((size_t)n);
+  if (!tgrid) {
+    return NULL;
+  }
+  uint8_t *tconf = NULL;
+  if (conf) {
+    tconf = malloc((size_t)n);
+    if (!tconf) {
+      free(tgrid);
+      return NULL;
+    }
+    transpose_grid_u8(conf, tconf, qr_size);
+  }
+  transpose_grid_u8(grid, tgrid, qr_size);
+
+  int fd = 16, rc = 100000;
+  char *dm = decode_grid_oriented(tgrid, tconf, qr_size, version, &fd, &rc);
+  free(tgrid);
+  free(tconf);
+  if (dm) {
+    if (out_fmt_dist) {
+      *out_fmt_dist = fd;
+    }
+    if (out_rs_cost) {
+      *out_rs_cost = rc;
+    }
+  }
+  return dm;
 }
 
 /* ---- Decode the grid under a homography, then perturb the sample offset
