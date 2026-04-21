@@ -2512,6 +2512,114 @@ static int find_alignment_pattern(
   return 1;
 }
 
+/* ---- Alignment pattern grid positions (ISO/IEC 18004 Annex E) ----
+   Each row lists the grid coordinates (in modules, 0-indexed) where
+   alignment pattern centres lie for that version. Alignment patterns
+   exist at every combination (row, col) of these values EXCEPT the
+   three that overlap the finder patterns: (first, first), (first, last),
+   (last, first). Index = version. Count is stored in [0]; up to 7 values
+   follow in [1..7]. v1 has no alignment patterns. */
+static const int QR_ALIGN_GRID[41][8] = {
+  {0},                      /* v0 unused */
+  {0},                      /* v1 */
+  {2, 6, 18},  {2, 6, 22},  {2, 6, 26},  {2, 6, 30},  {2, 6, 34},
+  {3, 6, 22, 38},  {3, 6, 24, 42},  {3, 6, 26, 46},  {3, 6, 28, 50},
+  {3, 6, 30, 54},  {3, 6, 32, 58},  {3, 6, 34, 62},
+  {4, 6, 26, 46, 66},  {4, 6, 26, 48, 70},  {4, 6, 26, 50, 74},
+  {4, 6, 30, 54, 78},  {4, 6, 30, 56, 82},  {4, 6, 30, 58, 86},
+  {4, 6, 34, 62, 90},
+  {5, 6, 28, 50, 72, 94},  {5, 6, 26, 50, 74, 98},
+  {5, 6, 30, 54, 78, 102}, {5, 6, 28, 54, 80, 106},
+  {5, 6, 32, 58, 84, 110}, {5, 6, 30, 58, 86, 114},
+  {5, 6, 34, 62, 90, 118},
+  {6, 6, 26, 50, 74, 98, 122},  {6, 6, 30, 54, 78, 102, 126},
+  {6, 6, 26, 52, 78, 104, 130}, {6, 6, 30, 56, 82, 108, 134},
+  {6, 6, 34, 60, 86, 112, 138}, {6, 6, 30, 58, 86, 114, 142},
+  {6, 6, 34, 62, 90, 118, 146},
+  {7, 6, 30, 54, 78, 102, 126, 150},  {7, 6, 24, 50, 76, 102, 128, 154},
+  {7, 6, 28, 54, 80, 106, 132, 158},  {7, 6, 32, 58, 84, 110, 136, 162},
+  {7, 6, 26, 54, 82, 110, 138, 166},  {7, 6, 30, 58, 86, 114, 142, 170},
+};
+
+/* Apply a 3x3 homography H (row-major) to module coordinates (mx, my),
+   returning pixel coordinates. Shared with the quadratic-warp path. */
+static int project_homography(
+  const double H[9], double mx, double my, double *out_px, double *out_py
+) {
+  double w_h = H[6] * mx + H[7] * my + H[8];
+  if (fabs(w_h) < 1e-10) {
+    return 0;
+  }
+  *out_px = (H[0] * mx + H[1] * my + H[2]) / w_h;
+  *out_py = (H[3] * mx + H[4] * my + H[5]) / w_h;
+  return 1;
+}
+
+/* Find every alignment pattern predicted by H for this version, skipping
+   the three that overlap the finders. Writes (module-coord, pixel-coord)
+   pairs for each one found, and returns the count. `search_r_modules`
+   controls how far find_alignment_pattern looks from each predicted
+   centre — widen it when H is an unrefined affine extrapolation from
+   three finders (the residual under strong perspective can be 3-4
+   modules), tighten it when H already folds in the BR alignment. */
+static int find_all_alignment_patterns(
+  uint8_t const *px,
+  int w,
+  int h,
+  int version,
+  const double H[9],
+  float avg_m,
+  float search_r_modules,
+  double out_src[][2],
+  double out_dst[][2],
+  int max_out
+) {
+  if (version < 2 || version > 40) {
+    return 0;
+  }
+  int nvals = QR_ALIGN_GRID[version][0];
+  if (nvals < 2) {
+    return 0;
+  }
+  int last = QR_ALIGN_GRID[version][nvals];
+  int first = QR_ALIGN_GRID[version][1];
+  float search_r = avg_m * search_r_modules;
+  int found = 0;
+  for (int ri = 0; ri < nvals; ri++) {
+    int row = QR_ALIGN_GRID[version][1 + ri];
+    for (int ci = 0; ci < nvals; ci++) {
+      int col = QR_ALIGN_GRID[version][1 + ci];
+      /* Skip the three finder-overlapping positions. */
+      if ((row == first && col == first) ||
+          (row == first && col == last) ||
+          (row == last && col == first)) {
+        continue;
+      }
+      if (found >= max_out) {
+        return found;
+      }
+      double mx = (double)col + 0.5;
+      double my = (double)row + 0.5;
+      double pred_x, pred_y;
+      if (!project_homography(H, mx, my, &pred_x, &pred_y)) {
+        continue;
+      }
+      float found_x, found_y;
+      if (find_alignment_pattern(
+            px, w, h, (float)pred_x, (float)pred_y,
+            avg_m, search_r, &found_x, &found_y
+          )) {
+        out_src[found][0] = mx;
+        out_src[found][1] = my;
+        out_dst[found][0] = found_x;
+        out_dst[found][1] = found_y;
+        found++;
+      }
+    }
+  }
+  return found;
+}
+
 /* ---- Grid sampling ----
    Homography-only: uses a 4-point perspective transform and samples a small
    cluster of pixels near each module center, taking the majority value to
@@ -4488,6 +4596,60 @@ static char *try_decode_triple(
           {{tl.x, tl.y}, {tr.x, tr.y}, {found_ax, found_ay}, {bl.x, bl.y}};
         double H[9];
         if (compute_homography(src, dst, H)) {
+          /* For v7+ QRs, refine H by finding all other alignment patterns
+             and least-squares fitting over 3 finders + all APs. The BR-only
+             4-point fit is exact but fits a pure perspective, which leaves
+             residual drift under paper curl or compound distortion. Each
+             additional AP constrains the interior of the grid, so the
+             refined H samples data bits more accurately near the BR where
+             zigzag reads start — a half-module drift on the mode
+             indicator is enough to read byte mode as alphanumeric. */
+          if (version >= 7) {
+            enum { MAX_AP = 45 };
+            double ap_src[MAX_AP][2], ap_dst[MAX_AP][2];
+            /* Predict interior APs via the 4-point H first (accurate when
+               the BR snap is good). If too few come back, retry with the
+               pure-affine transform (no BR bias) and a wider search —
+               recovers v7+ QRs where the BR snap was off by 30-50 px. */
+            int n_ap = find_all_alignment_patterns(
+              pixels, width, height, version, H, avg_m, 2.0f,
+              ap_src, ap_dst, MAX_AP
+            );
+            if (n_ap < 2) {
+              double H_affine[9] = {
+                a11, a12, b1, a21, a22, b2, 0.0, 0.0, 1.0
+              };
+              n_ap = find_all_alignment_patterns(
+                pixels, width, height, version, H_affine, avg_m, 4.0f,
+                ap_src, ap_dst, MAX_AP
+              );
+            }
+            if (n_ap >= 2) {
+              double pts_src[MAX_AP + 4][2];
+              double pts_dst[MAX_AP + 4][2];
+              int np = 0;
+              pts_src[np][0] = sx0; pts_src[np][1] = sy0;
+              pts_dst[np][0] = tl.x; pts_dst[np][1] = tl.y;
+              np++;
+              pts_src[np][0] = sx1; pts_src[np][1] = sy1;
+              pts_dst[np][0] = tr.x; pts_dst[np][1] = tr.y;
+              np++;
+              pts_src[np][0] = sx2; pts_src[np][1] = sy2;
+              pts_dst[np][0] = bl.x; pts_dst[np][1] = bl.y;
+              np++;
+              for (int i = 0; i < n_ap; i++) {
+                pts_src[np][0] = ap_src[i][0];
+                pts_src[np][1] = ap_src[i][1];
+                pts_dst[np][0] = ap_dst[i][0];
+                pts_dst[np][1] = ap_dst[i][1];
+                np++;
+              }
+              double H_ls[9];
+              if (compute_homography_ls(pts_src, pts_dst, np, H_ls)) {
+                memcpy(H, H_ls, sizeof(H));
+              }
+            }
+          }
           memcpy(H_primary, H, sizeof(H));
           have_primary_H = 1;
           int fd = 16;
