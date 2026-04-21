@@ -67,29 +67,22 @@ void print32_t_usage(const char *program_name) {
     "  bw_smooth       - Smooth (anti-aliased) black and white conversion\n"
   );
   printf("  detect_corners  - Detect corners and output as JSON\n");
-  printf(
-    "  draw_corners    - Detect corners and draw circles at each corner\n"
+  printf("  draw_corners    - Detect corners and draw circles at each corner\n"
   );
   printf("  sobel           - Apply Sobel edge detection\n");
   printf(
     "  circle <hex_color> <radius> <x>x<y> - Draw a colored circle at position "
     "(x,y)\n"
   );
-  printf(
-    "  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
-    "position "
-    "(x,y)\n"
-  );
-  printf(
-    "  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
-    "markers at "
-    "specified coordinates\n"
-  );
+  printf("  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
+         "position "
+         "(x,y)\n");
+  printf("  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
+         "markers at "
+         "specified coordinates\n");
   printf("  crop <widthxheight+x+y> - Crop the image\n");
-  printf(
-    "  extract_document - Extract document using corner detection and "
-    "perspective transform (auto-size)\n"
-  );
+  printf("  extract_document - Extract document using corner detection and "
+         "perspective transform (auto-size)\n");
   printf(
     "  extract_document_to <output_width>x<output_height> - Extract document "
     "to specific dimensions\n"
@@ -100,8 +93,7 @@ void print32_t_usage(const char *program_name) {
   printf(
     "  flip_y          - Flip image vertically (mirror along horizontal axis)\n"
   );
-  printf(
-    "  rotate <angle>  - Rotate image by angle (must be multiple of 90)\n"
+  printf("  rotate <angle>  - Rotate image by angle (must be multiple of 90)\n"
   );
   printf(
     "  trim [<threshold>%%] - Remove border pixels with same color (optional "
@@ -836,9 +828,8 @@ uint8_t *apply_operation(
       fprintf(stderr, "Error: blur operation requires radius parameter\n");
       return NULL;
     }
-    return (
-      uint8_t *
-    )fcv_apply_gaussian_blur(*width, *height, param, input_data);
+    return (uint8_t *)
+      fcv_apply_gaussian_blur(*width, *height, param, input_data);
   }
   else if (strcmp(operation, "resize") == 0) {
     double resize_x, resize_y;
@@ -907,9 +898,8 @@ uint8_t *apply_operation(
     return result;
   }
   else if (strcmp(operation, "threshold") == 0) {
-    return (
-      uint8_t *
-    )fcv_otsu_threshold_rgba(*width, *height, false, input_data);
+    return (uint8_t *)
+      fcv_otsu_threshold_rgba(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smart") == 0) {
     return (uint8_t *)fcv_bw_smart(*width, *height, false, input_data);
@@ -1442,9 +1432,8 @@ uint8_t *apply_operation(
     if (has_string_param && param_str && strchr(param_str, '%')) {
       // Trim with threshold percentage
       double threshold = atof(param_str);
-      return (
-        uint8_t *
-      )fcv_trim_threshold(width, height, 4, input_data, threshold);
+      return (uint8_t *)
+        fcv_trim_threshold(width, height, 4, input_data, threshold);
     }
     else if (has_param) {
       // Trim with threshold as numeric parameter
