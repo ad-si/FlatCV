@@ -4786,14 +4786,18 @@ static void try_pipeline(
 /* Runs the full binarizer/preprocessor cascade against `gray_pixels`. The
    sequence is cheapest-first; each attempt short-circuits once a
    high-confidence decode (fmt_dist <= 1, length >= 5) is in hand, so the
-   work only expands as far as the image demands. Called twice by the
-   public decoder — once for the original polarity and once for the
-   inverted buffer — which lets light-on-dark QRs (level_13) ride the same
-   Sauvola/upsample/median passes the normal-polarity pass has. */
+   work only expands as far as the image demands. Called by the public
+   decoder at each pyramid level and once again on the inverted buffer —
+   which lets light-on-dark QRs (level_13) ride the same Sauvola/upsample/
+   median passes the normal-polarity pass has. `is_finest_level` gates the
+   native-resolution-only passes (2x/3x upsample), which exist to rescue
+   tiny QRs at native scale; upsampling from a downsampled pyramid level
+   is strictly worse than running those passes at level 0. */
 static void run_all_attempts(
   uint8_t const *gray_pixels,
   int w,
   int h,
+  int is_finest_level,
   char **best_decoded,
   int *best_fmt_dist,
   int *best_rs_cost,
@@ -4913,8 +4917,8 @@ static void run_all_attempts(
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 &&
-            strlen(*best_decoded) >= 5)) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
+          )) {
         bin = binarize_adaptive(sharp, w, h);
         if (bin) {
           try_pipeline(
@@ -4941,9 +4945,11 @@ static void run_all_attempts(
      at native resolution. Coordinates from any winning upsampled decode are
      scaled back by 1/n before returning. Attempt 5b (3x) follows when 2x
      still doesn't yield a confident decode; helpful for QRs with mod < 3 px
-     where even doubled modules remain on the edge of the ratio tolerance. */
+     where even doubled modules remain on the edge of the ratio tolerance.
+     Skipped at coarser pyramid levels: upsampling a downsampled buffer is
+     strictly worse than running this at level 0 on the original data. */
   for (int n_try = 2; n_try <= 3; n_try++) {
-    if (small_image) {
+    if (small_image || !is_finest_level) {
       break;
     }
     /* Skip the upscaled passes when we already have a long, perfect-format
@@ -5077,8 +5083,8 @@ static void run_all_attempts(
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 &&
-            strlen(*best_decoded) >= 5)) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
+          )) {
         bin = binarize_adaptive(med, w, h);
         if (bin) {
           try_pipeline(
@@ -5099,110 +5105,60 @@ static void run_all_attempts(
       free(med);
     }
   }
+}
 
-  /* Attempt 7: 2x box-average downsample + Otsu, then hybrid. Mirrors
-     zxing-cpp's LumImagePyramid: at full resolution some images (notably
-     level_13's pastel coloured-inverted QR on a checkered bg) have every
-     8x8 block's dynamic range below MIN_DYNAMIC_RANGE=24, so hybrid's
-     sparse-threshold grid is empty and flood-fills to zero. Downsampling
-     by 2 averages anti-aliased QR-edge pixels into new intermediate luma
-     values, raising enough blocks above the threshold for hybrid to seed
-     from. Winning coordinates are scaled back by 2x. Gated on the same
-     "no confident decode yet" predicate so already-decoded images skip
-     the work. */
-  if (!small_image &&
-      !(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5)) {
-    uint8_t *down = downsample_2x_box(gray_pixels, w, h);
-    if (down) {
-      int dw = w / 2;
-      int dh = h / 2;
-      char *best_decoded_dn = NULL;
-      Corners best_corners_dn = {0};
-      Point2D best_finders_dn[3] = {{0, 0}, {0, 0}, {0, 0}};
-      double best_module_size_dn = 0;
-      int best_fmt_dist_dn = 16;
-      int best_rs_cost_dn = 100000;
+/* ---- Pyramid-level decode helpers ---- */
 
-      bin = binarize_global_otsu(down, dw, dh);
-      if (bin) {
-        try_pipeline(
-          bin,
-          down,
-          dw,
-          dh,
-          &best_decoded_dn,
-          &best_fmt_dist_dn,
-          &best_rs_cost_dn,
-          &best_corners_dn,
-          best_finders_dn,
-          &best_module_size_dn
-        );
-        free(bin);
-      }
-      if (!(best_decoded_dn && best_fmt_dist_dn <= 1)) {
-        bin = binarize_hybrid(down, dw, dh);
-        if (bin) {
-          try_pipeline(
-            bin,
-            down,
-            dw,
-            dh,
-            &best_decoded_dn,
-            &best_fmt_dist_dn,
-            &best_rs_cost_dn,
-            &best_corners_dn,
-            best_finders_dn,
-            &best_module_size_dn
-          );
-          free(bin);
-        }
-      }
-      free(down);
-
-      /* Promote the downsampled result with the same ranking logic the
-         upsample attempt uses; scale spatial outputs back up by 2. */
-      if (best_decoded_dn) {
-        int replace = 0;
-        int prev_len = (*best_decoded) ? (int)strlen(*best_decoded) : -1;
-        int new_len = (int)strlen(best_decoded_dn);
-        if (!*best_decoded) {
-          replace = 1;
-        }
-        else if (best_fmt_dist_dn < *best_fmt_dist) {
-          replace = 1;
-        }
-        else if (best_fmt_dist_dn == *best_fmt_dist && new_len > prev_len) {
-          replace = 1;
-        }
-        else if (best_fmt_dist_dn == *best_fmt_dist && new_len == prev_len &&
-                 best_rs_cost_dn < *best_rs_cost) {
-          replace = 1;
-        }
-        if (replace) {
-          free(*best_decoded);
-          *best_decoded = best_decoded_dn;
-          *best_fmt_dist = best_fmt_dist_dn;
-          *best_rs_cost = best_rs_cost_dn;
-          best_corners->tl_x = best_corners_dn.tl_x * 2.0;
-          best_corners->tl_y = best_corners_dn.tl_y * 2.0;
-          best_corners->tr_x = best_corners_dn.tr_x * 2.0;
-          best_corners->tr_y = best_corners_dn.tr_y * 2.0;
-          best_corners->br_x = best_corners_dn.br_x * 2.0;
-          best_corners->br_y = best_corners_dn.br_y * 2.0;
-          best_corners->bl_x = best_corners_dn.bl_x * 2.0;
-          best_corners->bl_y = best_corners_dn.bl_y * 2.0;
-          for (int i = 0; i < 3; i++) {
-            best_finders[i].x = best_finders_dn[i].x * 2.0;
-            best_finders[i].y = best_finders_dn[i].y * 2.0;
-          }
-          *best_module_size = best_module_size_dn * 2.0;
-        }
-        else {
-          free(best_decoded_dn);
-        }
-      }
-    }
+/* Scales all spatial fields of a decode state by `scale`. Used to convert
+   coordinates from a downsampled pyramid level back into original-image
+   pixel space. */
+static void scale_decode_state(
+  Corners *corners,
+  Point2D finders[3],
+  double *module_size,
+  double scale
+) {
+  corners->tl_x *= scale;
+  corners->tl_y *= scale;
+  corners->tr_x *= scale;
+  corners->tr_y *= scale;
+  corners->br_x *= scale;
+  corners->br_y *= scale;
+  corners->bl_x *= scale;
+  corners->bl_y *= scale;
+  for (int i = 0; i < 3; i++) {
+    finders[i].x *= scale;
+    finders[i].y *= scale;
   }
+  *module_size *= scale;
+}
+
+/* Returns 1 if (cand_*) should replace (cur_*). Ranking is: lower fmt_dist
+   first, then longer decoded string, then lower RS cost. Matches the
+   promotion logic previously inlined in the upsample / downsample blocks. */
+static int decode_is_better(
+  char const *cur,
+  int cur_fmt,
+  int cur_rs,
+  char const *cand,
+  int cand_fmt,
+  int cand_rs
+) {
+  if (!cand) {
+    return 0;
+  }
+  if (!cur) {
+    return 1;
+  }
+  if (cand_fmt != cur_fmt) {
+    return cand_fmt < cur_fmt;
+  }
+  int cur_len = (int)strlen(cur);
+  int cand_len = (int)strlen(cand);
+  if (cand_len != cur_len) {
+    return cand_len > cur_len;
+  }
+  return cand_rs < cur_rs;
 }
 
 FCVQRCodeResult fcv_decode_qr_codes(
@@ -5229,6 +5185,62 @@ FCVQRCodeResult fcv_decode_qr_codes(
   int w = (int)width;
   int h = (int)height;
 
+  /* ---- Build a box-averaged pyramid ----
+     Level 0 is the original; level k+1 is a 2x2 box-average of level k.
+     We stop halving once the short side would drop below MIN_SHORT_SIDE,
+     below which even a version-1 QR (21 modules) can't plausibly survive
+     binarization (<6 px/module after quiet zone). */
+#define QR_PYRAMID_MAX 6
+#define QR_PYRAMID_MIN_SHORT 120
+#define QR_PYRAMID_TARGET_SHORT 640
+
+  uint8_t const *lv_px[QR_PYRAMID_MAX];
+  int lv_w[QR_PYRAMID_MAX], lv_h[QR_PYRAMID_MAX];
+  int lv_owned[QR_PYRAMID_MAX];
+
+  lv_px[0] = gray_pixels;
+  lv_w[0] = w;
+  lv_h[0] = h;
+  lv_owned[0] = 0;
+  int n_levels = 1;
+  while (n_levels < QR_PYRAMID_MAX) {
+    int nw = lv_w[n_levels - 1] / 2;
+    int nh = lv_h[n_levels - 1] / 2;
+    int short_side = nw < nh ? nw : nh;
+    if (short_side < QR_PYRAMID_MIN_SHORT) {
+      break;
+    }
+    uint8_t *down = downsample_2x_box(
+      lv_px[n_levels - 1],
+      lv_w[n_levels - 1],
+      lv_h[n_levels - 1]
+    );
+    if (!down) {
+      break;
+    }
+    lv_px[n_levels] = down;
+    lv_w[n_levels] = nw;
+    lv_h[n_levels] = nh;
+    lv_owned[n_levels] = 1;
+    n_levels++;
+  }
+
+  /* Target level: the coarsest (highest-index) level whose short side is
+     still >= TARGET. Decouples first-pass work from sensor resolution:
+     the common case of "one QR filling a large fraction of a phone photo"
+     gets scanned at ~640 px regardless of whether the source is 1 MP or
+     48 MP. If no level meets the target (small input), target stays 0. */
+  int target = 0;
+  for (int i = 1; i < n_levels; i++) {
+    int short_side = lv_w[i] < lv_h[i] ? lv_w[i] : lv_h[i];
+    if (short_side >= QR_PYRAMID_TARGET_SHORT) {
+      target = i;
+    }
+    else {
+      break;
+    }
+  }
+
   char *best_decoded = NULL;
   Corners best_corners = {0};
   Point2D best_finders[3] = {{0, 0}, {0, 0}, {0, 0}};
@@ -5236,41 +5248,116 @@ FCVQRCodeResult fcv_decode_qr_codes(
   int best_fmt_dist = 16;
   int best_rs_cost = 100000;
 
-  run_all_attempts(
-    gray_pixels,
-    w,
-    h,
-    &best_decoded,
-    &best_fmt_dist,
-    &best_rs_cost,
-    &best_corners,
-    best_finders,
-    &best_module_size
-  );
+  /* Visit order: target first (best balance of detail vs. noise for the
+     typical "one QR filling most of a phone photo" case), then coarser
+     levels (cheap, different binarizer response — catches level_13's
+     low-contrast pastel-on-checkered case the old inline 2x-downsample
+     attempt used to handle), then finer levels (expensive, last resort
+     for tiny QRs). Stop as soon as a confident decode (fmt_dist <= 1,
+     length >= 5) is in hand. Non-confident decodes are kept as best-so-
+     far and may be displaced by a cleaner result from another level. */
+  int visit_order[QR_PYRAMID_MAX];
+  int n_visits = 0;
+  visit_order[n_visits++] = target;
+  for (int lvl = target + 1; lvl < n_levels; lvl++) {
+    visit_order[n_visits++] = lvl;
+  }
+  for (int lvl = target - 1; lvl >= 0; lvl--) {
+    visit_order[n_visits++] = lvl;
+  }
 
-  /* Inverted-polarity retry. Handles level_13's light-on-dark and
-     coloured-inverted palettes by running the exact same attempt cascade
-     on 255 - v. Only fires when nothing has decoded confidently: a strong
-     normal-polarity decode is never worth displacing, and inverting
-     near-uniform regions can produce plausible-looking noise that the
-     ratio-7 finder check occasionally latches onto. */
-  if (!(best_decoded && best_fmt_dist <= 1 && strlen(best_decoded) >= 5)) {
-    uint8_t *inv = invert_gray(gray_pixels, w, h);
-    if (inv) {
-      run_all_attempts(
-        inv,
-        w,
-        h,
-        &best_decoded,
-        &best_fmt_dist,
-        &best_rs_cost,
-        &best_corners,
-        best_finders,
-        &best_module_size
-      );
-      free(inv);
+  for (int vi = 0; vi < n_visits; vi++) {
+    int lvl = visit_order[vi];
+    double scale = (double)(1 << lvl);
+    int is_finest = (lvl == 0);
+    int lw = lv_w[lvl];
+    int lh = lv_h[lvl];
+    uint8_t const *lpx = lv_px[lvl];
+
+    char *decoded = NULL;
+    Corners corners = {0};
+    Point2D finders[3] = {{0, 0}, {0, 0}, {0, 0}};
+    double module_size = 0;
+    int fmt_dist = 16;
+    int rs_cost = 100000;
+
+    run_all_attempts(
+      lpx,
+      lw,
+      lh,
+      is_finest,
+      &decoded,
+      &fmt_dist,
+      &rs_cost,
+      &corners,
+      finders,
+      &module_size
+    );
+
+    /* Inverted-polarity retry at this level — handles light-on-dark QRs.
+       Only fires if nothing at this level has decoded confidently.
+       Confidence = fmt_dist <= 1 (format info BCH can correct 1-bit errors
+       in its 15-bit code, so a 0-or-1-bit fmt_dist reliably indicates a
+       real QR). Length is not a trust signal: legitimate v1 QRs routinely
+       encode 2-4 characters. */
+    if (!(decoded && fmt_dist <= 1)) {
+      uint8_t *inv = invert_gray(lpx, lw, lh);
+      if (inv) {
+        run_all_attempts(
+          inv,
+          lw,
+          lh,
+          is_finest,
+          &decoded,
+          &fmt_dist,
+          &rs_cost,
+          &corners,
+          finders,
+          &module_size
+        );
+        free(inv);
+      }
+    }
+
+    if (decoded) {
+      scale_decode_state(&corners, finders, &module_size, scale);
+      if (decode_is_better(
+            best_decoded,
+            best_fmt_dist,
+            best_rs_cost,
+            decoded,
+            fmt_dist,
+            rs_cost
+          )) {
+        free(best_decoded);
+        best_decoded = decoded;
+        best_fmt_dist = fmt_dist;
+        best_rs_cost = rs_cost;
+        best_corners = corners;
+        for (int i = 0; i < 3; i++) {
+          best_finders[i] = finders[i];
+        }
+        best_module_size = module_size;
+      }
+      else {
+        free(decoded);
+      }
+    }
+
+    if (best_decoded && best_fmt_dist <= 1) {
+      break;
     }
   }
+
+  for (int i = 1; i < n_levels; i++) {
+    if (lv_owned[i]) {
+      free((uint8_t *)lv_px[i]);
+    }
+  }
+
+#undef QR_PYRAMID_MAX
+#undef QR_PYRAMID_MIN_SHORT
+#undef QR_PYRAMID_TARGET_SHORT
 
   if (best_decoded) {
     FCVQRCode *qr = &result.codes[result.count++];
