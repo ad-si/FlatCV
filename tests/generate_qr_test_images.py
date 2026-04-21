@@ -714,6 +714,43 @@ def apply_cylindrical_warp(
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
 
 
+def apply_wrinkle_warp(
+    img: Image.Image,
+    amplitude: float,
+    base_cells: int = 14,
+) -> Image.Image:
+    """Remap pixels along a 2D value-noise displacement field — simulates
+    short-wavelength paper wrinkles (creases and ridges a few millimetres
+    across) that jitter the module grid non-uniformly.
+    Distinct from apply_cylindrical_warp, which bends the whole surface
+    as a smooth cylinder. Amplitude is in pixels at image scale;
+    base_cells controls wrinkle wavelength (≈ image_min / base_cells)."""
+    arr = np.asarray(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+    dx = (_value_noise(w, h, base_cells=base_cells, octaves=3) - 0.5) * (
+        2.0 * amplitude
+    )
+    dy = (_value_noise(w, h, base_cells=base_cells, octaves=3) - 0.5) * (
+        2.0 * amplitude
+    )
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    src_x = np.clip(xs + dx, 0.0, float(w - 1))
+    src_y = np.clip(ys + dy, 0.0, float(h - 1))
+    x0 = src_x.astype(np.int32)
+    x1 = np.clip(x0 + 1, 0, w - 1)
+    y0 = src_y.astype(np.int32)
+    y1 = np.clip(y0 + 1, 0, h - 1)
+    fx = (src_x - x0)[..., None]
+    fy = (src_y - y0)[..., None]
+    out = (
+        arr[y0, x0] * (1.0 - fx) * (1.0 - fy)
+        + arr[y0, x1] * fx * (1.0 - fy)
+        + arr[y1, x0] * (1.0 - fx) * fy
+        + arr[y1, x1] * fx * fy
+    )
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
+
+
 def apply_qr_occlusion(
     qr_rgba: Image.Image, border: int, box_size: int
 ) -> Image.Image:
@@ -1164,16 +1201,18 @@ def _render_level(
         )
         return apply_physical_damage(img)
 
-    # Level 21: curled-paper receipt. Two-axis paper curl (linear
-    # homographies can't rectify a non-planar surface) stacked with
-    # concentric-square clutter (wide-run false-positive finders crowd
-    # out the real triple unless select_and_rank clusters by module
-    # size). Reproduces the failure mode that commit 581fdc0 fixed —
-    # the five curled-paper improvements only become load-bearing when
-    # curl and clutter appear together.
-    # ECI payloads are intentionally not covered here — the `qrcode`
-    # Python library doesn't emit ECI indicators; regression coverage
-    # for that code path relies on real photo fixtures.
+    # Level 21: curled + wrinkled paper receipt. Two distortions stacked:
+    #   (1) Two-axis cylindrical curl — a smooth non-planar surface no
+    #       4-point homography can rectify.
+    #   (2) Value-noise wrinkle displacement — short-wavelength local
+    #       creases that jitter module centres off the timing-pattern
+    #       line, separately from the large-scale curl.
+    # Plus photo-like background + concentric-square clutter decoys
+    # (stresses finder-pattern discrimination) and full rotation.
+    # Reproduces the failure mode that commit 581fdc0 addressed.
+    # ECI payloads are not covered here — the `qrcode` Python library
+    # doesn't emit ECI indicators; that code path relies on real
+    # photo fixtures for regression coverage.
     w, h = random.choice([(640, 480), (800, 600), (1024, 768)])
     bg = Image.new("RGB", (w, h))
     bg_photo_like(bg)
@@ -1192,6 +1231,11 @@ def _render_level(
         img,
         angle_max=random.uniform(0.3, 0.5),
         axis="h" if primary_axis == "v" else "v",
+    )
+    img = apply_wrinkle_warp(
+        img,
+        amplitude=random.uniform(2.0, 4.0),
+        base_cells=random.choice([16, 20, 24]),
     )
     return img
 
