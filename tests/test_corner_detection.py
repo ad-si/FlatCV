@@ -13,6 +13,7 @@ import json
 import subprocess
 import sys
 import os
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 import math
 from shapely.geometry import Polygon
@@ -108,6 +109,55 @@ def run_corner_detection(image_path):
     return None
 
 
+def process_image(image_path_str):
+  """Worker: run detection + overlap for one image. Must be top-level for pickling."""
+  image_file = Path(image_path_str)
+  json_file = image_file.with_suffix('.json')
+
+  if not json_file.exists():
+    return {
+      "name": image_file.name,
+      "status": "skip_no_truth",
+      "line": f"⚠️  Skipping {image_file.name} - no ground truth file",
+      "counted": False,
+      "overlap": 0.0,
+    }
+
+  try:
+    with open(json_file, 'r') as f:
+      ground_truth = json.load(f)
+  except json.JSONDecodeError as e:
+    return {
+      "name": image_file.name,
+      "status": "skip_bad_json",
+      "line": f"❌ Error reading {json_file.name}: {e}",
+      "counted": False,
+      "overlap": 0.0,
+    }
+
+  detected = run_corner_detection(str(image_file))
+  if detected is None:
+    return {
+      "name": image_file.name,
+      "status": "detect_failed",
+      "line": f"❌ {image_file.name}: Corner detection failed (0.0% overlap)",
+      "counted": True,
+      "overlap": 0.0,
+    }
+
+  overlap = calculate_overlap_percentage(
+    detected.get('corners', {}),
+    ground_truth.get('corners', {})
+  )
+  return {
+    "name": image_file.name,
+    "status": "ok",
+    "line": f"📊 {image_file.name}: {overlap:.1f}% overlap",
+    "counted": True,
+    "overlap": overlap,
+  }
+
+
 def main():
   """Main test function."""
   # Get the directory containing test documents
@@ -126,7 +176,7 @@ def main():
 
   total_overlap = 0.0
   total_tests = 0
-  
+
   # Group images by category
   categories = {}
   for image_file in image_files:
@@ -138,53 +188,29 @@ def main():
   print(f"Running corner detection tests on {len(image_files)} images...")
   print()
 
-  # Process each category separately
-  for category in sorted(categories.keys()):
-    print(f"🏷️  {category.upper().replace('_', ' ')}")
-    category_overlap = 0.0
-    category_tests = 0
-    
-    for image_file in sorted(categories[category]):
-      json_file = image_file.with_suffix('.json')
+  with ProcessPoolExecutor() as pool:
+    # Process each category separately
+    for category in sorted(categories.keys()):
+      print(f"🏷️  {category.upper().replace('_', ' ')}")
+      ordered_files = sorted(categories[category])
+      # map preserves input order, so results align with ordered_files
+      results = list(pool.map(process_image, [str(f) for f in ordered_files]))
 
-      if not json_file.exists():
-        print(f"⚠️  Skipping {image_file.name} - no ground truth file")
-        continue
+      category_overlap = 0.0
+      category_tests = 0
+      for result in results:
+        print(result["line"])
+        if result["counted"]:
+          category_tests += 1
+          total_tests += 1
+          category_overlap += result["overlap"]
+          total_overlap += result["overlap"]
 
-      # Load ground truth
-      try:
-        with open(json_file, 'r') as f:
-          ground_truth = json.load(f)
-      except json.JSONDecodeError as e:
-        print(f"❌ Error reading {json_file.name}: {e}")
-        continue
-
-      # Run corner detection
-      detected = run_corner_detection(str(image_file))
-      if detected is None:
-        print(f"❌ {image_file.name}: Corner detection failed (0.0% overlap)")
-        category_tests += 1
-        total_tests += 1
-        continue
-
-      # Calculate overlap percentage
-      overlap = calculate_overlap_percentage(
-        detected.get('corners', {}),
-        ground_truth.get('corners', {})
-      )
-
-      category_overlap += overlap
-      category_tests += 1
-      total_tests += 1
-      total_overlap += overlap
-
-      print(f"📊 {image_file.name}: {overlap:.1f}% overlap")
-    
-    # Print category summary
-    if category_tests > 0:
-      category_avg = category_overlap / category_tests
-      print(f"   📈 {category.replace('_', ' ').title()}: {category_avg:.1f}% average (n={category_tests})")
-    print()
+      # Print category summary
+      if category_tests > 0:
+        category_avg = category_overlap / category_tests
+        print(f"   📈 {category.replace('_', ' ').title()}: {category_avg:.1f}% average (n={category_tests})")
+      print()
 
   # Calculate and display overall results
   if total_tests > 0:

@@ -29,12 +29,12 @@ format:
 
 .PHONY: test-units
 test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
-	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
+	$(CC) $(CFLAGS) -O2 -Wall -Wextra -Wpedantic \
 		-Iinclude tests/test.c $(LIB_SRC_FILES) \
 		-lm -o test_bin \
 	&& ./test_bin
 
-	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
+	$(CC) $(CFLAGS) -O2 -Wall -Wextra -Wpedantic \
 		-Iinclude $(LIB_SRC_FILES) tests/apply_test.c \
 		-lm -o apply_test \
 	&& ./apply_test
@@ -51,7 +51,7 @@ test-units: $(HDR_FILES) $(SRC_FILES) $(TEST_FILES)
 		uv run tests/generate_qr_test_images.py --difficulty --per-level 30 --seed 42; \
 	fi
 
-	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
+	$(CC) $(CFLAGS) -O2 -Wall -Wextra -Wpedantic \
 		-Iinclude $(LIB_SRC_FILES) tests/test_qr_code.c \
 		-lm -o test_qr_code \
 	&& ./test_qr_code
@@ -79,20 +79,29 @@ test-amalgamation: flatcv.h flatcv.c tests/test_amalgamation.c
 	# Test that amalgamated files compile and work correctly
 	mkdir -p tmp/amalgamation_test
 	cp flatcv.h flatcv.c tests/test_amalgamation.c tmp/amalgamation_test/
-	cd tmp/amalgamation_test && $(CC) $(CFLAGS) -Wall -Wextra -Wpedantic \
+	cd tmp/amalgamation_test && $(CC) $(CFLAGS) -O2 -Wall -Wextra -Wpedantic \
 		flatcv.c test_amalgamation.c \
 		-lm -o test_amalgamation_bin \
 	&& ./test_amalgamation_bin
 
 
 .PHONY: test-corner-detection
-test-corner-detection: flatcv_mac tests/test_corner_detection.py
+test-corner-detection: $(FLATCV_NATIVE) tests/test_corner_detection.py
 	# Test corner detection accuracy against ground truth
+	ln -sf $(FLATCV_NATIVE) flatcv
 	./tests/test_corner_detection.py
 
 
 .PHONY: test
 test: flatcv_mac test-units test-integration test-amalgamation test-corner-detection
+
+
+# Full regression: includes QR false-positive (noqr-*) negatives per difficulty
+# level, which roughly double test_qr_code's runtime. Use before release or
+# after decoder changes; `make test` alone is sufficient for routine work.
+.PHONY: test-full
+test-full: export FLATCV_FULL_TEST=1
+test-full: test
 
 
 .PHONY: test-extended

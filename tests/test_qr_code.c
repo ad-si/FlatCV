@@ -727,6 +727,16 @@ static int test_difficulty_images_filtered(const char *only_level) {
   int regression_count = 0;
   int fixed_count = 0;
 
+  /* Negatives (noqr-*.png false-positive checks) roughly double the decode
+     work per level because the cascade never short-circuits on non-decodes.
+     Skipped unless FLATCV_FULL_TEST is set to a truthy value; `make test-full`
+     sets it to keep the full regression net available. */
+  const char *full_env = getenv("FLATCV_FULL_TEST");
+  int run_negatives = full_env && *full_env && strcmp(full_env, "0") != 0;
+  if (!run_negatives) {
+    printf("  (skipping negatives; set FLATCV_FULL_TEST=1 to include)\n");
+  }
+
   for (size_t i = 0; i < num_levels; i++) {
     if (only_level && strcmp(levels[i], only_level) != 0) {
       continue;
@@ -734,7 +744,9 @@ static int test_difficulty_images_filtered(const char *only_level) {
     LevelStats ls;
     memset(&ls, 0, sizeof(ls));
     run_difficulty_level(root_dir, levels[i], &kfl, &ls);
-    run_difficulty_level_negatives(root_dir, levels[i], &kfl, &ls);
+    if (run_negatives) {
+      run_difficulty_level_negatives(root_dir, levels[i], &kfl, &ls);
+    }
     totals.total += ls.total;
     totals.passed += ls.passed;
     totals.failed_expected += ls.failed_expected;
@@ -757,16 +769,21 @@ static int test_difficulty_images_filtered(const char *only_level) {
   }
 
   /* Any known-failure entry that was never matched (because its image
-   * no longer exists) is stale and should be removed. */
+   * no longer exists) is stale and should be removed. When negatives are
+   * skipped, `noqr-` entries are never visited and must not be flagged. */
   int stale_count = 0;
   for (size_t i = 0; i < kfl.count; i++) {
-    if (!kfl.seen[i]) {
-      printf(
-        "  STALE: %s listed in known_failures.txt but not found\n",
-        kfl.entries[i]
-      );
-      stale_count++;
+    if (kfl.seen[i]) {
+      continue;
     }
+    if (!run_negatives && strstr(kfl.entries[i], "/noqr-") != NULL) {
+      continue;
+    }
+    printf(
+      "  STALE: %s listed in known_failures.txt but not found\n",
+      kfl.entries[i]
+    );
+    stale_count++;
   }
 
   printf(
