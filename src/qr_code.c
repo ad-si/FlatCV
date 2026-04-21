@@ -2520,31 +2520,57 @@ static int find_alignment_pattern(
    (last, first). Index = version. Count is stored in [0]; up to 7 values
    follow in [1..7]. v1 has no alignment patterns. */
 static const int QR_ALIGN_GRID[41][8] = {
-  {0},                      /* v0 unused */
-  {0},                      /* v1 */
-  {2, 6, 18},  {2, 6, 22},  {2, 6, 26},  {2, 6, 30},  {2, 6, 34},
-  {3, 6, 22, 38},  {3, 6, 24, 42},  {3, 6, 26, 46},  {3, 6, 28, 50},
-  {3, 6, 30, 54},  {3, 6, 32, 58},  {3, 6, 34, 62},
-  {4, 6, 26, 46, 66},  {4, 6, 26, 48, 70},  {4, 6, 26, 50, 74},
-  {4, 6, 30, 54, 78},  {4, 6, 30, 56, 82},  {4, 6, 30, 58, 86},
+  {0}, /* v0 unused */
+  {0}, /* v1 */
+  {2, 6, 18},
+  {2, 6, 22},
+  {2, 6, 26},
+  {2, 6, 30},
+  {2, 6, 34},
+  {3, 6, 22, 38},
+  {3, 6, 24, 42},
+  {3, 6, 26, 46},
+  {3, 6, 28, 50},
+  {3, 6, 30, 54},
+  {3, 6, 32, 58},
+  {3, 6, 34, 62},
+  {4, 6, 26, 46, 66},
+  {4, 6, 26, 48, 70},
+  {4, 6, 26, 50, 74},
+  {4, 6, 30, 54, 78},
+  {4, 6, 30, 56, 82},
+  {4, 6, 30, 58, 86},
   {4, 6, 34, 62, 90},
-  {5, 6, 28, 50, 72, 94},  {5, 6, 26, 50, 74, 98},
-  {5, 6, 30, 54, 78, 102}, {5, 6, 28, 54, 80, 106},
-  {5, 6, 32, 58, 84, 110}, {5, 6, 30, 58, 86, 114},
+  {5, 6, 28, 50, 72, 94},
+  {5, 6, 26, 50, 74, 98},
+  {5, 6, 30, 54, 78, 102},
+  {5, 6, 28, 54, 80, 106},
+  {5, 6, 32, 58, 84, 110},
+  {5, 6, 30, 58, 86, 114},
   {5, 6, 34, 62, 90, 118},
-  {6, 6, 26, 50, 74, 98, 122},  {6, 6, 30, 54, 78, 102, 126},
-  {6, 6, 26, 52, 78, 104, 130}, {6, 6, 30, 56, 82, 108, 134},
-  {6, 6, 34, 60, 86, 112, 138}, {6, 6, 30, 58, 86, 114, 142},
+  {6, 6, 26, 50, 74, 98, 122},
+  {6, 6, 30, 54, 78, 102, 126},
+  {6, 6, 26, 52, 78, 104, 130},
+  {6, 6, 30, 56, 82, 108, 134},
+  {6, 6, 34, 60, 86, 112, 138},
+  {6, 6, 30, 58, 86, 114, 142},
   {6, 6, 34, 62, 90, 118, 146},
-  {7, 6, 30, 54, 78, 102, 126, 150},  {7, 6, 24, 50, 76, 102, 128, 154},
-  {7, 6, 28, 54, 80, 106, 132, 158},  {7, 6, 32, 58, 84, 110, 136, 162},
-  {7, 6, 26, 54, 82, 110, 138, 166},  {7, 6, 30, 58, 86, 114, 142, 170},
+  {7, 6, 30, 54, 78, 102, 126, 150},
+  {7, 6, 24, 50, 76, 102, 128, 154},
+  {7, 6, 28, 54, 80, 106, 132, 158},
+  {7, 6, 32, 58, 84, 110, 136, 162},
+  {7, 6, 26, 54, 82, 110, 138, 166},
+  {7, 6, 30, 58, 86, 114, 142, 170},
 };
 
 /* Apply a 3x3 homography H (row-major) to module coordinates (mx, my),
    returning pixel coordinates. Shared with the quadratic-warp path. */
 static int project_homography(
-  const double H[9], double mx, double my, double *out_px, double *out_py
+  const double H[9],
+  double mx,
+  double my,
+  double *out_px,
+  double *out_py
 ) {
   double w_h = H[6] * mx + H[7] * my + H[8];
   if (fabs(w_h) < 1e-10) {
@@ -2590,8 +2616,7 @@ static int find_all_alignment_patterns(
     for (int ci = 0; ci < nvals; ci++) {
       int col = QR_ALIGN_GRID[version][1 + ci];
       /* Skip the three finder-overlapping positions. */
-      if ((row == first && col == first) ||
-          (row == first && col == last) ||
+      if ((row == first && col == first) || (row == first && col == last) ||
           (row == last && col == first)) {
         continue;
       }
@@ -2606,8 +2631,15 @@ static int find_all_alignment_patterns(
       }
       float found_x, found_y;
       if (find_alignment_pattern(
-            px, w, h, (float)pred_x, (float)pred_y,
-            avg_m, search_r, &found_x, &found_y
+            px,
+            w,
+            h,
+            (float)pred_x,
+            (float)pred_y,
+            avg_m,
+            search_r,
+            &found_x,
+            &found_y
           )) {
         out_src[found][0] = mx;
         out_src[found][1] = my;
@@ -4575,7 +4607,20 @@ static char *try_decode_triple(
       float amx = qr_size - 6.5f, amy = qr_size - 6.5f;
       float predicted_ax = a11 * amx + a12 * amy + b1;
       float predicted_ay = a21 * amx + a22 * amy + b2;
+      /* Search radius scales with QR size: under severe perspective, the
+         affine-predicted BR drift grows with finder separation — a v8
+         receipt photo can have the real BR alignment 10+ modules from
+         the affine prediction. Clamp so the search area stays bounded. */
       float search_r = avg_m * 10.0f;
+      if (version >= 7) {
+        float wide = avg_m * (float)(qr_size / 4);
+        if (wide > search_r) {
+          search_r = wide;
+        }
+        if (search_r > avg_m * 20.0f) {
+          search_r = avg_m * 20.0f;
+        }
+      }
       float found_ax, found_ay;
       if (find_alignment_pattern(
             pixels,
@@ -4596,46 +4641,55 @@ static char *try_decode_triple(
           {{tl.x, tl.y}, {tr.x, tr.y}, {found_ax, found_ay}, {bl.x, bl.y}};
         double H[9];
         if (compute_homography(src, dst, H)) {
-          /* For v7+ QRs, refine H by finding all other alignment patterns
-             and least-squares fitting over 3 finders + all APs. The BR-only
-             4-point fit is exact but fits a pure perspective, which leaves
-             residual drift under paper curl or compound distortion. Each
-             additional AP constrains the interior of the grid, so the
-             refined H samples data bits more accurately near the BR where
-             zigzag reads start — a half-module drift on the mode
-             indicator is enough to read byte mode as alphanumeric. */
+          /* Try up to two homography variants for v7+ QRs: the exact
+             4-point fit from the BR snap (accurate when the snap is clean)
+             and a least-squares fit over all found alignment patterns
+             (accurate under paper curl or severe perspective, which
+             leaves the 4-point fit drifting inside the grid). Decode with
+             the BR-snap H first, then fall back to the LS-refined H if
+             the primary fails. */
+          double H_variants[2][9];
+          memcpy(H_variants[0], H, sizeof(H));
+          int n_variants = 1;
           if (version >= 7) {
             enum { MAX_AP = 45 };
             double ap_src[MAX_AP][2], ap_dst[MAX_AP][2];
-            /* Predict interior APs via the 4-point H first (accurate when
-               the BR snap is good). If too few come back, retry with the
-               pure-affine transform (no BR bias) and a wider search —
-               recovers v7+ QRs where the BR snap was off by 30-50 px. */
             int n_ap = find_all_alignment_patterns(
               pixels, width, height, version, H, avg_m, 2.0f,
               ap_src, ap_dst, MAX_AP
             );
-            if (n_ap < 2) {
-              double H_affine[9] = {
-                a11, a12, b1, a21, a22, b2, 0.0, 0.0, 1.0
-              };
-              n_ap = find_all_alignment_patterns(
-                pixels, width, height, version, H_affine, avg_m, 4.0f,
-                ap_src, ap_dst, MAX_AP
-              );
+            double ap_src_a[MAX_AP][2], ap_dst_a[MAX_AP][2];
+            double H_affine[9] = {a11, a12, b1, a21, a22, b2, 0.0, 0.0, 1.0};
+            int n_ap_a = find_all_alignment_patterns(
+              pixels, width, height, version, H_affine, avg_m, 4.0f,
+              ap_src_a, ap_dst_a, MAX_AP
+            );
+            if (n_ap_a > n_ap) {
+              n_ap = n_ap_a;
+              memcpy(ap_src, ap_src_a, sizeof(ap_src_a));
+              memcpy(ap_dst, ap_dst_a, sizeof(ap_dst_a));
             }
-            if (n_ap >= 2) {
+            double H_refined[9];
+            memcpy(H_refined, H, sizeof(H_refined));
+            int refined_ok = 0;
+            for (int iter = 0; iter < 3 && n_ap >= 2; iter++) {
               double pts_src[MAX_AP + 4][2];
               double pts_dst[MAX_AP + 4][2];
               int np = 0;
-              pts_src[np][0] = sx0; pts_src[np][1] = sy0;
-              pts_dst[np][0] = tl.x; pts_dst[np][1] = tl.y;
+              pts_src[np][0] = sx0;
+              pts_src[np][1] = sy0;
+              pts_dst[np][0] = tl.x;
+              pts_dst[np][1] = tl.y;
               np++;
-              pts_src[np][0] = sx1; pts_src[np][1] = sy1;
-              pts_dst[np][0] = tr.x; pts_dst[np][1] = tr.y;
+              pts_src[np][0] = sx1;
+              pts_src[np][1] = sy1;
+              pts_dst[np][0] = tr.x;
+              pts_dst[np][1] = tr.y;
               np++;
-              pts_src[np][0] = sx2; pts_src[np][1] = sy2;
-              pts_dst[np][0] = bl.x; pts_dst[np][1] = bl.y;
+              pts_src[np][0] = sx2;
+              pts_src[np][1] = sy2;
+              pts_dst[np][0] = bl.x;
+              pts_dst[np][1] = bl.y;
               np++;
               for (int i = 0; i < n_ap; i++) {
                 pts_src[np][0] = ap_src[i][0];
@@ -4645,26 +4699,112 @@ static char *try_decode_triple(
                 np++;
               }
               double H_ls[9];
-              if (compute_homography_ls(pts_src, pts_dst, np, H_ls)) {
-                memcpy(H, H_ls, sizeof(H));
+              if (!compute_homography_ls(pts_src, pts_dst, np, H_ls)) {
+                break;
               }
+              /* Outlier rejection: discard any AP whose reprojection is
+                 more than 1.5 modules off the fit — those are wrong snaps
+                 (random dark clusters that match the 5x5 template). Real
+                 APs sit within 0.5 modules of the fit. Finders anchor the
+                 three known corners and are kept unconditionally. */
+              double pts_src_in[MAX_AP + 4][2];
+              double pts_dst_in[MAX_AP + 4][2];
+              int np_in = 3;
+              for (int i = 0; i < 3; i++) {
+                pts_src_in[i][0] = pts_src[i][0];
+                pts_src_in[i][1] = pts_src[i][1];
+                pts_dst_in[i][0] = pts_dst[i][0];
+                pts_dst_in[i][1] = pts_dst[i][1];
+              }
+              float thresh = avg_m * 1.5f;
+              for (int i = 3; i < np; i++) {
+                double rx, ry;
+                if (!project_homography(
+                      H_ls, pts_src[i][0], pts_src[i][1], &rx, &ry
+                    )) {
+                  continue;
+                }
+                double dx = rx - pts_dst[i][0];
+                double dy = ry - pts_dst[i][1];
+                if (dx * dx + dy * dy <= thresh * thresh) {
+                  pts_src_in[np_in][0] = pts_src[i][0];
+                  pts_src_in[np_in][1] = pts_src[i][1];
+                  pts_dst_in[np_in][0] = pts_dst[i][0];
+                  pts_dst_in[np_in][1] = pts_dst[i][1];
+                  np_in++;
+                }
+              }
+              if (np_in >= 4 && np_in < np) {
+                double H_ls2[9];
+                if (compute_homography_ls(
+                      pts_src_in, pts_dst_in, np_in, H_ls2
+                    )) {
+                  memcpy(H_ls, H_ls2, sizeof(H_ls2));
+                }
+              }
+              memcpy(H_refined, H_ls, sizeof(H_refined));
+              refined_ok = 1;
+              n_ap = find_all_alignment_patterns(
+                pixels, width, height, version, H_refined, avg_m, 2.0f,
+                ap_src, ap_dst, MAX_AP
+              );
+            }
+            if (refined_ok) {
+              memcpy(H_variants[1], H_refined, sizeof(H_refined));
+              n_variants = 2;
             }
           }
           memcpy(H_primary, H, sizeof(H));
           have_primary_H = 1;
           int fd = 16;
           int rc = 100000;
-          char *d = decode_with_perturbation(
-            pixels,
-            gray,
-            width,
-            height,
-            H,
-            qr_size,
-            version,
-            &fd,
-            &rc
-          );
+          char *d = NULL;
+          for (int v_idx = 0; v_idx < n_variants && !d; v_idx++) {
+            fd = 16;
+            rc = 100000;
+            d = decode_with_perturbation(
+              pixels,
+              gray,
+              width,
+              height,
+              H_variants[v_idx],
+              qr_size,
+              version,
+              &fd,
+              &rc
+            );
+          }
+          /* If neither variant decoded, try each found alignment pattern
+             as the 4th homography point on its own (exact 3-finders + 1-AP
+             fit). Covers severe perspective where one individual AP is
+             well-located but the ensemble fit gets pulled off by its
+             outliers. */
+          if (!d && version >= 7) {
+            enum { MAX_AP = 45 };
+            double ap_src[MAX_AP][2], ap_dst[MAX_AP][2];
+            double H_affine[9] = {a11, a12, b1, a21, a22, b2, 0.0, 0.0, 1.0};
+            int n_ap = find_all_alignment_patterns(
+              pixels, width, height, version, H_affine, avg_m, 8.0f,
+              ap_src, ap_dst, MAX_AP
+            );
+            for (int ai = 0; ai < n_ap && !d; ai++) {
+              double src_i[4][2] =
+                {{sx0, sy0}, {sx1, sy1}, {ap_src[ai][0], ap_src[ai][1]},
+                 {sx2, sy2}};
+              double dst_i[4][2] =
+                {{tl.x, tl.y}, {tr.x, tr.y},
+                 {ap_dst[ai][0], ap_dst[ai][1]}, {bl.x, bl.y}};
+              double H_i[9];
+              if (!compute_homography(src_i, dst_i, H_i)) {
+                continue;
+              }
+              fd = 16;
+              rc = 100000;
+              d = decode_with_perturbation(
+                pixels, gray, width, height, H_i, qr_size, version, &fd, &rc
+              );
+            }
+          }
           if (d) {
             decoded = d;
             fmt_dist = fd;
