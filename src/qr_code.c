@@ -4913,8 +4913,8 @@ static void run_all_attempts(
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
-          )) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 &&
+            strlen(*best_decoded) >= 5)) {
         bin = binarize_adaptive(sharp, w, h);
         if (bin) {
           try_pipeline(
@@ -5077,8 +5077,8 @@ static void run_all_attempts(
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
-          )) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 &&
+            strlen(*best_decoded) >= 5)) {
         bin = binarize_adaptive(med, w, h);
         if (bin) {
           try_pipeline(
