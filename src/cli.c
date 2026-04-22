@@ -67,29 +67,22 @@ void print32_t_usage(const char *program_name) {
     "  bw_smooth       - Smooth (anti-aliased) black and white conversion\n"
   );
   printf("  detect_corners  - Detect corners and output as JSON\n");
-  printf(
-    "  draw_corners    - Detect corners and draw circles at each corner\n"
+  printf("  draw_corners    - Detect corners and draw circles at each corner\n"
   );
   printf("  sobel           - Apply Sobel edge detection\n");
   printf(
     "  circle <hex_color> <radius> <x>x<y> - Draw a colored circle at position "
     "(x,y)\n"
   );
-  printf(
-    "  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
-    "position "
-    "(x,y)\n"
-  );
-  printf(
-    "  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
-    "markers at "
-    "specified coordinates\n"
-  );
+  printf("  disk <hex_color> <radius> <x>x<y> - Draw a filled colored disk at "
+         "position "
+         "(x,y)\n");
+  printf("  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
+         "markers at "
+         "specified coordinates\n");
   printf("  crop <widthxheight+x+y> - Crop the image\n");
-  printf(
-    "  extract_document - Extract document using corner detection and "
-    "perspective transform (auto-size)\n"
-  );
+  printf("  extract_document - Extract document using corner detection and "
+         "perspective transform (auto-size)\n");
   printf(
     "  extract_document_to <output_width>x<output_height> - Extract document "
     "to specific dimensions\n"
@@ -100,8 +93,7 @@ void print32_t_usage(const char *program_name) {
   printf(
     "  flip_y          - Flip image vertically (mirror along horizontal axis)\n"
   );
-  printf(
-    "  rotate <angle>  - Rotate image by angle (must be multiple of 90)\n"
+  printf("  rotate <angle>  - Rotate image by angle (must be multiple of 90)\n"
   );
   printf(
     "  trim [<threshold>%%] - Remove border pixels with same color (optional "
@@ -112,7 +104,8 @@ void print32_t_usage(const char *program_name) {
     "  border <hex_color> <border_width> - Add colored border around image\n"
   );
   printf("  qr              - Decode QR codes and output as JSON\n");
-  printf("  qr_draw         - Decode QR codes and draw border + finders\n");
+  printf("  qr_draw         - Decode QR codes and draw every detected feature "
+         "(border, finders, alignments, timing)\n");
   printf("  erode <radius>  - Binary erosion with disk structuring element\n");
   printf("  dilate <radius> - Binary dilation with disk structuring element\n");
   printf("  close <radius>  - Binary closing (dilation then erosion)\n");
@@ -836,9 +829,8 @@ uint8_t *apply_operation(
       fprintf(stderr, "Error: blur operation requires radius parameter\n");
       return NULL;
     }
-    return (
-      uint8_t *
-    )fcv_apply_gaussian_blur(*width, *height, param, input_data);
+    return (uint8_t *)
+      fcv_apply_gaussian_blur(*width, *height, param, input_data);
   }
   else if (strcmp(operation, "resize") == 0) {
     double resize_x, resize_y;
@@ -907,9 +899,8 @@ uint8_t *apply_operation(
     return result;
   }
   else if (strcmp(operation, "threshold") == 0) {
-    return (
-      uint8_t *
-    )fcv_otsu_threshold_rgba(*width, *height, false, input_data);
+    return (uint8_t *)
+      fcv_otsu_threshold_rgba(*width, *height, false, input_data);
   }
   else if (strcmp(operation, "bw_smart") == 0) {
     return (uint8_t *)fcv_bw_smart(*width, *height, false, input_data);
@@ -1054,15 +1045,107 @@ uint8_t *apply_operation(
     }
     memcpy(result, input_data, img_length_byte);
 
-    const char *green = "00C800";
-    const char *red = "C80000";
+    /* Colour legend for the annotations:
+       - green:   QR outer border (polygon around all modules)
+       - red:     finder-pattern outlines + centres (module 3.5, 3.5)
+       - magenta: alignment-pattern outlines + centres (module 5x5)
+       - yellow:  timing-pattern module centres (row 6 and col 6) */
+    const char *border_color = "00C800";
+    const char *finder_color = "C80000";
+    const char *alignment_color = "C800C8";
+    const char *timing_color = "FFC800";
 
     for (size_t i = 0; i < qrs.count; i++) {
       FCVQRCode *qr = &qrs.codes[i];
       double module = qr->module_size > 0 ? qr->module_size : 1.0;
+      int qr_size = qr->qr_size > 0 ? qr->qr_size : 21;
       double finder_radius = module * 1.5;
+      double alignment_radius = module * 0.7;
+      double timing_radius = fmax(1.0, module * 0.3);
       double border_thickness = fmax(1.0, module * 0.25);
+      double outline_thickness = fmax(1.0, module * 0.15);
 
+      /* Module-coordinate → pixel-coordinate projection. Built from the
+         four detected outer corners so we can draw any feature (finders,
+         alignments, timing) by projecting its module-space rectangle. */
+      Corners src_mod = {
+        0.0,
+        0.0,
+        (double)qr_size,
+        0.0,
+        (double)qr_size,
+        (double)qr_size,
+        0.0,
+        (double)qr_size
+      };
+      Matrix3x3 *H =
+        fcv_calculate_perspective_transform(&src_mod, &qr->corners);
+
+      /* Projects module-coordinate (mx, my) to pixel-coordinate (*px, *py)
+         via H. Returns 0 if the projection is degenerate. */
+#define QR_PROJECT(mx, my, px, py)                                             \
+  do {                                                                         \
+    double _w = H->m20 * (mx) + H->m21 * (my) + H->m22;                        \
+    if (fabs(_w) < 1e-9) {                                                     \
+      (px) = 0.0;                                                              \
+      (py) = 0.0;                                                              \
+    }                                                                          \
+    else {                                                                     \
+      (px) = (H->m00 * (mx) + H->m01 * (my) + H->m02) / _w;                    \
+      (py) = (H->m10 * (mx) + H->m11 * (my) + H->m12) / _w;                    \
+    }                                                                          \
+  } while (0)
+
+      /* Draws a straight line from (x0,y0) to (x1,y1) as overlapping disks
+         of radius `thickness` with the given hex colour. */
+#define QR_DRAW_SEGMENT(x0, y0, x1, y1, color, thickness)                      \
+  do {                                                                         \
+    double _dx = (x1) - (x0);                                                  \
+    double _dy = (y1) - (y0);                                                  \
+    double _len = hypot(_dx, _dy);                                             \
+    int _steps = (int)ceil(_len);                                              \
+    if (_steps < 1) {                                                          \
+      _steps = 1;                                                              \
+    }                                                                          \
+    for (int _s = 0; _s <= _steps; _s++) {                                     \
+      double _t = (double)_s / (double)_steps;                                 \
+      fcv_draw_disk(                                                           \
+        *width,                                                                \
+        *height,                                                               \
+        4,                                                                     \
+        color,                                                                 \
+        thickness,                                                             \
+        (x0) + _t * _dx,                                                       \
+        (y0) + _t * _dy,                                                       \
+        result                                                                 \
+      );                                                                       \
+    }                                                                          \
+  } while (0)
+
+      /* Draws the pixel-projected rectangle (mx0,my0)-(mx1,my1) in module
+         coordinates, outlined with the given colour and thickness. */
+#define QR_DRAW_MODULE_RECT(mx0, my0, mx1, my1, color, thickness)              \
+  do {                                                                         \
+    double _c[4][2];                                                           \
+    QR_PROJECT((mx0), (my0), _c[0][0], _c[0][1]);                              \
+    QR_PROJECT((mx1), (my0), _c[1][0], _c[1][1]);                              \
+    QR_PROJECT((mx1), (my1), _c[2][0], _c[2][1]);                              \
+    QR_PROJECT((mx0), (my1), _c[3][0], _c[3][1]);                              \
+    for (int _e = 0; _e < 4; _e++) {                                           \
+      int _e2 = (_e + 1) % 4;                                                  \
+      QR_DRAW_SEGMENT(                                                         \
+        _c[_e][0],                                                             \
+        _c[_e][1],                                                             \
+        _c[_e2][0],                                                            \
+        _c[_e2][1],                                                            \
+        color,                                                                 \
+        thickness                                                              \
+      );                                                                       \
+    }                                                                          \
+  } while (0)
+
+      /* Outer border: connect the four detected corners directly (no
+         projection — these are pixel coords already). */
       double xs[4] = {
         qr->corners.tl_x,
         qr->corners.tr_x,
@@ -1077,41 +1160,138 @@ uint8_t *apply_operation(
       };
       for (int e = 0; e < 4; e++) {
         int e2 = (e + 1) % 4;
-        double dx = xs[e2] - xs[e];
-        double dy = ys[e2] - ys[e];
-        double length = hypot(dx, dy);
-        int steps = (int)ceil(length);
-        if (steps < 1) {
-          steps = 1;
-        }
-        for (int s = 0; s <= steps; s++) {
-          double t = (double)s / (double)steps;
-          fcv_draw_disk(
-            *width,
-            *height,
-            4,
-            green,
-            border_thickness,
-            xs[e] + t * dx,
-            ys[e] + t * dy,
-            result
-          );
-        }
+        QR_DRAW_SEGMENT(
+          xs[e],
+          ys[e],
+          xs[e2],
+          ys[e2],
+          border_color,
+          border_thickness
+        );
       }
 
+      /* Finder patterns: 7x7 module squares at TL, TR, BL. Outlined, and
+         the detected pixel centre drawn as a filled red disk. */
+      double finder_origins[3][2] = {
+        {0.0, 0.0},
+        {(double)(qr_size - 7), 0.0},
+        {0.0, (double)(qr_size - 7)}
+      };
       for (int f = 0; f < 3; f++) {
+        QR_DRAW_MODULE_RECT(
+          finder_origins[f][0],
+          finder_origins[f][1],
+          finder_origins[f][0] + 7.0,
+          finder_origins[f][1] + 7.0,
+          finder_color,
+          outline_thickness
+        );
         fcv_draw_disk(
           *width,
           *height,
           4,
-          red,
+          finder_color,
           finder_radius,
           qr->finders[f].x,
           qr->finders[f].y,
           result
         );
       }
-      printf("  QR code %zu: \"%s\"\n", i + 1, qr->text);
+
+      /* Alignment patterns: 5x5 module squares centred at each detected
+         alignment location. The result struct carries pixel-space
+         centres only (not module indices), so draw a screen-aligned
+         5-module box — this matches the actual snap point under any
+         moderate perspective distortion. */
+      for (size_t a = 0; a < qr->alignment_count; a++) {
+        double cx = qr->alignments[a].x;
+        double cy = qr->alignments[a].y;
+        double pts[4][2] = {
+          {cx - 2.5 * module, cy - 2.5 * module},
+          {cx + 2.5 * module, cy - 2.5 * module},
+          {cx + 2.5 * module, cy + 2.5 * module},
+          {cx - 2.5 * module, cy + 2.5 * module}
+        };
+        for (int e = 0; e < 4; e++) {
+          int e2 = (e + 1) % 4;
+          QR_DRAW_SEGMENT(
+            pts[e][0],
+            pts[e][1],
+            pts[e2][0],
+            pts[e2][1],
+            alignment_color,
+            outline_thickness
+          );
+        }
+        fcv_draw_disk(
+          *width,
+          *height,
+          4,
+          alignment_color,
+          alignment_radius,
+          cx,
+          cy,
+          result
+        );
+      }
+
+      /* Timing patterns: every module centre along row 6 cols 8..qr_size-9
+         and col 6 rows 8..qr_size-9 (the interior cells, excluding the
+         7-module finder blocks and their separators). Module centre of
+         (col, row) is (col + 0.5, row + 0.5). */
+      for (int col = 8; col <= qr_size - 9; col++) {
+        double px, py;
+        QR_PROJECT((double)col + 0.5, 6.5, px, py);
+        fcv_draw_disk(
+          *width,
+          *height,
+          4,
+          timing_color,
+          timing_radius,
+          px,
+          py,
+          result
+        );
+      }
+      for (int row = 8; row <= qr_size - 9; row++) {
+        double px, py;
+        QR_PROJECT(6.5, (double)row + 0.5, px, py);
+        fcv_draw_disk(
+          *width,
+          *height,
+          4,
+          timing_color,
+          timing_radius,
+          px,
+          py,
+          result
+        );
+      }
+
+      printf(
+        "  QR code %zu: v%d (%dx%d modules), %zu alignment pattern%s: \"%s\"\n",
+        i + 1,
+        qr->version,
+        qr_size,
+        qr_size,
+        qr->alignment_count,
+        qr->alignment_count == 1 ? "" : "s",
+        qr->text
+      );
+
+      /* fcv_calculate_perspective_transform may return a static identity
+         fallback on failure — only free heap-allocated results. The only
+         stable heap result has m22 == 1.0 and non-identity content; the
+         fallback is exactly the identity matrix. */
+      if (H && !(H->m00 == 1.0 && H->m01 == 0.0 && H->m02 == 0.0 &&
+                 H->m10 == 0.0 && H->m11 == 1.0 && H->m12 == 0.0 &&
+                 H->m20 == 0.0 && H->m21 == 0.0 && H->m22 == 1.0)) {
+        free(H);
+      }
+
+#undef QR_PROJECT
+#undef QR_DRAW_SEGMENT
+#undef QR_DRAW_MODULE_RECT
     }
 
     fcv_free_qr_result(qrs);
@@ -1442,9 +1622,8 @@ uint8_t *apply_operation(
     if (has_string_param && param_str && strchr(param_str, '%')) {
       // Trim with threshold percentage
       double threshold = atof(param_str);
-      return (
-        uint8_t *
-      )fcv_trim_threshold(width, height, 4, input_data, threshold);
+      return (uint8_t *)
+        fcv_trim_threshold(width, height, 4, input_data, threshold);
     }
     else if (has_param) {
       // Trim with threshold as numeric parameter

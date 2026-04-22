@@ -14,6 +14,10 @@
 #define MAX_QR_CODES 10
 #define MAX_CANDIDATES 200
 #define MAX_TRIPLES 10
+/* Max alignment patterns per QR. Version 40 has 7×7 = 49 grid positions,
+   of which 3 (top-left, top-right, bottom-left) overlap the finder patterns
+   and are skipped — leaving at most 46. */
+#define QR_MAX_ALIGNMENTS 46
 
 /* ---- Types ---- */
 
@@ -4583,7 +4587,11 @@ static char *try_decode_triple(
   int *out_rs_cost,
   Corners *out_corners,
   Point2D out_finders[3],
-  double *out_module_size
+  double *out_module_size,
+  int *out_version,
+  int *out_qr_size,
+  Point2D out_alignments[QR_MAX_ALIGNMENTS],
+  int *out_alignment_count
 ) {
   float dist_t = fp_dist(tl, tr), dist_l = fp_dist(tl, bl);
   float avg_d = (dist_t + dist_l) / 2.0f;
@@ -4616,6 +4624,12 @@ static char *try_decode_triple(
   int have_primary_H = 0;
   int have_alignment = 0;
   double alignment_x = 0, alignment_y = 0;
+
+  /* Track the homography (if any) associated with the winning decode so
+     callers can enumerate every alignment pattern the image exposes. Not
+     populated for the quadratic-warp fallback, which has no single H. */
+  double winning_H[9];
+  int have_winning_H = 0;
 
   if (version >= 2) {
     float sx0 = 3.5f, sy0 = 3.5f;
@@ -4833,6 +4847,10 @@ static char *try_decode_triple(
               &fd,
               &rc
             );
+            if (d) {
+              memcpy(winning_H, H_variants[v_idx], sizeof(winning_H));
+              have_winning_H = 1;
+            }
           }
           /* If neither variant decoded, try each found alignment pattern
              as the 4th homography point on its own (exact 3-finders + 1-AP
@@ -4885,6 +4903,10 @@ static char *try_decode_triple(
                 &fd,
                 &rc
               );
+              if (d) {
+                memcpy(winning_H, H_i, sizeof(winning_H));
+                have_winning_H = 1;
+              }
             }
           }
           if (d) {
@@ -4912,6 +4934,8 @@ static char *try_decode_triple(
           char *best_sweep = NULL;
           int best_sweep_fd = 16;
           int best_sweep_rc = 100000;
+          double best_sweep_H[9];
+          int have_best_sweep_H = 0;
           for (int dy = -n_steps; dy <= n_steps; dy++) {
             for (int dx = -n_steps; dx <= n_steps; dx++) {
               if (dx == 0 && dy == 0) {
@@ -4971,6 +4995,8 @@ static char *try_decode_triple(
                 best_sweep = d;
                 best_sweep_fd = fd;
                 best_sweep_rc = rc;
+                memcpy(best_sweep_H, Hp, sizeof(best_sweep_H));
+                have_best_sweep_H = 1;
               }
               else {
                 free(d);
@@ -4989,6 +5015,10 @@ static char *try_decode_triple(
             decoded = best_sweep;
             fmt_dist = best_sweep_fd;
             rs_cost = best_sweep_rc;
+            if (have_best_sweep_H) {
+              memcpy(winning_H, best_sweep_H, sizeof(winning_H));
+              have_winning_H = 1;
+            }
           }
           else {
             free(best_sweep);
@@ -5033,6 +5063,8 @@ static char *try_decode_triple(
         decoded = d;
         fmt_dist = fd;
         rs_cost = rc;
+        memcpy(winning_H, H, sizeof(winning_H));
+        have_winning_H = 1;
       }
     }
   }
@@ -5093,6 +5125,8 @@ static char *try_decode_triple(
         decoded = d;
         fmt_dist = fd;
         rs_cost = rc;
+        memcpy(winning_H, H_ref, sizeof(winning_H));
+        have_winning_H = 1;
       }
     }
 
@@ -5129,6 +5163,12 @@ static char *try_decode_triple(
         decoded = d;
         fmt_dist = fd;
         rs_cost = rc;
+        /* Quadratic warp has no homography; H_cur from the last timing
+           refinement is the closest planar approximation. Good enough to
+           seed alignment-pattern search — find_all_alignment_patterns
+           snaps to the pixel-space pattern anyway. */
+        memcpy(winning_H, H_cur, sizeof(winning_H));
+        have_winning_H = 1;
       }
     }
   }
@@ -5179,6 +5219,88 @@ static char *try_decode_triple(
       float mv = sqrtf(vx * vx + vy * vy);
       *out_module_size = (mu + mv) / 2.0f;
     }
+    if (out_version) {
+      *out_version = version;
+    }
+    if (out_qr_size) {
+      *out_qr_size = qr_size;
+    }
+    if (out_alignment_count) {
+      *out_alignment_count = 0;
+    }
+    /* Enumerate every alignment pattern the decoder could locate in the
+       binarized buffer so callers (e.g. qr_draw) can visualise them.
+       v1 has none; v2–6 have 1 (BR); v7+ have a spec-defined grid. Uses
+       the outer-corners homography as the prediction frame — find_all_*
+       snaps to the actual dark 5x5 pattern in pixel space, so prediction
+       accuracy only has to put us within search_r of the true center. */
+    if (out_alignments && out_alignment_count && version >= 2 && out_corners) {
+      double src[4][2] = {
+        {0.0, 0.0},
+        {(double)qr_size, 0.0},
+        {(double)qr_size, (double)qr_size},
+        {0.0, (double)qr_size}
+      };
+      double dst[4][2] = {
+        {out_corners->tl_x, out_corners->tl_y},
+        {out_corners->tr_x, out_corners->tr_y},
+        {out_corners->br_x, out_corners->br_y},
+        {out_corners->bl_x, out_corners->bl_y}
+      };
+      double H[9];
+      if (have_winning_H) {
+        memcpy(H, winning_H, sizeof(H));
+      }
+      if (have_winning_H || compute_homography(src, dst, H)) {
+        /* Enumerate every spec-defined alignment-pattern grid position
+           for this version, projecting each module-space centre through
+           H to predict its pixel location. Then refine each prediction
+           against the binarized buffer if find_alignment_pattern can
+           snap to a real 5x5 template — otherwise keep the prediction
+           (useful for qr_draw even when the binarization degraded the
+           pattern enough that the snap fails). */
+        int nvals = QR_ALIGN_GRID[version][0];
+        int first = (nvals >= 1) ? QR_ALIGN_GRID[version][1] : 0;
+        int last = (nvals >= 1) ? QR_ALIGN_GRID[version][nvals] : 0;
+        int n_out = 0;
+        for (int ri = 0; ri < nvals && n_out < QR_MAX_ALIGNMENTS; ri++) {
+          int row = QR_ALIGN_GRID[version][1 + ri];
+          for (int ci = 0; ci < nvals && n_out < QR_MAX_ALIGNMENTS; ci++) {
+            int col = QR_ALIGN_GRID[version][1 + ci];
+            if ((row == first && col == first) ||
+                (row == first && col == last) ||
+                (row == last && col == first)) {
+              continue;
+            }
+            double mx = (double)col + 0.5;
+            double my = (double)row + 0.5;
+            double pred_x, pred_y;
+            if (!project_homography(H, mx, my, &pred_x, &pred_y)) {
+              continue;
+            }
+            float snap_x = (float)pred_x, snap_y = (float)pred_y;
+            /* 5-module search radius is the same tolerance used elsewhere
+               in the decoder for paper-curled captures where the
+               module-size estimate can drift up to ±30% locally. */
+            find_alignment_pattern(
+              pixels,
+              width,
+              height,
+              (float)pred_x,
+              (float)pred_y,
+              (float)(*out_module_size),
+              (float)(*out_module_size) * 5.0f,
+              &snap_x,
+              &snap_y
+            );
+            out_alignments[n_out].x = snap_x;
+            out_alignments[n_out].y = snap_y;
+            n_out++;
+          }
+        }
+        *out_alignment_count = n_out;
+      }
+    }
   }
   return decoded;
 }
@@ -5199,7 +5321,11 @@ static void try_pipeline(
   int *best_rs_cost,
   Corners *best_corners,
   Point2D best_finders[3],
-  double *best_module_size
+  double *best_module_size,
+  int *best_version,
+  int *best_qr_size,
+  Point2D best_alignments[QR_MAX_ALIGNMENTS],
+  int *best_alignment_count
 ) {
   FinderPattern fps[MAX_CANDIDATES];
   int nfp = find_finders(bin, w, h, fps, MAX_CANDIDATES);
@@ -5219,6 +5345,10 @@ static void try_pipeline(
     Corners corners = {0};
     Point2D finders[3];
     double module_size = 0;
+    int version = 0;
+    int qr_size = 0;
+    Point2D alignments[QR_MAX_ALIGNMENTS];
+    int alignment_count = 0;
     char *decoded = try_decode_triple(
       bin,
       gray,
@@ -5231,7 +5361,11 @@ static void try_pipeline(
       &rs_cost,
       &corners,
       finders,
-      &module_size
+      &module_size,
+      &version,
+      &qr_size,
+      alignments,
+      &alignment_count
     );
     if (decoded) {
       /* Composite score: lower fmt_dist wins, tie-break first on decoded
@@ -5264,6 +5398,12 @@ static void try_pipeline(
           best_finders[i] = finders[i];
         }
         *best_module_size = module_size;
+        *best_version = version;
+        *best_qr_size = qr_size;
+        *best_alignment_count = alignment_count;
+        for (int i = 0; i < alignment_count; i++) {
+          best_alignments[i] = alignments[i];
+        }
       }
       else {
         free(decoded);
@@ -5292,7 +5432,11 @@ static void run_all_attempts(
   int *best_rs_cost,
   Corners *best_corners,
   Point2D best_finders[3],
-  double *best_module_size
+  double *best_module_size,
+  int *best_version,
+  int *best_qr_size,
+  Point2D best_alignments[QR_MAX_ALIGNMENTS],
+  int *best_alignment_count
 ) {
   /* Attempt 1: Otsu on original. */
   uint8_t *bin = binarize_global_otsu(gray_pixels, w, h);
@@ -5307,7 +5451,11 @@ static void run_all_attempts(
       best_rs_cost,
       best_corners,
       best_finders,
-      best_module_size
+      best_module_size,
+      best_version,
+      best_qr_size,
+      best_alignments,
+      best_alignment_count
     );
     free(bin);
   }
@@ -5329,7 +5477,11 @@ static void run_all_attempts(
         best_rs_cost,
         best_corners,
         best_finders,
-        best_module_size
+        best_module_size,
+        best_version,
+        best_qr_size,
+        best_alignments,
+        best_alignment_count
       );
       free(bin);
     }
@@ -5349,7 +5501,11 @@ static void run_all_attempts(
         best_rs_cost,
         best_corners,
         best_finders,
-        best_module_size
+        best_module_size,
+        best_version,
+        best_qr_size,
+        best_alignments,
+        best_alignment_count
       );
       free(bin);
     }
@@ -5378,7 +5534,11 @@ static void run_all_attempts(
         best_rs_cost,
         best_corners,
         best_finders,
-        best_module_size
+        best_module_size,
+        best_version,
+        best_qr_size,
+        best_alignments,
+        best_alignment_count
       );
       free(bin);
     }
@@ -5402,12 +5562,16 @@ static void run_all_attempts(
           best_rs_cost,
           best_corners,
           best_finders,
-          best_module_size
+          best_module_size,
+          best_version,
+          best_qr_size,
+          best_alignments,
+          best_alignment_count
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 &&
-            strlen(*best_decoded) >= 5)) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
+          )) {
         bin = binarize_adaptive(sharp, w, h);
         if (bin) {
           try_pipeline(
@@ -5420,7 +5584,11 @@ static void run_all_attempts(
             best_rs_cost,
             best_corners,
             best_finders,
-            best_module_size
+            best_module_size,
+            best_version,
+            best_qr_size,
+            best_alignments,
+            best_alignment_count
           );
           free(bin);
         }
@@ -5461,6 +5629,10 @@ static void run_all_attempts(
     double best_module_size_up = 0;
     int best_fmt_dist_up = 16;
     int best_rs_cost_up = 100000;
+    int best_version_up = 0;
+    int best_qr_size_up = 0;
+    Point2D best_alignments_up[QR_MAX_ALIGNMENTS];
+    int best_alignment_count_up = 0;
 
     bin = binarize_global_otsu(grayn, wn, hn);
     if (bin) {
@@ -5474,7 +5646,11 @@ static void run_all_attempts(
         &best_rs_cost_up,
         &best_corners_up,
         best_finders_up,
-        &best_module_size_up
+        &best_module_size_up,
+        &best_version_up,
+        &best_qr_size_up,
+        best_alignments_up,
+        &best_alignment_count_up
       );
       free(bin);
     }
@@ -5491,7 +5667,11 @@ static void run_all_attempts(
           &best_rs_cost_up,
           &best_corners_up,
           best_finders_up,
-          &best_module_size_up
+          &best_module_size_up,
+          &best_version_up,
+          &best_qr_size_up,
+          best_alignments_up,
+          &best_alignment_count_up
         );
         free(bin);
       }
@@ -5538,6 +5718,13 @@ static void run_all_attempts(
           best_finders[i].y = best_finders_up[i].y * inv;
         }
         *best_module_size = best_module_size_up * inv;
+        *best_version = best_version_up;
+        *best_qr_size = best_qr_size_up;
+        *best_alignment_count = best_alignment_count_up;
+        for (int i = 0; i < best_alignment_count_up; i++) {
+          best_alignments[i].x = best_alignments_up[i].x * inv;
+          best_alignments[i].y = best_alignments_up[i].y * inv;
+        }
       }
       else {
         free(best_decoded_up);
@@ -5568,12 +5755,16 @@ static void run_all_attempts(
           best_rs_cost,
           best_corners,
           best_finders,
-          best_module_size
+          best_module_size,
+          best_version,
+          best_qr_size,
+          best_alignments,
+          best_alignment_count
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 &&
-            strlen(*best_decoded) >= 5)) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
+          )) {
         bin = binarize_adaptive(med, w, h);
         if (bin) {
           try_pipeline(
@@ -5586,7 +5777,11 @@ static void run_all_attempts(
             best_rs_cost,
             best_corners,
             best_finders,
-            best_module_size
+            best_module_size,
+            best_version,
+            best_qr_size,
+            best_alignments,
+            best_alignment_count
           );
           free(bin);
         }
@@ -5605,6 +5800,8 @@ static void scale_decode_state(
   Corners *corners,
   Point2D finders[3],
   double *module_size,
+  Point2D alignments[QR_MAX_ALIGNMENTS],
+  int alignment_count,
   double scale
 ) {
   corners->tl_x *= scale;
@@ -5618,6 +5815,10 @@ static void scale_decode_state(
   for (int i = 0; i < 3; i++) {
     finders[i].x *= scale;
     finders[i].y *= scale;
+  }
+  for (int i = 0; i < alignment_count; i++) {
+    alignments[i].x *= scale;
+    alignments[i].y *= scale;
   }
   *module_size *= scale;
 }
@@ -5736,6 +5937,10 @@ FCVQRCodeResult fcv_decode_qr_codes(
   double best_module_size = 0;
   int best_fmt_dist = 16;
   int best_rs_cost = 100000;
+  int best_version = 0;
+  int best_qr_size = 0;
+  Point2D best_alignments[QR_MAX_ALIGNMENTS];
+  int best_alignment_count = 0;
 
   /* Visit order: target first (best balance of detail vs. noise for the
      typical "one QR filling most of a phone photo" case), then coarser
@@ -5769,6 +5974,10 @@ FCVQRCodeResult fcv_decode_qr_codes(
     double module_size = 0;
     int fmt_dist = 16;
     int rs_cost = 100000;
+    int version = 0;
+    int qr_size = 0;
+    Point2D alignments[QR_MAX_ALIGNMENTS];
+    int alignment_count = 0;
 
     run_all_attempts(
       lpx,
@@ -5780,7 +5989,11 @@ FCVQRCodeResult fcv_decode_qr_codes(
       &rs_cost,
       &corners,
       finders,
-      &module_size
+      &module_size,
+      &version,
+      &qr_size,
+      alignments,
+      &alignment_count
     );
 
     /* Inverted-polarity retry at this level — handles light-on-dark QRs.
@@ -5802,14 +6015,25 @@ FCVQRCodeResult fcv_decode_qr_codes(
           &rs_cost,
           &corners,
           finders,
-          &module_size
+          &module_size,
+          &version,
+          &qr_size,
+          alignments,
+          &alignment_count
         );
         free(inv);
       }
     }
 
     if (decoded) {
-      scale_decode_state(&corners, finders, &module_size, scale);
+      scale_decode_state(
+        &corners,
+        finders,
+        &module_size,
+        alignments,
+        alignment_count,
+        scale
+      );
       if (decode_is_better(
             best_decoded,
             best_fmt_dist,
@@ -5827,6 +6051,12 @@ FCVQRCodeResult fcv_decode_qr_codes(
           best_finders[i] = finders[i];
         }
         best_module_size = module_size;
+        best_version = version;
+        best_qr_size = qr_size;
+        best_alignment_count = alignment_count;
+        for (int i = 0; i < alignment_count; i++) {
+          best_alignments[i] = alignments[i];
+        }
       }
       else {
         free(decoded);
@@ -5856,6 +6086,23 @@ FCVQRCodeResult fcv_decode_qr_codes(
       qr->finders[i] = best_finders[i];
     }
     qr->module_size = best_module_size;
+    qr->version = best_version;
+    qr->qr_size = best_qr_size;
+    qr->alignment_count = (size_t)best_alignment_count;
+    if (best_alignment_count > 0) {
+      qr->alignments = malloc((size_t)best_alignment_count * sizeof(Point2D));
+      if (qr->alignments) {
+        for (int i = 0; i < best_alignment_count; i++) {
+          qr->alignments[i] = best_alignments[i];
+        }
+      }
+      else {
+        qr->alignment_count = 0;
+      }
+    }
+    else {
+      qr->alignments = NULL;
+    }
   }
 
   return result;
@@ -5865,6 +6112,7 @@ void fcv_free_qr_result(FCVQRCodeResult result) {
   if (result.codes) {
     for (size_t i = 0; i < result.count; i++) {
       free(result.codes[i].text);
+      free(result.codes[i].alignments);
     }
     free(result.codes);
   }

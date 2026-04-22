@@ -13,6 +13,10 @@ typedef struct {
   char *text;
   Corners corners;
   Point2D finders[3]; // TL, TR, BL finder pattern centers
+  Point2D *alignments;     // Alignment pattern centers (pixel coords)
+  size_t alignment_count;  // Number of alignment patterns (0 for v1)
+  int version;             // QR version, 1..40
+  int qr_size;             // Module count per side: 21 + 4*(version-1)
   double module_size;
 } FCVQRCode;
 

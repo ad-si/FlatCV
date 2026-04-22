@@ -37,8 +37,13 @@ Applying operation: qr
 
 ### Draw Detected QR Codes
 
-Draw the QR code border (green) connecting the four boundary corners
-and disks at the three finder pattern centers (red).
+Draw every feature FlatCV detected for each decoded QR:
+
+- Green polygon around the outer border
+- Red outlines and filled dots at the three finder pattern centers
+- Magenta outlines and dots at every alignment pattern
+- Yellow dots along the two timing patterns
+
 Marker sizes are scaled to the QR code's module size.
 
 ```scrut
@@ -49,7 +54,7 @@ Applying operation: qr_draw
   → Completed in \d+.\d+ ms \(output: 928x928\) (regex)
 Final output dimensions: 928x928
 Successfully saved processed image to 'imgs/qr_hello_annotated.png'
-  QR code 1: "Hello World!"
+  QR code 1: v2 (25x25 modules), 1 alignment pattern: "Hello World!"
 ```
 
 
