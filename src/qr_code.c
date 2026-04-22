@@ -1537,8 +1537,26 @@ static void apply_homography(
     *out_y = 0;
     return;
   }
-  *out_x = (float)((H[0] * mx + H[1] * my + H[2]) / w);
-  *out_y = (float)((H[3] * mx + H[4] * my + H[5]) / w);
+  double x = (H[0] * mx + H[1] * my + H[2]) / w;
+  double y = (H[3] * mx + H[4] * my + H[5]) / w;
+  /* Clamp to a range safely castable to int by callers. Values outside this
+     range come from ill-conditioned homographies and would be off-image
+     anyway; unclamped they trigger UB when cast via (int)fx. */
+  const double lim = 1.0e7;
+  if (!(x == x) || x < -lim) {
+    x = -lim;
+  }
+  else if (x > lim) {
+    x = lim;
+  }
+  if (!(y == y) || y < -lim) {
+    y = -lim;
+  }
+  else if (y > lim) {
+    y = lim;
+  }
+  *out_x = (float)x;
+  *out_y = (float)y;
 }
 
 /* Solve the linear system Mh = v where M is 8x8 symmetric (A^T A) and v is
@@ -4116,12 +4134,23 @@ static char *decode_payload(uint8_t const *data, int len, int ver) {
     int i = 0;
     while (i + 1 < count) {
       int v = read_bits(data, len, &pos, 11);
-      result[i] = tbl[v / 45];
-      result[i + 1] = tbl[v % 45];
+      int hi = v / 45;
+      int lo = v % 45;
+      if (hi >= 45) {
+        free(result);
+        return NULL;
+      }
+      result[i] = tbl[hi];
+      result[i + 1] = tbl[lo];
       i += 2;
     }
     if (i < count) {
-      result[i] = tbl[read_bits(data, len, &pos, 6)];
+      int v = read_bits(data, len, &pos, 6);
+      if (v >= 45) {
+        free(result);
+        return NULL;
+      }
+      result[i] = tbl[v];
     }
     result[count] = '\0';
   }
