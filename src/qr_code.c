@@ -4655,14 +4655,30 @@ static char *try_decode_triple(
             enum { MAX_AP = 45 };
             double ap_src[MAX_AP][2], ap_dst[MAX_AP][2];
             int n_ap = find_all_alignment_patterns(
-              pixels, width, height, version, H, avg_m, 2.0f,
-              ap_src, ap_dst, MAX_AP
+              pixels,
+              width,
+              height,
+              version,
+              H,
+              avg_m,
+              2.0f,
+              ap_src,
+              ap_dst,
+              MAX_AP
             );
             double ap_src_a[MAX_AP][2], ap_dst_a[MAX_AP][2];
             double H_affine[9] = {a11, a12, b1, a21, a22, b2, 0.0, 0.0, 1.0};
             int n_ap_a = find_all_alignment_patterns(
-              pixels, width, height, version, H_affine, avg_m, 4.0f,
-              ap_src_a, ap_dst_a, MAX_AP
+              pixels,
+              width,
+              height,
+              version,
+              H_affine,
+              avg_m,
+              4.0f,
+              ap_src_a,
+              ap_dst_a,
+              MAX_AP
             );
             if (n_ap_a > n_ap) {
               n_ap = n_ap_a;
@@ -4720,7 +4736,11 @@ static char *try_decode_triple(
               for (int i = 3; i < np; i++) {
                 double rx, ry;
                 if (!project_homography(
-                      H_ls, pts_src[i][0], pts_src[i][1], &rx, &ry
+                      H_ls,
+                      pts_src[i][0],
+                      pts_src[i][1],
+                      &rx,
+                      &ry
                     )) {
                   continue;
                 }
@@ -4737,7 +4757,10 @@ static char *try_decode_triple(
               if (np_in >= 4 && np_in < np) {
                 double H_ls2[9];
                 if (compute_homography_ls(
-                      pts_src_in, pts_dst_in, np_in, H_ls2
+                      pts_src_in,
+                      pts_dst_in,
+                      np_in,
+                      H_ls2
                     )) {
                   memcpy(H_ls, H_ls2, sizeof(H_ls2));
                 }
@@ -4745,8 +4768,16 @@ static char *try_decode_triple(
               memcpy(H_refined, H_ls, sizeof(H_refined));
               refined_ok = 1;
               n_ap = find_all_alignment_patterns(
-                pixels, width, height, version, H_refined, avg_m, 2.0f,
-                ap_src, ap_dst, MAX_AP
+                pixels,
+                width,
+                height,
+                version,
+                H_refined,
+                avg_m,
+                2.0f,
+                ap_src,
+                ap_dst,
+                MAX_AP
               );
             }
             if (refined_ok) {
@@ -4784,16 +4815,30 @@ static char *try_decode_triple(
             double ap_src[MAX_AP][2], ap_dst[MAX_AP][2];
             double H_affine[9] = {a11, a12, b1, a21, a22, b2, 0.0, 0.0, 1.0};
             int n_ap = find_all_alignment_patterns(
-              pixels, width, height, version, H_affine, avg_m, 8.0f,
-              ap_src, ap_dst, MAX_AP
+              pixels,
+              width,
+              height,
+              version,
+              H_affine,
+              avg_m,
+              8.0f,
+              ap_src,
+              ap_dst,
+              MAX_AP
             );
             for (int ai = 0; ai < n_ap && !d; ai++) {
-              double src_i[4][2] =
-                {{sx0, sy0}, {sx1, sy1}, {ap_src[ai][0], ap_src[ai][1]},
-                 {sx2, sy2}};
-              double dst_i[4][2] =
-                {{tl.x, tl.y}, {tr.x, tr.y},
-                 {ap_dst[ai][0], ap_dst[ai][1]}, {bl.x, bl.y}};
+              double src_i[4][2] = {
+                {sx0, sy0},
+                {sx1, sy1},
+                {ap_src[ai][0], ap_src[ai][1]},
+                {sx2, sy2}
+              };
+              double dst_i[4][2] = {
+                {tl.x, tl.y},
+                {tr.x, tr.y},
+                {ap_dst[ai][0], ap_dst[ai][1]},
+                {bl.x, bl.y}
+              };
               double H_i[9];
               if (!compute_homography(src_i, dst_i, H_i)) {
                 continue;
@@ -4801,7 +4846,15 @@ static char *try_decode_triple(
               fd = 16;
               rc = 100000;
               d = decode_with_perturbation(
-                pixels, gray, width, height, H_i, qr_size, version, &fd, &rc
+                pixels,
+                gray,
+                width,
+                height,
+                H_i,
+                qr_size,
+                version,
+                &fd,
+                &rc
               );
             }
           }
@@ -5324,8 +5377,8 @@ static void run_all_attempts(
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
-          )) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 &&
+            strlen(*best_decoded) >= 5)) {
         bin = binarize_adaptive(sharp, w, h);
         if (bin) {
           try_pipeline(
@@ -5490,8 +5543,8 @@ static void run_all_attempts(
         );
         free(bin);
       }
-      if (!(*best_decoded && *best_fmt_dist <= 1 && strlen(*best_decoded) >= 5
-          )) {
+      if (!(*best_decoded && *best_fmt_dist <= 1 &&
+            strlen(*best_decoded) >= 5)) {
         bin = binarize_adaptive(med, w, h);
         if (bin) {
           try_pipeline(
