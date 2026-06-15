@@ -1,8 +1,4 @@
-//cc -Wall -Wextra -Wpedantic -Iinclude tests/test.c src/{feature_to_test}.c 
-//How to use test.c
-
 #include <assert.h>
-
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,7 +12,7 @@
 #include "draw.h"
 #include "exif.h"
 #include "flip.h"
-#include "floodfill.h"
+#include "flood_fill.h"
 #include "foerstner_corner.h"
 #include "histogram.h"
 #include "perspectivetransform.h"
@@ -2269,14 +2265,14 @@ int32_t test_fcv_flood_fill(void) {
 
     uint8_t *result = fcv_flood_fill(width, height, data, &marker, 3, 9);
     if (!result) {
-      printf("Flood fill test failed: NULL result for valid input\n");
+      printf("❌ Flood fill test failed: NULL result for valid input\n");
       return 1;
     }
 
     for (uint32_t i = 0; i < width * height; i++) {
       if (result[i] != expected[i]) {
         printf(
-          "Flood fill test failed at index %u: %u != %u\n",
+          "❌ Flood fill test failed at index %u: %u != %u\n",
           i,
           result[i],
           expected[i]
@@ -2296,14 +2292,14 @@ int32_t test_fcv_flood_fill(void) {
 
     uint8_t *result = fcv_flood_fill(3, 3, data, &marker, 0, 7);
     if (!result) {
-      printf("Flood fill test failed: NULL result for no-op fill\n");
+      printf("❌ Flood fill test failed: NULL result for no-op fill\n");
       return 1;
     }
 
     for (uint32_t i = 0; i < 9; i++) {
       if (result[i] != expected[i]) {
         printf(
-          "Flood fill test failed in no-op case at index %u: %u != %u\n",
+          "❌ Flood fill test failed in no-op case at index %u: %u != %u\n",
           i,
           result[i],
           expected[i]
@@ -2337,14 +2333,43 @@ int32_t test_fcv_flood_fill(void) {
 
     uint8_t *result = fcv_flood_fill(3, 3, data, &marker, 3, 1);
     if (!result) {
-      printf("Flood fill test failed: NULL result for threshold fill\n");
+      printf("❌ Flood fill test failed: NULL result for threshold fill\n");
       return 1;
     }
 
     for (uint32_t i = 0; i < 9; i++) {
       if (result[i] != expected[i]) {
         printf(
-          "Flood fill threshold test failed at index %u: %u != %u\n",
+          "❌ Flood fill threshold test failed at index %u: %u != %u\n",
+          i,
+          result[i],
+          expected[i]
+        );
+        test_ok = false;
+        break;
+      }
+    }
+
+    free(result);
+  }
+
+  {
+    // new_value equals the seed value, but a 4-connected neighbor within
+    // threshold has a different grayscale value and must still be overwritten.
+    uint8_t data[4] = {10, 8, 200, 200};
+    uint8_t expected[4] = {10, 10, 200, 200};
+    Point2D marker = {.x = 0.0, .y = 0.0};
+
+    uint8_t *result = fcv_flood_fill(2, 2, data, &marker, 3, 10);
+    if (!result) {
+      printf("❌ Flood fill test failed: NULL result for new==seed fill\n");
+      return 1;
+    }
+
+    for (uint32_t i = 0; i < 4; i++) {
+      if (result[i] != expected[i]) {
+        printf(
+          "❌ Flood fill new==seed test failed at index %u: %u != %u\n",
           i,
           result[i],
           expected[i]

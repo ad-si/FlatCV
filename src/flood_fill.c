@@ -6,7 +6,7 @@
 
 #ifndef FLATCV_AMALGAMATION
 #include "1_types.h"
-#include "floodfill.h"
+#include "flood_fill.h"
 #else
 #include "flatcv.h"
 #endif
@@ -102,7 +102,7 @@ uint8_t *fcv_flood_fill(
   uint32_t height,
   uint8_t const *const grayscale_data,
   Point2D const *marker,
-  uint8_t threshold, 
+  uint8_t threshold,
   uint8_t new_value
 ) {
   if (!grayscale_data || !marker || width == 0 || height == 0) {
@@ -149,11 +149,6 @@ uint8_t *fcv_flood_fill(
 
   size_t start_idx = (size_t)marker_y * width + (uint32_t)marker_x;
   uint8_t target_value = grayscale_data[start_idx];
-  if (target_value == new_value) {
-    destroy_floodfill_queue(queue);
-    free(visited);
-    return output_data;
-  }
 
   if (!enqueue_floodfill(queue, marker_x, marker_y)) {
     destroy_floodfill_queue(queue);
