@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 
 
+## Unreleased
+
+- Fix build with GCC 15, which defaults to C23,
+    whose `bool` keyword can't be parsed by c2hs
+
+
 ## 2025-01-15 - 0.1
 
 - Initial release of Haskell bindings for FlatCV
