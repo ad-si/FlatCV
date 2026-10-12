@@ -93,7 +93,7 @@ test-corner-detection: $(FLATCV_NATIVE) tests/test_corner_detection.py
 
 
 .PHONY: test
-test: flatcv_mac test-units test-integration test-amalgamation test-corner-detection
+test: $(FLATCV_NATIVE) test-units test-integration test-amalgamation test-corner-detection
 
 
 # Full regression: includes QR false-positive (noqr-*) negatives per difficulty

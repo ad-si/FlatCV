@@ -12,6 +12,7 @@
 #include "draw.h"
 #include "exif.h"
 #include "flip.h"
+#include "flood_fill.h"
 #include "foerstner_corner.h"
 #include "histogram.h"
 #include "perspectivetransform.h"
@@ -2229,12 +2230,164 @@ int32_t test_fcv_binary_opening_disk(void) {
   }
 }
 
+int32_t test_fcv_flood_fill(void) {
+  bool test_ok = true;
+
+  {
+    uint32_t width = 5;
+    uint32_t height = 5;
+    uint8_t data[25] = {
+      10, 11, 14, 30, 30,
+      9, 12, 13, 29, 31,
+      8, 10, 16, 28, 32,
+      7, 9, 25, 40, 40,
+      7, 8, 26, 40, 40
+    };
+    uint8_t expected[25] = {
+      9, 9, 14, 30, 30,
+      9, 9, 9, 29, 31,
+      9, 9, 16, 28, 32,
+      9, 9, 25, 40, 40,
+      9, 9, 26, 40, 40
+    };
+    Point2D marker = {.x = 0.0, .y = 0.0};
+
+    uint8_t *result = fcv_flood_fill(width, height, data, &marker, 3, 9);
+    if (!result) {
+      printf("❌ Flood fill test failed: NULL result for valid input\n");
+      return 1;
+    }
+
+    for (uint32_t i = 0; i < width * height; i++) {
+      if (result[i] != expected[i]) {
+        printf(
+          "❌ Flood fill test failed at index %u: %u != %u\n",
+          i,
+          result[i],
+          expected[i]
+        );
+        test_ok = false;
+        break;
+      }
+    }
+
+    free(result);
+  }
+
+  {
+    uint8_t data[9] = {7, 7, 7, 7, 7, 7, 7, 7, 7};
+    uint8_t expected[9] = {7, 7, 7, 7, 7, 7, 7, 7, 7};
+    Point2D marker = {.x = 1.0, .y = 1.0};
+
+    uint8_t *result = fcv_flood_fill(3, 3, data, &marker, 0, 7);
+    if (!result) {
+      printf("❌ Flood fill test failed: NULL result for no-op fill\n");
+      return 1;
+    }
+
+    for (uint32_t i = 0; i < 9; i++) {
+      if (result[i] != expected[i]) {
+        printf(
+          "❌ Flood fill test failed in no-op case at index %u: %u != %u\n",
+          i,
+          result[i],
+          expected[i]
+        );
+        test_ok = false;
+        break;
+      }
+    }
+
+    free(result);
+  }
+
+  {
+    uint8_t data[4] = {1, 2, 3, 4};
+    Point2D invalid_marker = {.x = 4.0, .y = 0.0};
+
+    uint8_t *result = fcv_flood_fill(2, 2, data, &invalid_marker, 1, 9);
+    if (result != NULL) {
+      printf(
+        "❌ Flood fill test failed: should return NULL for out-of-bounds seed\n"
+      );
+      test_ok = false;
+      free(result);
+    }
+  }
+
+  {
+    uint8_t data[9] = {10, 12, 13, 9, 10, 13, 40, 41, 42};
+    uint8_t expected[9] = {1, 1, 1, 1, 1, 1, 40, 41, 42};
+    Point2D marker = {.x = 1.0, .y = 1.0};
+
+    uint8_t *result = fcv_flood_fill(3, 3, data, &marker, 3, 1);
+    if (!result) {
+      printf("❌ Flood fill test failed: NULL result for threshold fill\n");
+      return 1;
+    }
+
+    for (uint32_t i = 0; i < 9; i++) {
+      if (result[i] != expected[i]) {
+        printf(
+          "❌ Flood fill threshold test failed at index %u: %u != %u\n",
+          i,
+          result[i],
+          expected[i]
+        );
+        test_ok = false;
+        break;
+      }
+    }
+
+    free(result);
+  }
+
+  {
+    // new_value equals the seed value, but a 4-connected neighbor within
+    // threshold has a different grayscale value and must still be overwritten.
+    uint8_t data[4] = {10, 8, 200, 200};
+    uint8_t expected[4] = {10, 10, 200, 200};
+    Point2D marker = {.x = 0.0, .y = 0.0};
+
+    uint8_t *result = fcv_flood_fill(2, 2, data, &marker, 3, 10);
+    if (!result) {
+      printf("❌ Flood fill test failed: NULL result for new==seed fill\n");
+      return 1;
+    }
+
+    for (uint32_t i = 0; i < 4; i++) {
+      if (result[i] != expected[i]) {
+        printf(
+          "❌ Flood fill new==seed test failed at index %u: %u != %u\n",
+          i,
+          result[i],
+          expected[i]
+        );
+        test_ok = false;
+        break;
+      }
+    }
+
+    free(result);
+  }
+
+  if (test_ok) {
+    printf("Flood fill test passed\n");
+    return 0;
+  }
+  else {
+    printf("Flood fill test failed\n");
+    return 1;
+  }
+}
+
 int32_t main(void) {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
       !test_perspective_transform_float() && !test_fcv_foerstner_corner() &&
       !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk() &&
       !test_fcv_binary_dilation_disk() && !test_fcv_binary_erosion_disk() &&
-      !test_fcv_binary_opening_disk() && !test_fcv_trim() &&
+      !test_fcv_binary_opening_disk() && !test_fcv_flood_fill() &&
+      !test_fcv_trim() &&
       !test_fcv_trim_threshold() && !test_fcv_histogram() &&
       !test_fcv_add_border() && !test_sort_corners() &&
       !test_exif_orientation() && !test_transformations()) {
