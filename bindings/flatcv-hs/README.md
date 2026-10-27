@@ -111,6 +111,7 @@ main = do
 ### Segmentation
 
 - `watershedSegmentation` - Watershed segmentation
+- `floodFill` - Flood fill with multiple seeds and 4- or 8-connectivity
 
 
 ### Utility

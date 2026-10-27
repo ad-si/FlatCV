@@ -78,6 +78,7 @@ Command | Input | Output
 `flatcv i.jpg grayscale, blur 9 o.jpg` | ![Parrot](./imgs/parrot.jpeg) | ![Parrot Grayscale and Blur](./imgs/parrot_grayscale_blur.jpeg)
 `flatcv i.jpg bw_smooth o.jpg` | ![Parrot](./imgs/page.png) | ![Smooth Binarization](./imgs/page_bw_smooth.png)
 `flatcv i.jpg watershed 0x0 300x200 599x0 o.jpg` | ![Parrot](./imgs/elevation_3_basins_gradient.png) | ![Watershed Segmentation](./imgs/elevation_3_basins_gradient_watershed.png)
+`flatcv i.png flood_fill 10 128 0x0 150x100 o.png` | ![Ring](./imgs/elevation_2_basins_1_ring.png) | ![Flood Fill](./imgs/elevation_2_basins_1_ring_flood_fill_2_seeds.png)
 
 
 ### Library

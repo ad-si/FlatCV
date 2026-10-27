@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 
 - Fix build with GCC 15, which defaults to C23,
     whose `bool` keyword can't be parsed by c2hs
+- Add `floodFill` binding
 
 
 ## 2025-01-15 - 0.1

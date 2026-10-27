@@ -12,6 +12,7 @@
 #include "draw.h"
 #include "exif.h"
 #include "flip.h"
+#include "flood_fill.h"
 #include "foerstner_corner.h"
 #include "histogram.h"
 #include "perspectivetransform.h"
@@ -2229,13 +2230,244 @@ int32_t test_fcv_binary_opening_disk(void) {
   }
 }
 
+static bool check_flood_fill(
+  char const *name,
+  uint32_t width,
+  uint32_t height,
+  uint8_t const *data,
+  Point2D const *markers,
+  uint32_t num_markers,
+  uint8_t threshold,
+  uint8_t new_value,
+  uint8_t connectivity,
+  uint8_t const *expected
+) {
+  uint8_t *result = fcv_flood_fill(
+    width,
+    height,
+    data,
+    markers,
+    num_markers,
+    threshold,
+    new_value,
+    connectivity
+  );
+  if (!result) {
+    printf("❌ Flood fill %s test failed: NULL result\n", name);
+    return false;
+  }
+
+  bool ok = true;
+  for (uint32_t i = 0; i < width * height; i++) {
+    if (result[i] != expected[i]) {
+      printf(
+        "❌ Flood fill %s test failed at index %u: %u != %u\n",
+        name,
+        i,
+        result[i],
+        expected[i]
+      );
+      ok = false;
+      break;
+    }
+  }
+
+  free(result);
+  return ok;
+}
+
+int32_t test_fcv_flood_fill(void) {
+  bool test_ok = true;
+
+  {
+    // clang-format off
+    uint8_t data[25] = {
+      10, 11, 14, 30, 30,
+      9, 12, 13, 29, 31,
+      8, 10, 16, 28, 32,
+      7, 9, 25, 40, 40,
+      7, 8, 26, 40, 40
+    };
+    uint8_t expected[25] = {
+      9, 9, 14, 30, 30,
+      9, 9, 9, 29, 31,
+      9, 9, 16, 28, 32,
+      9, 9, 25, 40, 40,
+      9, 9, 26, 40, 40
+    };
+    // clang-format on
+    Point2D marker = {.x = 0.0, .y = 0.0};
+    test_ok &=
+      check_flood_fill("basic", 5, 5, data, &marker, 1, 3, 9, 4, expected);
+  }
+
+  {
+    uint8_t data[9] = {7, 7, 7, 7, 7, 7, 7, 7, 7};
+    uint8_t expected[9] = {7, 7, 7, 7, 7, 7, 7, 7, 7};
+    Point2D marker = {.x = 1.0, .y = 1.0};
+    test_ok &=
+      check_flood_fill("no-op", 3, 3, data, &marker, 1, 0, 7, 4, expected);
+  }
+
+  {
+    uint8_t data[9] = {10, 12, 13, 9, 10, 13, 40, 41, 42};
+    uint8_t expected[9] = {1, 1, 1, 1, 1, 1, 40, 41, 42};
+    Point2D marker = {.x = 1.0, .y = 1.0};
+    test_ok &=
+      check_flood_fill("threshold", 3, 3, data, &marker, 1, 3, 1, 4, expected);
+  }
+
+  {
+    // new_value equals the seed value, but a 4-connected neighbor within
+    // threshold has a different grayscale value and must still be overwritten.
+    uint8_t data[4] = {10, 8, 200, 200};
+    uint8_t expected[4] = {10, 10, 200, 200};
+    Point2D marker = {.x = 0.0, .y = 0.0};
+    test_ok &=
+      check_flood_fill("new==seed", 2, 2, data, &marker, 1, 3, 10, 4, expected);
+  }
+
+  {
+    // Diagonal pattern: 4-connectivity stays at the center pixel,
+    // 8-connectivity reaches the corners.
+    uint8_t data[9] = {0, 255, 0, 255, 0, 255, 0, 255, 0};
+    uint8_t expected_4[9] = {0, 255, 0, 255, 100, 255, 0, 255, 0};
+    uint8_t expected_8[9] = {100, 255, 100, 255, 100, 255, 100, 255, 100};
+    Point2D marker = {.x = 1.0, .y = 1.0};
+    test_ok &= check_flood_fill(
+      "4-connectivity",
+      3,
+      3,
+      data,
+      &marker,
+      1,
+      0,
+      100,
+      4,
+      expected_4
+    );
+    test_ok &= check_flood_fill(
+      "8-connectivity",
+      3,
+      3,
+      data,
+      &marker,
+      1,
+      0,
+      100,
+      8,
+      expected_8
+    );
+  }
+
+  {
+    // Two separate regions, one seed in each
+    uint8_t data[5] = {10, 10, 200, 50, 50};
+    uint8_t expected[5] = {0, 0, 200, 0, 0};
+    Point2D markers[] = {{.x = 0.0, .y = 0.0}, {.x = 4.0, .y = 0.0}};
+    test_ok &= check_flood_fill(
+      "multiple seeds",
+      5,
+      1,
+      data,
+      markers,
+      2,
+      5,
+      0,
+      4,
+      expected
+    );
+  }
+
+  {
+    // Overlapping regions: each seed fills relative to its own value.
+    // The first seed (value 0) reaches indices 0-2, the second seed
+    // (value 5) must traverse those again to reach index 3 (value 10).
+    uint8_t data[4] = {5, 0, 5, 10};
+    uint8_t expected[4] = {255, 255, 255, 255};
+    Point2D markers[] = {{.x = 1.0, .y = 0.0}, {.x = 0.0, .y = 0.0}};
+    test_ok &= check_flood_fill(
+      "overlapping seeds",
+      4,
+      1,
+      data,
+      markers,
+      2,
+      5,
+      255,
+      4,
+      expected
+    );
+  }
+
+  {
+    // Out-of-bounds or non-finite seeds.
+    // Negative fractional coordinates must not be truncated to 0.
+    uint8_t data[4] = {1, 2, 3, 4};
+    Point2D invalid_markers[] = {
+      {.x = 2.0, .y = 0.0},
+      {.x = 0.0, .y = 2.0},
+      {.x = -0.5, .y = 0.0},
+      {.x = 0.0, .y = -0.5},
+      {.x = 1e20, .y = 0.0},
+      {.x = NAN, .y = 0.0},
+    };
+
+    for (size_t i = 0; i < sizeof(invalid_markers) / sizeof(Point2D); i++) {
+      uint8_t *result =
+        fcv_flood_fill(2, 2, data, &invalid_markers[i], 1, 1, 9, 4);
+      if (result != NULL) {
+        printf(
+          "❌ Flood fill test failed: should return NULL for seed (%f, %f)\n",
+          invalid_markers[i].x,
+          invalid_markers[i].y
+        );
+        test_ok = false;
+        free(result);
+      }
+    }
+
+    // One invalid seed among valid ones rejects the whole call
+    Point2D mixed_markers[] = {{.x = 0.0, .y = 0.0}, {.x = 5.0, .y = 0.0}};
+    Point2D valid_marker = {.x = 0.0, .y = 0.0};
+    uint8_t *invalid_results[] = {
+      fcv_flood_fill(2, 2, data, mixed_markers, 2, 1, 9, 4),
+      fcv_flood_fill(2, 2, data, &valid_marker, 0, 1, 9, 4),
+      fcv_flood_fill(2, 2, data, NULL, 1, 1, 9, 4),
+      fcv_flood_fill(2, 2, NULL, &valid_marker, 1, 1, 9, 4),
+      fcv_flood_fill(0, 2, data, &valid_marker, 1, 1, 9, 4),
+      fcv_flood_fill(2, 2, data, &valid_marker, 1, 1, 9, 6),
+    };
+    for (size_t i = 0; i < sizeof(invalid_results) / sizeof(uint8_t *); i++) {
+      if (invalid_results[i] != NULL) {
+        printf(
+          "❌ Flood fill test failed: invalid argument case %zu returned "
+          "data\n",
+          i
+        );
+        test_ok = false;
+        free(invalid_results[i]);
+      }
+    }
+  }
+
+  if (test_ok) {
+    printf("Flood fill test passed\n");
+    return 0;
+  }
+  else {
+    printf("Flood fill test failed\n");
+    return 1;
+  }
+}
+
 int32_t main(void) {
   if (!test_otsu_threshold() && !test_perspective_transform() &&
       !test_perspective_transform_float() && !test_fcv_foerstner_corner() &&
       !test_fcv_corner_peaks() && !test_fcv_binary_closing_disk() &&
       !test_fcv_binary_dilation_disk() && !test_fcv_binary_erosion_disk() &&
-      !test_fcv_binary_opening_disk() && !test_fcv_trim() &&
-      !test_fcv_trim_threshold() && !test_fcv_histogram() &&
+      !test_fcv_binary_opening_disk() && !test_fcv_flood_fill() &&
+      !test_fcv_trim() && !test_fcv_trim_threshold() && !test_fcv_histogram() &&
       !test_fcv_add_border() && !test_sort_corners() &&
       !test_exif_orientation() && !test_transformations()) {
     printf("✅ All tests passed\n");

@@ -246,6 +246,24 @@ main = hspec $ do
         outH `shouldBe` 8
         V.length result `shouldBe` 256  -- 8x8x4
 
+    describe "floodFill" $ do
+      it "fills the connected region within threshold of the seed" $ do
+        let input = V.fromList [10, 12, 200, 11]
+        result <- floodFill 4 1 [Point2D 0 0] 5 0 Connectivity4 input
+        result `shouldBe` V.fromList [0, 0, 200, 11]
+
+      it "fills one region per seed" $ do
+        let input = V.fromList [10, 12, 200, 11]
+        result <- floodFill 4 1 [Point2D 0 0, Point2D 3 0] 5 0 Connectivity4 input
+        result `shouldBe` V.fromList [0, 0, 200, 0]
+
+      it "only crosses diagonal gaps with 8-connectivity" $ do
+        let input = V.fromList [0, 255, 0, 255, 0, 255, 0, 255, 0]
+        result4 <- floodFill 3 3 [Point2D 1 1] 0 100 Connectivity4 input
+        result8 <- floodFill 3 3 [Point2D 1 1] 0 100 Connectivity8 input
+        result4 `shouldBe` V.fromList [0, 255, 0, 255, 100, 255, 0, 255, 0]
+        result8 `shouldBe` V.fromList [100, 255, 100, 255, 100, 255, 100, 255, 100]
+
     describe "convertToBinary" $ do
       it "converts to binary with custom colors" $ do
         result <- convertToBinary 4 4 "#FFFFFF" "#000000" testImage

@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Apply EXIF orientation to PNG inputs (via the `eXIf` chunk), not just JPEGs
+- Add flood fill segmentation (`flood_fill` and `flood_fill_8`)
+    with support for multiple seeds and 4- or 8-connectivity
 
 ## 2026-01-15 - 0.3.0
 
