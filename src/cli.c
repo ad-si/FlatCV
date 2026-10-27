@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +23,7 @@
 #include "exif.h"
 #include "extract_document.h"
 #include "flip.h"
+#include "flood_fill.h"
 #include "foerstner_corner.h"
 #include "histogram.h"
 #include "perspectivetransform.h"
@@ -80,6 +82,12 @@ void print32_t_usage(const char *program_name) {
   printf("  watershed '<x1>x<y1> <x2>x<y2> ...' - Watershed segmentation with "
          "markers at "
          "specified coordinates\n");
+  printf("  flood_fill <threshold> <value> <x1>x<y1> [<x2>x<y2> ...] - Fill "
+         "4-connected regions within threshold of each seed with gray value\n");
+  printf(
+    "  flood_fill_8 <threshold> <value> <x1>x<y1> [...] - Like flood_fill, "
+    "but 8-connected (includes diagonal neighbors)\n"
+  );
   printf("  crop <widthxheight+x+y> - Crop the image\n");
   printf("  extract_document - Extract document using corner detection and "
          "perspective transform (auto-size)\n");
@@ -132,6 +140,10 @@ void print32_t_usage(const char *program_name) {
   );
   printf(
     "  %s input.jpg \"watershed '100x50 200x150 300x100'\" output.jpg\n",
+    program_name
+  );
+  printf(
+    "  %s input.jpg \"flood_fill 10 128 0x0 150x100\" output.jpg\n",
     program_name
   );
   printf("  %s input.jpg \"extract_document\" output.jpg\n", program_name);
@@ -577,6 +589,29 @@ int32_t parse_pipeline(
       }
       else if (strcmp(piece, "watershed") == 0) {
         /* Watershed operation requires: x1×y1,x2×y2,... */
+        add_operation(
+          pipeline,
+          piece,
+          0.0,
+          0,
+          0.0,
+          0,
+          0.0,
+          0,
+          0.0,
+          0,
+          params_str,
+          1
+        );
+      }
+      else if (strcmp(piece, "flood_fill") == 0 ||
+               strcmp(piece, "flood_fill_8") == 0) {
+        /* Flood fill requires: threshold value x1×y1 [x2×y2 ...] */
+        if (strlen(params_str) >= sizeof(((PipelineOp *)0)->param_str)) {
+          fprintf(stderr, "Error: %s parameters are too long\n", piece);
+          free(combined);
+          return 0;
+        }
         add_operation(
           pipeline,
           piece,
@@ -1476,6 +1511,125 @@ uint8_t *apply_operation(
       false
     );
     free(grayscale_data);
+
+    free(markers);
+    free(param_copy);
+    return result;
+  }
+  else if (strcmp(operation, "flood_fill") == 0 ||
+           strcmp(operation, "flood_fill_8") == 0) {
+    char const *usage = "Error: %s operation requires: "
+                        "<threshold> <value> <x1>x<y1> [<x2>x<y2> ...]\n";
+    if (!has_string_param) {
+      fprintf(stderr, usage, operation);
+      return NULL;
+    }
+
+    char *param_copy = strdup(param_str);
+    if (!param_copy) {
+      return NULL;
+    }
+
+    // Upper bound for the number of markers: tokens minus threshold and value
+    uint32_t max_markers = 1;
+    for (char *p = param_copy; *p; p++) {
+      if (*p == ' ') {
+        max_markers++;
+      }
+    }
+    Point2D *markers = malloc(max_markers * sizeof(Point2D));
+    if (!markers) {
+      free(param_copy);
+      return NULL;
+    }
+
+    long threshold = -1;
+    long value = -1;
+    uint32_t num_markers = 0;
+    int32_t token_idx = 0;
+    bool valid = true;
+
+    for (char *token = strtok(param_copy, " "); token && valid;
+         token = strtok(NULL, " "), token_idx++) {
+      char *end;
+      if (token_idx < 2) {
+        long number = strtol(token, &end, 10);
+        if (*end != '\0' || number < 0 || number > 255) {
+          fprintf(
+            stderr,
+            "Error: %s %s must be an integer between 0 and 255\n",
+            operation,
+            token_idx == 0 ? "threshold" : "value"
+          );
+          valid = false;
+        }
+        if (token_idx == 0) {
+          threshold = number;
+        }
+        else {
+          value = number;
+        }
+        continue;
+      }
+
+      char *x_pos = strchr(token, 'x');
+      if (!x_pos) {
+        fprintf(stderr, "Error: invalid marker '%s', use <x>x<y>\n", token);
+        valid = false;
+        continue;
+      }
+      *x_pos = '\0';
+      double x = strtod(token, &end);
+      bool x_ok = end != token && *end == '\0';
+      double y = strtod(x_pos + 1, &end);
+      bool y_ok = end != x_pos + 1 && *end == '\0';
+      *x_pos = 'x';
+      if (!x_ok || !y_ok) {
+        fprintf(stderr, "Error: invalid marker '%s', use <x>x<y>\n", token);
+        valid = false;
+        continue;
+      }
+      if (!(x >= 0 && x < *width && y >= 0 && y < *height)) {
+        fprintf(
+          stderr,
+          "Error: marker '%s' is outside the %dx%d image\n",
+          token,
+          *width,
+          *height
+        );
+        valid = false;
+        continue;
+      }
+      markers[num_markers++] = (Point2D){.x = x, .y = y};
+    }
+
+    if (valid && num_markers == 0) {
+      fprintf(stderr, usage, operation);
+      valid = false;
+    }
+
+    uint8_t *result = NULL;
+    if (valid) {
+      uint8_t *grayscale_data =
+        fcv_rgba_to_grayscale(*width, *height, input_data);
+      if (grayscale_data) {
+        uint8_t *filled = fcv_flood_fill(
+          *width,
+          *height,
+          grayscale_data,
+          markers,
+          num_markers,
+          (uint8_t)threshold,
+          (uint8_t)value,
+          strcmp(operation, "flood_fill_8") == 0 ? 8 : 4
+        );
+        free(grayscale_data);
+        if (filled) {
+          result = fcv_single_to_multichannel(*width, *height, filled);
+          free(filled);
+        }
+      }
+    }
 
     free(markers);
     free(param_copy);

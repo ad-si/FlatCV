@@ -9,7 +9,9 @@ uint8_t *fcv_flood_fill(
   uint32_t width,
   uint32_t height,
   uint8_t const *const grayscale_data,
-  Point2D const *marker,
+  Point2D const *markers,
+  uint32_t num_markers,
   uint8_t threshold,
-  uint8_t new_value
+  uint8_t new_value,
+  uint8_t connectivity
 );
