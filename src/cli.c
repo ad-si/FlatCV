@@ -1912,10 +1912,11 @@ int32_t main(int32_t argc, char *argv[]) {
     return 1;
   }
 
-  // Handle EXIF orientation for JPEGs
+  // Handle EXIF orientation for JPEGs and PNGs
   const char *ext_in = strrchr(input_path, '.');
   if (ext_in && (strcmp(ext_in, ".jpg") == 0 || strcmp(ext_in, ".jpeg") == 0 ||
-                 strcmp(ext_in, ".JPG") == 0 || strcmp(ext_in, ".JPEG") == 0)) {
+                 strcmp(ext_in, ".JPG") == 0 || strcmp(ext_in, ".JPEG") == 0 ||
+                 strcmp(ext_in, ".png") == 0 || strcmp(ext_in, ".PNG") == 0)) {
     int32_t orientation = fcv_get_exif_orientation(input_path);
     if (orientation > 1 && orientation <= 8) {
       fprintf(stderr, "Applying EXIF orientation: %d\n", orientation);

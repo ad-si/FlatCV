@@ -49,6 +49,10 @@ library
     include-dirs:       .
     c-sources:          flatcv_impl.c
 
+    -- Also passed to the C preprocessor of c2hs,
+    -- which can't parse C23's `bool` keyword (the default since GCC 15)
+    cpp-options:        -std=gnu17
+
     ghc-options:        -Wall
 
 test-suite flatcv-test

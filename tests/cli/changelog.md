@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Apply EXIF orientation to PNG inputs (via the `eXIf` chunk), not just JPEGs
+
 ## 2026-01-15 - 0.3.0
 
 - Add and improve several image manipulation features

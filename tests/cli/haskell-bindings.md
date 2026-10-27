@@ -133,7 +133,7 @@ with automatic memory management via foreign pointers.
 
 ### Utility
 
-- `getExifOrientation` - Read JPEG EXIF orientation
+- `getExifOrientation` - Read JPEG or PNG EXIF orientation
 - `parseHexColor` - Parse hex color string
 - `convertToBinary` - Convert to binary with custom colors
 
