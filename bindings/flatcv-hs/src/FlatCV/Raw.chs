@@ -513,3 +513,20 @@ fromWord32Ptr = castPtr
   , `Bool'                        -- ^ create_boundaries
   } -> `Ptr Word8' toWord8Ptr
 #}
+
+--------------------------------------------------------------------------------
+-- Flood fill
+--------------------------------------------------------------------------------
+
+-- | Flood fill segmentation
+{#fun fcv_flood_fill
+  { `Word32'                      -- ^ width
+  , `Word32'                      -- ^ height
+  , fromWord8Ptr `Ptr Word8'      -- ^ grayscale data
+  , `Point2DPtr'                  -- ^ markers array
+  , `Word32'                      -- ^ num_markers
+  , `Word8'                       -- ^ threshold
+  , `Word8'                       -- ^ new_value
+  , `Word8'                       -- ^ connectivity
+  } -> `Ptr Word8' toWord8Ptr
+#}

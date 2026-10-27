@@ -129,6 +129,7 @@ with automatic memory management via foreign pointers.
 ### Segmentation
 
 - `watershedSegmentation` - Watershed segmentation
+- `floodFill` - Flood fill with multiple seeds and 4- or 8-connectivity
 
 
 ### Utility

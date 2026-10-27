@@ -34,6 +34,7 @@ module FlatCV
   , Corners(..)
   , Matrix3x3(..)
   , Point2D(..)
+  , Connectivity(..)
 
     -- * Pretty printing
   , prettyShowCorners
@@ -97,6 +98,7 @@ module FlatCV
 
     -- * Segmentation
   , watershedSegmentation
+  , floodFill
 
     -- * EXIF
   , getExifOrientation
@@ -149,7 +151,7 @@ import Foreign.C.String (withCString)
 import Foreign.C.Types (CUChar)
 import Foreign.ForeignPtr (newForeignPtr, FinalizerPtr, castForeignPtr)
 import Foreign.Marshal.Alloc (alloca, free, mallocBytes)
-import Foreign.Marshal.Array (pokeArray)
+import Foreign.Marshal.Array (pokeArray, withArrayLen)
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
 import Foreign.Storable (Storable(..), peek, poke, sizeOf, alignment)
 import Text.Printf (printf)
@@ -180,6 +182,12 @@ instance Storable Point2D where
   poke ptr Point2D{..} = do
     pokeByteOff ptr 0 pointX
     pokeByteOff ptr 8 pointY
+
+-- | Pixel neighborhood used for region growing
+data Connectivity
+  = Connectivity4  -- ^ Edge neighbors only
+  | Connectivity8  -- ^ Edge and diagonal neighbors
+  deriving (Show, Eq)
 
 -- | Quadrilateral corners (top-left, top-right, bottom-right, bottom-left)
 data Corners = Corners
@@ -608,6 +616,25 @@ watershedSegmentation width height markers createBoundaries input = do
     (width * height * 4)
   free markersPtr
   return result
+
+-- | Flood fill segmentation on single-channel grayscale data.
+-- Starting from each marker, all connected pixels whose value differs
+-- by at most @threshold@ from that marker's value are set to @newValue@.
+-- Each marker is filled independently, the result is the union of all fills.
+-- Fails if no markers are given or a marker lies outside the image.
+floodFill
+  :: Word32 -> Word32 -> [Point2D] -> Word8 -> Word8 -> Connectivity
+  -> V.Vector Word8 -> IO (V.Vector Word8)
+floodFill width height markers threshold newValue connectivity input =
+  withArrayLen markers $ \numMarkers markersPtr ->
+    withImageData input
+      (\p -> Raw.fcv_flood_fill width height p (castPtr markersPtr)
+        (fromIntegral numMarkers) threshold newValue connectivityNum)
+      (width * height)
+  where
+    connectivityNum = case connectivity of
+      Connectivity4 -> 4
+      Connectivity8 -> 8
 
 --------------------------------------------------------------------------------
 -- EXIF
