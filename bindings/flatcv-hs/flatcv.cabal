@@ -49,9 +49,9 @@ library
     include-dirs:       .
     c-sources:          flatcv_impl.c
 
-    -- Also passed to the C preprocessor of c2hs,
-    -- which can't parse C23's `bool` keyword (the default since GCC 15)
-    cpp-options:        -std=gnu17
+    -- c2hs cannot parse C23's bool keyword (the default since GCC 15).
+    -- Spell it as the equivalent C99 type using a portable preprocessor flag.
+    cpp-options:        -Dbool=_Bool
 
     ghc-options:        -Wall
 
