@@ -3,8 +3,10 @@
 All notable changes to this project will be documented in this file.
 
 
-## Unreleased
+## 2026-11-07 - 0.3.1.0
 
+- Fix corner ordering for long, skewed documents to prevent quarter-turns
+    during extraction; relabel corners after selecting the final four peaks
 - Fix build with GCC 15, which defaults to C23,
     whose `bool` keyword can't be parsed by c2hs
 - Add `floodFill` binding
