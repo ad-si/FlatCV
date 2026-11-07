@@ -39,3 +39,28 @@ Successfully saved processed image to 'imgs/receipt_corners.png'
     Bottom-right: (720, 956)
     Bottom-left:  (352, 960)
 ```
+
+
+### Keep a skewed landscape receipt upright
+
+This synthetic receipt has a lower-left corner with a smaller raw `x + y`
+than its upper-left corner. Corner labels must follow the document's bounds
+so extraction does not introduce a quarter-turn. The fixture is a 720×540
+image with background RGB 30 and a solid RGB 240 quadrilateral at
+(261,215), (703,219), (692,367), (14,361).
+
+```scrut
+$ ./flatcv tests/skewed-receipt.png detect_corners
+Loaded image: 720x540 with 3 channels
+Executing pipeline with 1 operations:
+Applying operation: detect_corners
+  → Completed in \d+.\d+ ms \(output: 720x540\) (regex)
+  {
+    "corners": {
+      "top_left": [259, 219],
+      "top_right": [700, 219],
+      "bottom_right": [689, 363],
+      "bottom_left": [31, 356]
+    }
+  }
+```

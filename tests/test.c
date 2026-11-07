@@ -1631,6 +1631,63 @@ int32_t test_fcv_add_border(void) {
 int32_t test_sort_corners(void) {
   bool test_ok = true;
 
+  // Regression: a long, skewed receipt whose raw x+y minimum is bottom-left.
+  // Check every input permutation, in both raw and detector-resized space,
+  // and after a quarter-turn to portrait (EXIF 8).
+  const Point2D receipt[2][4] = {
+    {{2075, 1707}, {5578, 1740}, {5489, 2912}, {112, 2862}},
+    {{1740, 133}, {2912, 222}, {2862, 5599}, {1707, 3636}}
+  };
+  for (int orientation = 0; orientation < 2; orientation++) {
+    uint32_t width = orientation == 0 ? 5712 : 4284;
+    uint32_t height = orientation == 0 ? 4284 : 5712;
+    for (int resized = 0; resized < 2; resized++) {
+      uint32_t out_width = resized ? 256 : width;
+      uint32_t out_height = resized ? 256 : height;
+      for (int a = 0; a < 4; a++) {
+        for (int b = 0; b < 4; b++) {
+          for (int c = 0; c < 4; c++) {
+            for (int d = 0; d < 4; d++) {
+              if (a == b || a == c || a == d || b == c || b == d || c == d) {
+                continue;
+              }
+              int indices[4] = {a, b, c, d};
+              Point2D input[4], result[4];
+              for (int i = 0; i < 4; i++) {
+                input[i].x =
+                  receipt[orientation][indices[i]].x * out_width / width;
+                input[i].y =
+                  receipt[orientation][indices[i]].y * out_height / height;
+              }
+              Corners sorted = sort_corners(
+                width,
+                height,
+                out_width,
+                out_height,
+                input,
+                4,
+                result
+              );
+              Point2D actual[4] = {
+                {sorted.tl_x, sorted.tl_y},
+                {sorted.tr_x, sorted.tr_y},
+                {sorted.br_x, sorted.br_y},
+                {sorted.bl_x, sorted.bl_y}
+              };
+              for (int i = 0; i < 4; i++) {
+                if (fabs(actual[i].x - receipt[orientation][i].x) > 0.001 ||
+                    fabs(actual[i].y - receipt[orientation][i].y) > 0.001) {
+                  printf("❌ Skewed receipt corner ordering failed\n");
+                  return 1;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   // Test 1: Basic corner sorting with known coordinates
   {
     Point2D corners[4] = {

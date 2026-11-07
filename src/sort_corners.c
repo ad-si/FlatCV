@@ -233,11 +233,26 @@ Corners sort_corners(
   center_x /= corners_to_process;
   center_y /= corners_to_process;
 
-  // Step 2: Find the top-left corner (minimum x+y sum)
-  uint32_t top_left_idx = 0;
-  double min_sum = working_corners[0].x + working_corners[0].y;
+  // Step 2: Find top-left in document-relative coordinates. A plain x+y
+  // score lets the long axis dominate on skewed receipts, choosing bottom-left
+  // (or top-right) instead. Normalize by the document bounds, not image bounds,
+  // so the labels also survive the detector's non-uniform resize to 256x256.
+  double min_x = working_corners[0].x, max_x = min_x;
+  double min_y = working_corners[0].y, max_y = min_y;
   for (uint32_t i = 1; i < corners_to_process; i++) {
-    double sum = working_corners[i].x + working_corners[i].y;
+    min_x = fmin(min_x, working_corners[i].x);
+    max_x = fmax(max_x, working_corners[i].x);
+    min_y = fmin(min_y, working_corners[i].y);
+    max_y = fmax(max_y, working_corners[i].y);
+  }
+  double span_x = max_x > min_x ? max_x - min_x : 1.0;
+  double span_y = max_y > min_y ? max_y - min_y : 1.0;
+  uint32_t top_left_idx = 0;
+  double min_sum = (working_corners[0].x - min_x) / span_x +
+                   (working_corners[0].y - min_y) / span_y;
+  for (uint32_t i = 1; i < corners_to_process; i++) {
+    double sum = (working_corners[i].x - min_x) / span_x +
+                 (working_corners[i].y - min_y) / span_y;
     if (sum < min_sum) {
       min_sum = sum;
       top_left_idx = i;

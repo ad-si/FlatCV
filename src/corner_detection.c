@@ -507,6 +507,19 @@ fcv_detect_corners(const uint8_t *image, int32_t width, int32_t height) {
                 .bl_y = sorted_result[3 % peaks->count].y * scale_y};
   }
 
+  // Selecting the strongest four peaks can discard the starting corner and
+  // change the document bounds. Label the final quadrilateral again rather
+  // than inheriting the first surviving peak as top-left.
+  Point2D selected[4] = {
+    {sorted_corners.tl_x, sorted_corners.tl_y},
+    {sorted_corners.tr_x, sorted_corners.tr_y},
+    {sorted_corners.br_x, sorted_corners.br_y},
+    {sorted_corners.bl_x, sorted_corners.bl_y}
+  };
+  Point2D ordered[4];
+  sorted_corners =
+    sort_corners(width, height, width, height, selected, 4, ordered);
+
   free(sorted_result);
 
 #ifdef DEBUG_LOGGING
